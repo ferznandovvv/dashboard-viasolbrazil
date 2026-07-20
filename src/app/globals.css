@@ -1,0 +1,155 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --good: #006300;
+  --critical: #d03b3b;
+  /* Canais — slots categóricos validados (ordem fixa 2→3→4) */
+  --c-shopify: #008300;
+  --c-tiktok: #e87ba4;
+  --c-meli: #eda100;
+  --accent: #eda100;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --good: #0ca30c;
+    --critical: #d03b3b;
+    --c-shopify: #008300;
+    --c-tiktok: #d55181;
+    --c-meli: #c98500;
+    --accent: #c98500;
+  }
+}
+
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
+
+.topbar {
+  display: flex; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+}
+.topbar h1 { font-size: 20px; font-weight: 700; }
+.topbar h1 span { color: var(--text-muted); font-weight: 400; }
+.updated { color: var(--text-muted); font-size: 12px; }
+
+.filters { display: flex; gap: 8px; margin-bottom: 20px; }
+.filters button {
+  background: var(--surface-1); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+}
+.filters button:hover { color: var(--text-primary); }
+.filters button.active {
+  color: var(--text-primary); font-weight: 600; border-color: var(--baseline);
+}
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px;
+}
+.tile .label { color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; }
+.tile .value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.tile .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px; margin-bottom: 12px;
+}
+.card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.legend .item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.legend .swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+.chart-box { position: relative; }
+.chart-box svg { display: block; width: 100%; height: auto; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 10;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 150px;
+}
+.tooltip .t-date { font-weight: 600; margin-bottom: 4px; }
+.tooltip .t-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); }
+.tooltip .t-row b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.channel-card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px; border-top: 3px solid var(--ch-color, var(--border));
+}
+.channel-card .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.channel-card .name { font-weight: 600; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
+.badge.on { color: var(--good); border-color: var(--good); }
+.badge.err { color: var(--critical); border-color: var(--critical); }
+.channel-card .rev { font-size: 22px; font-weight: 700; }
+.channel-card .meta { color: var(--text-muted); font-size: 12px; }
+.channel-card .setup { color: var(--text-secondary); font-size: 12px; margin-top: 8px; }
+.channel-card .setup code {
+  background: var(--page); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0 4px; font-size: 11px;
+}
+.channel-card .err-msg { color: var(--critical); font-size: 12px; margin-top: 8px; overflow-wrap: anywhere; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; color: var(--text-muted); font-weight: 500; font-size: 12px;
+  padding: 6px 8px; border-bottom: 1px solid var(--grid);
+}
+td { padding: 8px; border-bottom: 1px solid var(--grid); }
+tr:last-child td { border-bottom: none; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num { text-align: right; }
+.ch-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 6px; vertical-align: 1px; }
+.muted { color: var(--text-muted); }
+
+.empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
+
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.login-card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 32px; width: 320px; display: flex; flex-direction: column; gap: 12px;
+}
+.login-card h1 { font-size: 18px; }
+.login-card p { color: var(--text-muted); font-size: 13px; margin-top: -8px; }
+.login-card input {
+  background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-size: 14px; color: var(--text-primary); font-family: inherit;
+}
+.login-card button {
+  background: var(--text-primary); color: var(--page); border: none; border-radius: 8px;
+  padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.login-error { color: var(--critical); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .tile .value { font-size: 22px; }
+  .orders-table-wrap { overflow-x: auto; }
+}
