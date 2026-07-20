@@ -2,10 +2,16 @@ import crypto from "crypto";
 import { ChannelResult, NormalizedOrder } from "../types";
 
 const HOST = "https://open-api.tiktokglobalshop.com";
+const AUTH_HOST = "https://auth.tiktok-shops.com";
 const ORDERS_PATH = "/order/202309/orders/search";
 
 /** Assinatura padrão da TikTok Shop Open API (HMAC-SHA256). */
-function sign(path: string, params: Record<string, string>, body: string, secret: string): string {
+export function tiktokSign(
+  path: string,
+  params: Record<string, string>,
+  body: string,
+  secret: string
+): string {
   const sorted = Object.keys(params)
     .filter((k) => k !== "sign" && k !== "access_token")
     .sort()
@@ -13,6 +19,38 @@ function sign(path: string, params: Record<string, string>, body: string, secret
     .join("");
   const input = `${secret}${path}${sorted}${body}${secret}`;
   return crypto.createHmac("sha256", secret).update(input).digest("hex");
+}
+
+// Cache em memória do access token renovado via refresh token
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getAccessToken(): Promise<string | null> {
+  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+
+  const appKey = process.env.TIKTOK_APP_KEY;
+  const appSecret = process.env.TIKTOK_APP_SECRET;
+  const refreshToken = process.env.TIKTOK_REFRESH_TOKEN;
+
+  if (appKey && appSecret && refreshToken) {
+    const url = new URL(`${AUTH_HOST}/api/v2/token/refresh`);
+    url.searchParams.set("app_key", appKey);
+    url.searchParams.set("app_secret", appSecret);
+    url.searchParams.set("refresh_token", refreshToken);
+    url.searchParams.set("grant_type", "refresh_token");
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.code === 0 && json.data?.access_token) {
+        // access_token_expire_in vem como timestamp unix (s) ou duração (s)
+        const exp = Number(json.data.access_token_expire_in ?? 0);
+        const expiresAt =
+          exp > 1e9 ? exp * 1000 - 300000 : Date.now() + Math.max(exp - 300, 600) * 1000;
+        cachedToken = { token: json.data.access_token, expiresAt };
+        return cachedToken.token;
+      }
+    }
+  }
+  return process.env.TIKTOK_ACCESS_TOKEN ?? null;
 }
 
 interface TikTokOrder {
@@ -26,14 +64,17 @@ interface TikTokOrder {
 export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
   const appKey = process.env.TIKTOK_APP_KEY;
   const appSecret = process.env.TIKTOK_APP_SECRET;
-  const accessToken = process.env.TIKTOK_ACCESS_TOKEN;
   const shopCipher = process.env.TIKTOK_SHOP_CIPHER;
-  if (!appKey || !appSecret || !accessToken || !shopCipher) {
+  const hasToken = process.env.TIKTOK_REFRESH_TOKEN || process.env.TIKTOK_ACCESS_TOKEN;
+  if (!appKey || !appSecret || !hasToken || !shopCipher) {
     return { channel: "tiktok", connected: false, orders: [] };
   }
 
   const orders: NormalizedOrder[] = [];
   try {
+    const accessToken = await getAccessToken();
+    if (!accessToken) throw new Error("Não foi possível obter o access token do TikTok Shop");
+
     let pageToken = "";
     for (let page = 0; page < 20; page++) {
       const body = JSON.stringify({
@@ -46,7 +87,7 @@ export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
         page_size: "100",
         ...(pageToken ? { page_token: pageToken } : {}),
       };
-      params.sign = sign(ORDERS_PATH, params, body, appSecret);
+      params.sign = tiktokSign(ORDERS_PATH, params, body, appSecret);
 
       const url = new URL(`${HOST}${ORDERS_PATH}`);
       for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);

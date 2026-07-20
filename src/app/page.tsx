@@ -15,7 +15,7 @@ const CHANNEL_META: Record<
   tiktok: {
     name: "TikTok Shop",
     cssVar: "var(--c-tiktok)",
-    envVars: ["TIKTOK_APP_KEY", "TIKTOK_APP_SECRET", "TIKTOK_ACCESS_TOKEN", "TIKTOK_SHOP_CIPHER"],
+    envVars: ["TIKTOK_APP_KEY", "TIKTOK_APP_SECRET", "TIKTOK_REFRESH_TOKEN", "TIKTOK_SHOP_CIPHER"],
   },
   meli: {
     name: "Mercado Livre",
@@ -59,6 +59,15 @@ export default function Dashboard() {
   useEffect(() => {
     load(days);
   }, [days, load]);
+
+  // Redirect da autorização do TikTok Shop: chega em /?code=... e segue
+  // para a página de configuração que troca o código pelas credenciais.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (code) {
+      window.location.replace(`/api/tiktok/setup?code=${encodeURIComponent(code)}`);
+    }
+  }, []);
 
   const anyConnected = data?.channels.some((c) => c.connected) ?? false;
 
