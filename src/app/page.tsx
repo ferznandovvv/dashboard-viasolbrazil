@@ -10,7 +10,7 @@ const CHANNEL_META: Record<
   shopify: {
     name: "Shopify",
     cssVar: "var(--c-shopify)",
-    envVars: ["SHOPIFY_STORE_DOMAIN", "SHOPIFY_ADMIN_TOKEN"],
+    envVars: ["SHOPIFY_ADMIN_TOKEN"],
   },
   tiktok: {
     name: "TikTok Shop",

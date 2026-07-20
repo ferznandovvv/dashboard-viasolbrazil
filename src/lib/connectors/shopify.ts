@@ -12,7 +12,8 @@ interface ShopifyOrderNode {
 }
 
 export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
-  const domain = process.env.SHOPIFY_STORE_DOMAIN;
+  const domain =
+    process.env.SHOPIFY_STORE_DOMAIN ?? "totvs-ibirapuera-viasolbrazil-dc.myshopify.com";
   const token = process.env.SHOPIFY_ADMIN_TOKEN;
   if (!domain || !token) {
     return { channel: "shopify", connected: false, orders: [] };
