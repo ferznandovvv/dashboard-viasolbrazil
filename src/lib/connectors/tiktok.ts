@@ -64,9 +64,10 @@ interface TikTokOrder {
 export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
   const appKey = process.env.TIKTOK_APP_KEY;
   const appSecret = process.env.TIKTOK_APP_SECRET;
+  // Cipher é opcional: lojas locais de app próprio podem dispensá-lo
   const shopCipher = process.env.TIKTOK_SHOP_CIPHER;
   const hasToken = process.env.TIKTOK_REFRESH_TOKEN || process.env.TIKTOK_ACCESS_TOKEN;
-  if (!appKey || !appSecret || !hasToken || !shopCipher) {
+  if (!appKey || !appSecret || !hasToken) {
     return { channel: "tiktok", connected: false, orders: [] };
   }
 
@@ -83,7 +84,7 @@ export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
       const params: Record<string, string> = {
         app_key: appKey,
         timestamp: String(Math.floor(Date.now() / 1000)),
-        shop_cipher: shopCipher,
+        ...(shopCipher ? { shop_cipher: shopCipher } : {}),
         page_size: "100",
         ...(pageToken ? { page_token: pageToken } : {}),
       };

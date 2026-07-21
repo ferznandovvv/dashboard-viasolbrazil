@@ -68,6 +68,35 @@ export async function GET(req: NextRequest) {
     }
     const { access_token, refresh_token, seller_name } = tokenJson.data;
 
+    // Teste direto da API de pedidos, com ou sem cipher
+    const testOrders = async (cipher?: string): Promise<string> => {
+      const path = "/order/202309/orders/search";
+      const body = JSON.stringify({
+        create_time_ge: Math.floor(Date.now() / 1000) - 30 * 86400,
+      });
+      const p: Record<string, string> = {
+        app_key: appKey,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        ...(cipher ? { shop_cipher: cipher } : {}),
+        page_size: "10",
+      };
+      p.sign = tiktokSign(path, p, body, appSecret);
+      const u = new URL(`${API_HOST}${path}`);
+      for (const [k, v] of Object.entries(p)) u.searchParams.set(k, v);
+      const r = await fetch(u, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tts-access-token": access_token },
+        body,
+        cache: "no-store",
+      });
+      const j = await r.json();
+      if (j.code === 0) {
+        const n = j.data?.orders?.length ?? 0;
+        return `OK — ${n} pedido(s) retornado(s) nos últimos 30 dias`;
+      }
+      return `falhou: ${j.message ?? r.status} (code ${j.code})`;
+    };
+
     // Tenta os dois endpoints que devolvem o cipher — qual funciona depende
     // do escopo ativado no app (Authorized Shops vs. Get Active Shops).
     const candidatePaths = ["/authorization/202309/shops", "/seller/202309/shops"];
@@ -97,29 +126,38 @@ export async function GET(req: NextRequest) {
           : `${shopsPath}: ${shopsJson.message ?? shopsRes.status}`
       );
     }
-    if (shops.length === 0) {
-      throw new Error(`Busca das lojas falhou — ${failures.join(" | ")}`);
-    }
+    const cipher = shops[0]?.cipher;
+    const orderTestNoCipher = cipher ? null : await testOrders();
+    const orderTestWithCipher = cipher ? await testOrders(cipher) : null;
+    const orderTest = orderTestWithCipher ?? orderTestNoCipher ?? "não testado";
+    const worked = orderTest.startsWith("OK");
 
-    const rows = shops
-      .map(
-        (s) =>
-          `<tr><td>TIKTOK_SHOP_CIPHER</td><td><code>${s.cipher}</code><br><small>${s.name} (${s.region})</small></td></tr>`
-      )
-      .join("");
+    const cipherRow = cipher
+      ? `<tr><td>TIKTOK_SHOP_CIPHER</td><td><code>${cipher}</code><br><small>${shops[0].name ?? ""} (${shops[0].region ?? ""})</small></td></tr>`
+      : "";
 
     return page(
-      "Autorizado!",
-      `<div class="s">✓ Loja autorizada com sucesso${seller_name ? ` — ${seller_name}` : ""}</div>
-       <p>Agora adicione estas variáveis na Vercel
+      worked ? "Autorizado!" : "Quase lá",
+      `<div class="s">${worked ? "✓" : "△"} Autorização concluída${seller_name ? ` — ${seller_name}` : ""}</div>
+       <p><b>Teste da API de pedidos${cipher ? " (com cipher)" : " (sem cipher)"}:</b> ${orderTest}</p>
+       ${
+         !cipher
+           ? `<p><small>Endpoints de cipher: ${failures.join(" | ") || "nenhum tentado"}</small></p>`
+           : ""
+       }
+       <p>Adicione ${cipher ? "estas variáveis" : "esta variável"} na Vercel
        (<b>Settings → Environment Variables</b>) e faça redeploy:</p>
        <table>
          <tr><td>TIKTOK_REFRESH_TOKEN</td><td><code>${refresh_token}</code></td></tr>
-         ${rows}
+         ${cipherRow}
        </table>
        <p>O dashboard renova o access token sozinho a partir do refresh token.
-       Depois do redeploy, esta página pode ser esquecida.</p>`,
-      true
+       ${
+         worked
+           ? "O teste passou — depois do redeploy o canal fica verde."
+           : "O teste de pedidos falhou com a mensagem acima — me mande ela no chat."
+       }</p>`,
+      worked
     );
   } catch (e) {
     return page(
