@@ -15,6 +15,7 @@ import {
   todaySpKey,
 } from "@/lib/types";
 import { readConfig } from "@/lib/config";
+import { fetchMetaSpend } from "@/lib/connectors/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -61,11 +62,13 @@ export async function GET(req: NextRequest) {
   const fetchStartKey = [prevFrom, monthStart, from].sort()[0];
   const fetchStart = spMidnight(fetchStartKey);
 
-  const results: ChannelResult[] = await Promise.all([
+  const [shopifyRes, tiktokRes, meliRes, adsRes] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
+    fetchMetaSpend(prevFrom, to),
   ]);
+  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes];
 
   // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
   // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
@@ -177,6 +180,21 @@ export async function GET(req: NextRequest) {
     }).format(spMidnight(today)),
   };
 
+  // Meta Ads × Shopify
+  const shopifyCh = channels.find((c) => c.channel === "shopify");
+  const adsCurrent = adsRes.daily.filter((d) => d.date >= from && d.date <= to);
+  const adsPrev = adsRes.daily.filter((d) => d.date >= prevFrom && d.date <= prevTo);
+  const spend = adsCurrent.reduce((s, d) => s + d.spend, 0);
+  const ads: DashboardData["ads"] = {
+    connected: adsRes.connected,
+    error: adsRes.error,
+    spend,
+    prevSpend: adsPrev.reduce((s, d) => s + d.spend, 0),
+    roas: spend > 0 ? (shopifyCh?.revenue ?? 0) / spend : 0,
+    cpa: (shopifyCh?.orders ?? 0) > 0 ? spend / shopifyCh!.orders : 0,
+    daily: adsCurrent,
+  };
+
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),
     from,
@@ -188,6 +206,7 @@ export async function GET(req: NextRequest) {
     recentOrders: current.slice(0, 25),
     topProducts,
     states,
+    ads,
     goal,
   };
 

@@ -63,7 +63,7 @@ function Delta({ now, before }: { now: number; before: number }) {
 
 export default function Dashboard() {
   const [presets] = useState(buildPresets);
-  const [period, setPeriod] = useState<Period>(presets[0]); // padrão: Hoje
+  const [period, setPeriod] = useState<Period>(presets[2]); // padrão: Mês atual
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -332,6 +332,58 @@ export default function Dashboard() {
             })}
           </div>
 
+          {(!channel || channel === "shopify") && (
+            <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
+              <div className="channel-card" style={{ ["--ch-color" as string]: "var(--baseline)" }}>
+                <div className="head">
+                  <span className="name">Anúncios Meta × Shopify</span>
+                  {!data.ads.connected ? (
+                    <span className="badge">não conectado</span>
+                  ) : data.ads.error ? (
+                    <span className="badge err">erro</span>
+                  ) : (
+                    <span className="badge on">conectado</span>
+                  )}
+                </div>
+                {data.ads.connected ? (
+                  <>
+                    <div className="ads-row">
+                      <div>
+                        <div className="label">Gasto no período</div>
+                        <div className="rev">{brl.format(data.ads.spend)}</div>
+                        <div className="meta">
+                          período anterior: {brl.format(data.ads.prevSpend)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="label">ROAS (Shopify)</div>
+                        <div className="rev">
+                          {data.ads.spend > 0
+                            ? `${data.ads.roas.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}×`
+                            : "—"}
+                        </div>
+                        <div className="meta">receita Shopify ÷ gasto</div>
+                      </div>
+                      <div>
+                        <div className="label">Custo por pedido</div>
+                        <div className="rev">
+                          {data.ads.cpa > 0 ? brl.format(data.ads.cpa) : "—"}
+                        </div>
+                        <div className="meta">gasto ÷ pedidos Shopify</div>
+                      </div>
+                    </div>
+                    {data.ads.error && <div className="err-msg">{data.ads.error}</div>}
+                  </>
+                ) : (
+                  <div className="setup">
+                    Para conectar, adicione nas variáveis de ambiente do projeto:
+                    <div><code>META_ACCESS_TOKEN</code></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="card">
             <h2>
               Faturamento por dia
@@ -346,8 +398,21 @@ export default function Dashboard() {
                   {CHANNEL_META[id].name}
                 </span>
               ))}
+              {data.ads.connected && (!channel || channel === "shopify") && (
+                <span className="item">
+                  <span className="swatch spend-swatch" />
+                  Gasto anúncios (Meta)
+                </span>
+              )}
             </div>
-            <DailyChart daily={data.daily} />
+            <DailyChart
+              daily={data.daily}
+              spend={
+                data.ads.connected && (!channel || channel === "shopify")
+                  ? data.ads.daily
+                  : undefined
+              }
+            />
           </div>
 
           <div className="grid-2">

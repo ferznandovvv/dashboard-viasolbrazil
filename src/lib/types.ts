@@ -63,6 +63,18 @@ export interface DashboardData {
   recentOrders: NormalizedOrder[];
   topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
   states: { uf: string; revenue: number; orders: number }[];
+  /** Meta Ads × vendas Shopify */
+  ads: {
+    connected: boolean;
+    error?: string;
+    spend: number;
+    prevSpend: number;
+    /** Receita Shopify ÷ gasto (0 quando não dá pra calcular) */
+    roas: number;
+    /** Gasto ÷ pedidos Shopify */
+    cpa: number;
+    daily: { date: string; spend: number }[];
+  };
   goal: {
     target: number;
     monthRevenue: number;

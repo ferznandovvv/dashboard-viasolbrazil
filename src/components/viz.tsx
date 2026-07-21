@@ -66,7 +66,16 @@ export function SunMark({ size = 40 }: { size?: number }) {
   );
 }
 
-export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; height?: number }) {
+export function DailyChart({
+  daily,
+  height = 280,
+  spend,
+}: {
+  daily: DailyPoint[];
+  height?: number;
+  /** Gasto diário em anúncios — desenhado como linha tracejada sobre as barras */
+  spend?: { date: string; spend: number }[];
+}) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
 
@@ -77,7 +86,10 @@ export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; heigh
   const plotH = H - PAD.top - PAD.bottom;
 
   const totals = daily.map((d) => d.shopify + d.tiktok + d.meli);
-  const max = Math.max(...totals, 1);
+  const spendMap = new Map((spend ?? []).map((s) => [s.date, s.spend]));
+  const spendVals = daily.map((d) => spendMap.get(d.date) ?? 0);
+  const hasSpend = (spend?.length ?? 0) > 0;
+  const max = Math.max(...totals, ...(hasSpend ? spendVals : []), 1);
 
   const pow = Math.pow(10, Math.floor(Math.log10(max)));
   const yMax = Math.ceil(max / pow) * pow;
@@ -193,6 +205,20 @@ export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; heigh
           );
         })}
 
+        {hasSpend && (
+          <polyline
+            points={daily
+              .map((d, i) => `${PAD.left + i * slot + slot / 2},${y(spendMap.get(d.date) ?? 0)}`)
+              .join(" ")}
+            fill="none"
+            stroke="var(--text-secondary)"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
         {!hasData && (
           <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="var(--text-muted)">
             Sem vendas no período
@@ -222,6 +248,12 @@ export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; heigh
             <span>Total</span>
             <b>{brl.format(daily[hover.i].shopify + daily[hover.i].tiktok + daily[hover.i].meli)}</b>
           </div>
+          {hasSpend && (
+            <div className="t-row">
+              <span>Gasto anúncios</span>
+              <b>{brl.format(spendMap.get(daily[hover.i].date) ?? 0)}</b>
+            </div>
+          )}
         </div>
       )}
     </div>
