@@ -1,87 +1,111 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@500;600;700&display=swap");
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
   color-scheme: light;
-  --page: #f9f9f7;
-  --surface-1: #fcfcfb;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.10);
-  --good: #006300;
-  --critical: #d03b3b;
-  /* Canais — slots categóricos validados (ordem fixa 2→3→4) */
-  --c-shopify: #008300;
-  --c-tiktok: #e87ba4;
-  --c-meli: #eda100;
-  --accent: #eda100;
+  /* Identidade Via Sol — terracota, bege, creme, menta */
+  --page: #e5d8ca;
+  --surface-1: #fbf4e8;
+  --text-primary: #3a2a1a;
+  --text-secondary: #6b5742;
+  --text-muted: #96805f;
+  --grid: #e7dac6;
+  --baseline: #cdb99e;
+  --border: rgba(58, 42, 26, 0.14);
+  --brand: #bc5714;
+  --good: #2e7d54;
+  --critical: #b3402e;
+  /* Canais — validados p/ daltonismo na ordem terracota→menta→dourado */
+  --c-shopify: #bc5714;
+  --c-tiktok: #2e9c72;
+  --c-meli: #de9a10;
+  --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --page: #0d0d0d;
-    --surface-1: #1a1a19;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --grid: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.10);
-    --good: #0ca30c;
-    --critical: #d03b3b;
-    --c-shopify: #008300;
-    --c-tiktok: #d55181;
-    --c-meli: #c98500;
-    --accent: #c98500;
+    --page: #1c1712;
+    --surface-1: #262019;
+    --text-primary: #f4e9d8;
+    --text-secondary: #cbb89d;
+    --text-muted: #94826a;
+    --grid: #372e23;
+    --baseline: #4a3e2f;
+    --border: rgba(244, 233, 216, 0.12);
+    --brand: #d97434;
+    --good: #4cae82;
+    --critical: #d96a58;
+    --c-shopify: #c6551a;
+    --c-tiktok: #33a176;
+    --c-meli: #c08a0e;
   }
 }
 
 body {
   background: var(--page);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
 }
 
-.wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 64px; }
 
 .topbar {
-  display: flex; align-items: baseline; justify-content: space-between;
-  flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 24px;
 }
-.topbar h1 { font-size: 20px; font-weight: 700; }
-.topbar h1 span { color: var(--text-muted); font-weight: 400; }
+.logo { display: flex; align-items: center; gap: 14px; }
+.logo .sun { color: var(--brand); flex: none; }
+.logo .word {
+  font-family: var(--font-serif);
+  font-size: 26px; font-weight: 600; letter-spacing: 0.30em;
+  color: var(--brand); line-height: 1;
+}
+.logo .tag {
+  display: block; font-family: var(--font-sans); font-size: 10px;
+  font-weight: 600; letter-spacing: 0.34em; text-transform: uppercase;
+  color: var(--text-muted); margin-top: 6px;
+}
 .updated { color: var(--text-muted); font-size: 12px; }
 
 .filters { display: flex; gap: 8px; margin-bottom: 20px; }
 .filters button {
-  background: var(--surface-1); color: var(--text-secondary);
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 7px 18px; font-size: 13px; cursor: pointer; font-family: inherit;
 }
-.filters button:hover { color: var(--text-primary); }
+.filters button:hover { color: var(--text-primary); background: var(--surface-1); }
 .filters button.active {
-  color: var(--text-primary); font-weight: 600; border-color: var(--baseline);
+  background: var(--brand); border-color: var(--brand);
+  color: #fbf4e8; font-weight: 600;
 }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .tile {
   background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: 12px; padding: 16px 18px;
+  border-radius: 14px; padding: 18px 20px;
 }
-.tile .label { color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; }
-.tile .value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
-.tile .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.tile .label {
+  color: var(--text-muted); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px;
+}
+.tile .value {
+  font-family: var(--font-serif); font-size: 30px; font-weight: 600;
+  letter-spacing: 0; color: var(--text-primary);
+}
 
 .card {
   background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: 12px; padding: 18px; margin-bottom: 12px;
+  border-radius: 14px; padding: 20px; margin-bottom: 14px;
 }
-.card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.card h2 {
+  font-family: var(--font-serif); font-size: 17px; font-weight: 600;
+  color: var(--brand); margin-bottom: 14px;
+}
 
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
 .legend .item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
@@ -92,24 +116,27 @@ body {
 .tooltip {
   position: absolute; pointer-events: none; z-index: 10;
   background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 10px; font-size: 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 150px;
+  border-radius: 10px; padding: 9px 11px; font-size: 12px;
+  box-shadow: 0 6px 20px rgba(58, 42, 26, 0.18); min-width: 160px;
 }
-.tooltip .t-date { font-weight: 600; margin-bottom: 4px; }
+.tooltip .t-date { font-weight: 700; margin-bottom: 4px; color: var(--brand); }
 .tooltip .t-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); }
 .tooltip .t-row b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .channel-card {
   background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: 12px; padding: 16px 18px; border-top: 3px solid var(--ch-color, var(--border));
+  border-radius: 14px; padding: 18px 20px; border-top: 3px solid var(--ch-color, var(--border));
 }
 .channel-card .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .channel-card .name { font-weight: 600; }
-.badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
+.badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted);
+}
 .badge.on { color: var(--good); border-color: var(--good); }
 .badge.err { color: var(--critical); border-color: var(--critical); }
-.channel-card .rev { font-size: 22px; font-weight: 700; }
+.channel-card .rev { font-family: var(--font-serif); font-size: 24px; font-weight: 600; }
 .channel-card .meta { color: var(--text-muted); font-size: 12px; }
 .channel-card .setup { color: var(--text-secondary); font-size: 12px; margin-top: 8px; }
 .channel-card .setup code {
@@ -120,10 +147,11 @@ body {
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
-  text-align: left; color: var(--text-muted); font-weight: 500; font-size: 12px;
-  padding: 6px 8px; border-bottom: 1px solid var(--grid);
+  text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 6px 8px; border-bottom: 1px solid var(--baseline);
 }
-td { padding: 8px; border-bottom: 1px solid var(--grid); }
+td { padding: 9px 8px; border-bottom: 1px solid var(--grid); }
 tr:last-child td { border-bottom: none; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 th.num { text-align: right; }
@@ -134,22 +162,28 @@ th.num { text-align: right; }
 
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
 .login-card {
-  background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px;
-  padding: 32px; width: 320px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px;
+  padding: 36px; width: 340px; display: flex; flex-direction: column; gap: 12px;
+  text-align: center;
 }
-.login-card h1 { font-size: 18px; }
-.login-card p { color: var(--text-muted); font-size: 13px; margin-top: -8px; }
+.login-card h1 {
+  font-family: var(--font-serif); font-size: 22px; font-weight: 600;
+  letter-spacing: 0.28em; color: var(--brand);
+}
+.login-card p { color: var(--text-muted); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; margin-top: -6px; }
 .login-card input {
-  background: var(--page); border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px 12px; font-size: 14px; color: var(--text-primary); font-family: inherit;
+  background: var(--page); border: 1px solid var(--border); border-radius: 10px;
+  padding: 11px 12px; font-size: 14px; color: var(--text-primary); font-family: inherit;
+  text-align: center;
 }
 .login-card button {
-  background: var(--text-primary); color: var(--page); border: none; border-radius: 8px;
-  padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  background: var(--brand); color: #fbf4e8; border: none; border-radius: 10px;
+  padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  letter-spacing: 0.06em;
 }
 .login-error { color: var(--critical); font-size: 13px; }
 
 @media (max-width: 640px) {
-  .tile .value { font-size: 22px; }
+  .tile .value { font-size: 24px; }
   .orders-table-wrap { overflow-x: auto; }
 }

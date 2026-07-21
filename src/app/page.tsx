@@ -75,9 +75,13 @@ export default function Dashboard() {
   return (
     <main className="wrap">
       <div className="topbar">
-        <h1>
-          Via Sol Brazil <span>· vendas online</span>
-        </h1>
+        <div className="logo">
+          <SunMark size={44} />
+          <div>
+            <span className="word">VIA&nbsp;SOL</span>
+            <span className="tag">vendas online</span>
+          </div>
+        </div>
         {data && (
           <span className="updated">
             Atualizado{" "}
@@ -223,6 +227,40 @@ export default function Dashboard() {
         </>
       )}
     </main>
+  );
+}
+
+/** Sol radial da identidade Via Sol, redesenhado em SVG. */
+function SunMark({ size = 40 }: { size?: number }) {
+  const rays = [];
+  const N = 18;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const long = i % 3 !== 1;
+    const r1 = 11;
+    const r2 = long ? 20 : 16.5;
+    rays.push(
+      <line
+        key={i}
+        x1={22 + r1 * Math.cos(a)}
+        y1={22 + r1 * Math.sin(a)}
+        x2={22 + r2 * Math.cos(a)}
+        y2={22 + r2 * Math.sin(a)}
+      />
+    );
+  }
+  return (
+    <svg
+      className="sun"
+      width={size}
+      height={size}
+      viewBox="0 0 44 44"
+      aria-hidden="true"
+    >
+      <g stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+        {rays}
+      </g>
+    </svg>
   );
 }
 
