@@ -106,6 +106,28 @@ body {
 .goal-fill { height: 100%; background: var(--brand); border-radius: 999px; }
 .goal-pct { font-size: 12px; color: var(--text-secondary); }
 
+.goal-edit { display: inline-flex; align-items: center; gap: 6px; }
+.goal-edit input {
+  background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 10px; font-family: inherit; font-size: 13px; color: var(--text-primary);
+  width: 120px;
+}
+button.mini {
+  background: var(--brand); color: #fbf4e8; border: none; border-radius: 8px;
+  padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+button.mini.ghost {
+  background: transparent; color: var(--brand);
+  border: 1px solid var(--border); font-weight: 600;
+}
+
+.channel-card.clickable { cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+.channel-card.clickable:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(58,42,26,0.10); }
+.channel-card.sel { outline: 2px solid var(--ch-color); outline-offset: 0; }
+.channel-card.dim { opacity: 0.45; }
+.badge.sel-badge { color: var(--brand); border-color: var(--brand); }
+.filter-note { color: var(--text-muted); font-family: var(--font-sans); font-size: 12px; font-weight: 400; }
+
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
 

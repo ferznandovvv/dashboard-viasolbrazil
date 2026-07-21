@@ -11,7 +11,44 @@ import {
   fmtDay,
 } from "@/components/viz";
 
-type Period = { kind: "days"; days: number } | { kind: "custom"; from: string; to: string };
+type Period = { key: string; from: string; to: string };
+
+/** Data de hoje no fuso de São Paulo (YYYY-MM-DD), calculada no navegador. */
+function spToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function shiftDays(dateKey: string, n: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
+
+function buildPresets(): Period[] {
+  const today = spToday();
+  const [y, m] = today.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const prevM = m === 1 ? 12 : m - 1;
+  const prevY = m === 1 ? y - 1 : y;
+  const lastDayPrev = new Date(y, m - 1, 0).getDate();
+  return [
+    { key: "Hoje", from: today, to: today },
+    { key: "Últimos 7 dias", from: shiftDays(today, -6), to: today },
+    { key: "Mês atual", from: `${y}-${pad(m)}-01`, to: today },
+    {
+      key: "Mês passado",
+      from: `${prevY}-${pad(prevM)}-01`,
+      to: `${prevY}-${pad(prevM)}-${pad(lastDayPrev)}`,
+    },
+    { key: "Últimos 3 meses", from: shiftDays(today, -89), to: today },
+    { key: "Ano atual", from: `${y}-01-01`, to: today },
+  ];
+}
 
 function Delta({ now, before }: { now: number; before: number }) {
   if (before <= 0) return null;
@@ -25,19 +62,29 @@ function Delta({ now, before }: { now: number; before: number }) {
 }
 
 export default function Dashboard() {
-  const [period, setPeriod] = useState<Period>({ kind: "days", days: 30 });
+  const [presets] = useState(buildPresets);
+  const [period, setPeriod] = useState<Period>(presets[0]); // padrão: Hoje
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [channel, setChannel] = useState<"" | "shopify" | "tiktok" | "meli">("");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
+  // Meta editável na tela
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+  const [localGoal, setLocalGoal] = useState(0);
 
-  const load = useCallback(async (p: Period) => {
+  useEffect(() => {
+    const v = parseFloat(localStorage.getItem("metaMensal") ?? "");
+    if (v > 0) setLocalGoal(v);
+  }, []);
+
+  const load = useCallback(async (p: Period, ch: string) => {
     setLoading(true);
     setFetchError("");
-    const qs =
-      p.kind === "days" ? `days=${p.days}` : `from=${p.from}&to=${p.to}`;
+    const qs = `from=${p.from}&to=${p.to}${ch ? `&channel=${ch}` : ""}`;
     try {
       const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`Erro ${res.status}`);
@@ -50,8 +97,30 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    load(period);
-  }, [period, load]);
+    load(period, channel);
+  }, [period, channel, load]);
+
+  async function saveGoal() {
+    const v = parseFloat(goalInput.replace(/\./g, "").replace(",", "."));
+    if (!(v >= 0)) return;
+    setEditingGoal(false);
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metaMensal: v }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!json.persisted) {
+        localStorage.setItem("metaMensal", String(v));
+        setLocalGoal(v);
+      }
+    } catch {
+      localStorage.setItem("metaMensal", String(v));
+      setLocalGoal(v);
+    }
+    load(period, channel);
+  }
 
   // Redirect das autorizações OAuth: TikTok Shop e Mercado Livre devolvem
   // ?code=... para cá; o state diz de qual plataforma veio.
@@ -90,20 +159,20 @@ export default function Dashboard() {
       </div>
 
       <div className="filters" role="group" aria-label="Período">
-        {[7, 30, 90].map((d) => (
+        {presets.map((p) => (
           <button
-            key={d}
-            className={period.kind === "days" && period.days === d ? "active" : ""}
+            key={p.key}
+            className={period.key === p.key ? "active" : ""}
             onClick={() => {
               setCustomOpen(false);
-              setPeriod({ kind: "days", days: d });
+              setPeriod(p);
             }}
           >
-            {d} dias
+            {p.key}
           </button>
         ))}
         <button
-          className={period.kind === "custom" ? "active" : ""}
+          className={period.key === "custom" ? "active" : ""}
           onClick={() => setCustomOpen((v) => !v)}
         >
           Personalizado
@@ -116,7 +185,7 @@ export default function Dashboard() {
             <button
               className="apply"
               disabled={!customFrom || !customTo || customFrom > customTo}
-              onClick={() => setPeriod({ kind: "custom", from: customFrom, to: customTo })}
+              onClick={() => setPeriod({ key: "custom", from: customFrom, to: customTo })}
             >
               Aplicar
             </button>
@@ -147,46 +216,92 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {data.goal ? (
-            <div className="card goal">
-              <div className="goal-head">
-                <h2>Meta de {data.goal.monthLabel}</h2>
-                <span className="muted">
-                  {brl.format(data.goal.monthRevenue)} de {brl.format(data.goal.target)} ·
-                  projeção {brl.format(data.goal.projection)}
-                </span>
+          {data.goal && (() => {
+            const target = data.goal.target > 0 ? data.goal.target : localGoal;
+            const pct = target > 0 ? data.goal.monthRevenue / target : 0;
+            return (
+              <div className="card goal">
+                <div className="goal-head">
+                  <h2>Meta de {data.goal.monthLabel}</h2>
+                  <span className="muted">
+                    {editingGoal ? (
+                      <span className="goal-edit">
+                        <input
+                          autoFocus
+                          inputMode="numeric"
+                          placeholder="ex.: 150000"
+                          value={goalInput}
+                          onChange={(e) => setGoalInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && saveGoal()}
+                        />
+                        <button className="mini" onClick={saveGoal}>Salvar</button>
+                        <button className="mini ghost" onClick={() => setEditingGoal(false)}>
+                          Cancelar
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        {target > 0 ? (
+                          <>
+                            {brl.format(data.goal.monthRevenue)} de {brl.format(target)} ·
+                            projeção {brl.format(data.goal.projection)}{" "}
+                          </>
+                        ) : (
+                          <>
+                            {brl.format(data.goal.monthRevenue)} no mês ·
+                            projeção {brl.format(data.goal.projection)}{" "}
+                          </>
+                        )}
+                        <button
+                          className="mini ghost"
+                          onClick={() => {
+                            setGoalInput(target > 0 ? String(target) : "");
+                            setEditingGoal(true);
+                          }}
+                        >
+                          {target > 0 ? "editar meta" : "definir meta"}
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+                {target > 0 && (
+                  <>
+                    <div className="goal-bar">
+                      <div className="goal-fill" style={{ width: `${Math.min(pct * 100, 100)}%` }} />
+                    </div>
+                    <div className="goal-pct">
+                      {(pct * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% da meta
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="goal-bar">
-                <div
-                  className="goal-fill"
-                  style={{ width: `${Math.min(data.goal.pct * 100, 100)}%` }}
-                />
-              </div>
-              <div className="goal-pct">
-                {(data.goal.pct * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
-                da meta
-              </div>
-            </div>
-          ) : (
-            <div className="card goal muted" style={{ fontSize: 12 }}>
-              Defina a variável <code>META_MENSAL</code> na Vercel (ex.: 100000) para
-              acompanhar a meta do mês aqui.
-            </div>
-          )}
+            );
+          })()}
 
           <div className="channels">
             {CHANNEL_ORDER.map((id) => {
               const c = data.channels.find((x) => x.channel === id);
               const meta = CHANNEL_META[id];
               if (!c) return null;
+              const sel = channel === id;
+              const dim = channel !== "" && !sel;
               return (
-                <div key={id} className="channel-card" style={{ ["--ch-color" as string]: meta.cssVar }}>
+                <div
+                  key={id}
+                  className={`channel-card clickable${sel ? " sel" : ""}${dim ? " dim" : ""}`}
+                  style={{ ["--ch-color" as string]: meta.cssVar }}
+                  onClick={() => setChannel(sel ? "" : id)}
+                  title={sel ? "Clique para ver todos os canais" : `Clique para filtrar por ${meta.name}`}
+                >
                   <div className="head">
                     <span className="name">
                       <span className="ch-dot" style={{ background: meta.cssVar }} />
                       {meta.name}
                     </span>
-                    {!c.connected ? (
+                    {sel ? (
+                      <span className="badge sel-badge">filtrando ✕</span>
+                    ) : !c.connected ? (
                       <span className="badge">não conectado</span>
                     ) : c.error ? (
                       <span className="badge err">erro</span>
@@ -218,9 +333,14 @@ export default function Dashboard() {
           </div>
 
           <div className="card">
-            <h2>Faturamento por dia</h2>
+            <h2>
+              Faturamento por dia
+              {channel && (
+                <span className="filter-note"> — só {CHANNEL_META[channel].name}</span>
+              )}
+            </h2>
             <div className="legend">
-              {CHANNEL_ORDER.map((id) => (
+              {(channel ? [channel] : CHANNEL_ORDER).map((id) => (
                 <span key={id} className="item">
                   <span className="swatch" style={{ background: CHANNEL_META[id].cssVar }} />
                   {CHANNEL_META[id].name}

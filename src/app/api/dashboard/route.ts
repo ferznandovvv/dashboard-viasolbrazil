@@ -3,6 +3,7 @@ import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import {
+  ChannelId,
   ChannelResult,
   DailyPoint,
   DashboardData,
@@ -13,10 +14,11 @@ import {
   spMidnight,
   todaySpKey,
 } from "@/lib/types";
+import { readConfig } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
-const MAX_RANGE_DAYS = 120;
+const MAX_RANGE_DAYS = 370;
 
 function totalsOf(orders: NormalizedOrder[]): Totals {
   const revenue = orders.reduce((s, o) => s + o.total, 0);
@@ -65,7 +67,17 @@ export async function GET(req: NextRequest) {
     fetchMeliOrders(fetchStart),
   ]);
 
-  const all = results.flatMap((r) => r.orders);
+  // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
+  // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
+  const channelParam = sp.get("channel") as ChannelId | null;
+  const channelFilter: ChannelId | null =
+    channelParam && ["shopify", "tiktok", "meli"].includes(channelParam) ? channelParam : null;
+  const filteredResults = channelFilter
+    ? results.filter((r) => r.channel === channelFilter)
+    : results;
+
+  const all = filteredResults.flatMap((r) => r.orders);
+  const allChannels = results.flatMap((r) => r.orders);
   const inWindow = (o: NormalizedOrder, a: string, b: string) => {
     const k = spDateKey(o.createdAt);
     return k >= a && k <= b;
@@ -142,30 +154,28 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
 
-  // Meta mensal (env META_MENSAL, em reais)
-  const target = parseFloat(process.env.META_MENSAL ?? "");
-  let goal: DashboardData["goal"] = null;
-  if (target > 0) {
-    const monthOrders = all.filter((o) => {
-      const k = spDateKey(o.createdAt);
-      return k >= monthStart && k <= today;
-    });
-    const monthRevenue = monthOrders.reduce((s, o) => s + o.total, 0);
-    const dayOfMonth = parseInt(today.slice(8), 10);
-    const [y, m] = today.split("-").map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const projection = (monthRevenue / dayOfMonth) * daysInMonth;
-    goal = {
-      target,
-      monthRevenue,
-      pct: Math.min(monthRevenue / target, 9.99),
-      projection,
-      monthLabel: new Intl.DateTimeFormat("pt-BR", {
-        month: "long",
-        timeZone: "America/Sao_Paulo",
-      }).format(spMidnight(today)),
-    };
-  }
+  // Meta mensal: configurável pelo sistema (Blob) com fallback na env.
+  // A meta é sempre da empresa toda — ignora o filtro de canal.
+  const cfg = await readConfig();
+  const target = cfg.metaMensal ?? parseFloat(process.env.META_MENSAL ?? "") ?? 0;
+  const monthOrders = allChannels.filter((o) => {
+    const k = spDateKey(o.createdAt);
+    return k >= monthStart && k <= today;
+  });
+  const monthRevenue = monthOrders.reduce((s, o) => s + o.total, 0);
+  const dayOfMonth = parseInt(today.slice(8), 10);
+  const [yy, mm] = today.split("-").map(Number);
+  const daysInMonth = new Date(yy, mm, 0).getDate();
+  const goal: DashboardData["goal"] = {
+    target: target > 0 ? target : 0,
+    monthRevenue,
+    pct: target > 0 ? Math.min(monthRevenue / target, 9.99) : 0,
+    projection: (monthRevenue / dayOfMonth) * daysInMonth,
+    monthLabel: new Intl.DateTimeFormat("pt-BR", {
+      month: "long",
+      timeZone: "America/Sao_Paulo",
+    }).format(spMidnight(today)),
+  };
 
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),

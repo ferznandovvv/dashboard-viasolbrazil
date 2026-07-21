@@ -85,7 +85,8 @@ export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; heigh
 
   const n = daily.length;
   const slot = plotW / Math.max(n, 1);
-  const barW = Math.max(3, Math.min(28, slot - 2));
+  const barW = Math.max(1, Math.min(28, slot - Math.min(2, slot * 0.2)));
+  const gapStroke = barW > 4 ? 2 : 0;
   const y = (v: number) => PAD.top + plotH - (v / yMax) * plotH;
 
   const hasData = totals.some((t) => t > 0);
@@ -155,7 +156,7 @@ export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; heigh
                     }
                     fill={s.color}
                     stroke="var(--surface-1)"
-                    strokeWidth={si > 0 ? 2 : 0}
+                    strokeWidth={si > 0 ? gapStroke : 0}
                   />
                 );
               })}
@@ -176,7 +177,7 @@ export function DailyChart({ daily, height = 280 }: { daily: DailyPoint[]; heigh
         })}
 
         {daily.map((d, i) => {
-          const every = n > 60 ? 14 : n > 14 ? 7 : n > 7 ? 2 : 1;
+          const every = n > 240 ? 30 : n > 120 ? 21 : n > 60 ? 14 : n > 14 ? 7 : n > 7 ? 2 : 1;
           if (i % every !== 0) return null;
           return (
             <text
