@@ -186,11 +186,11 @@ button.mini.ghost {
   border-top: 2px dashed var(--text-secondary);
 }
 
-.ads-row { display: flex; gap: 40px; flex-wrap: wrap; }
-.ads-row .label {
-  color: var(--text-muted); font-size: 11px; font-weight: 600;
-  letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 4px;
+.ads-inline {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--grid);
+  font-size: 12px; color: var(--text-secondary);
 }
+.ads-inline b { color: var(--text-primary); font-weight: 600; }
 
 .chart-box { position: relative; }
 .chart-box svg { display: block; width: 100%; height: auto; }

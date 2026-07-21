@@ -315,6 +315,26 @@ export default function Dashboard() {
                         {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
                       </div>
                       <div className="meta">{c.orders.toLocaleString("pt-BR")} pedidos no período</div>
+                      {id === "shopify" && data.ads.connected && (
+                        <div className="ads-inline">
+                          <div>
+                            Anúncios (Meta): <b>{brl.format(data.ads.spend)}</b>
+                          </div>
+                          <div className="muted">
+                            {data.ads.spend > 0 && (
+                              <>
+                                ROAS{" "}
+                                {data.ads.roas.toLocaleString("pt-BR", {
+                                  maximumFractionDigits: 2,
+                                })}
+                                ×
+                              </>
+                            )}
+                            {data.ads.cpa > 0 && <> · {brl.format(data.ads.cpa)} por pedido</>}
+                          </div>
+                          {data.ads.error && <div className="err-msg">{data.ads.error}</div>}
+                        </div>
+                      )}
                       {c.error && <div className="err-msg">{c.error}</div>}
                     </>
                   ) : (
@@ -331,58 +351,6 @@ export default function Dashboard() {
               );
             })}
           </div>
-
-          {(!channel || channel === "shopify") && (
-            <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
-              <div className="channel-card" style={{ ["--ch-color" as string]: "var(--baseline)" }}>
-                <div className="head">
-                  <span className="name">Anúncios Meta × Shopify</span>
-                  {!data.ads.connected ? (
-                    <span className="badge">não conectado</span>
-                  ) : data.ads.error ? (
-                    <span className="badge err">erro</span>
-                  ) : (
-                    <span className="badge on">conectado</span>
-                  )}
-                </div>
-                {data.ads.connected ? (
-                  <>
-                    <div className="ads-row">
-                      <div>
-                        <div className="label">Gasto no período</div>
-                        <div className="rev">{brl.format(data.ads.spend)}</div>
-                        <div className="meta">
-                          período anterior: {brl.format(data.ads.prevSpend)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="label">ROAS (Shopify)</div>
-                        <div className="rev">
-                          {data.ads.spend > 0
-                            ? `${data.ads.roas.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}×`
-                            : "—"}
-                        </div>
-                        <div className="meta">receita Shopify ÷ gasto</div>
-                      </div>
-                      <div>
-                        <div className="label">Custo por pedido</div>
-                        <div className="rev">
-                          {data.ads.cpa > 0 ? brl.format(data.ads.cpa) : "—"}
-                        </div>
-                        <div className="meta">gasto ÷ pedidos Shopify</div>
-                      </div>
-                    </div>
-                    {data.ads.error && <div className="err-msg">{data.ads.error}</div>}
-                  </>
-                ) : (
-                  <div className="setup">
-                    Para conectar, adicione nas variáveis de ambiente do projeto:
-                    <div><code>META_ACCESS_TOKEN</code></div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           <div className="card">
             <h2>
