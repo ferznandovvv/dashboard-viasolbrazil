@@ -2,14 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { DashboardData } from "@/lib/types";
-import {
-  CHANNEL_META,
-  CHANNEL_ORDER,
-  DailyChart,
-  SunMark,
-  brl,
-  fmtDay,
-} from "@/components/viz";
+import { CHANNEL_META, CHANNEL_ORDER, DailyChart, brl, fmtDay } from "@/components/viz";
 
 type Period = { key: string; from: string; to: string };
 
@@ -183,9 +176,8 @@ export default function Dashboard() {
     <main className="wrap">
       <div className="topbar">
         <div className="logo">
-          <SunMark size={44} />
           <div>
-            <span className="word">VIA&nbsp;SOL</span>
+            <span className="brand-word" role="img" aria-label="Via Sol" />
             <span className="tag">vendas online</span>
           </div>
         </div>

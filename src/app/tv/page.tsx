@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { DailyPoint } from "@/lib/types";
-import { CHANNEL_META, CHANNEL_ORDER, DailyChart, SunMark, brl } from "@/components/viz";
+import { CHANNEL_META, CHANNEL_ORDER, DailyChart, brl } from "@/components/viz";
 
 interface TvData {
   generatedAt: string;
@@ -36,9 +36,8 @@ export default function TvPage() {
     <main className="tv">
       <div className="tv-head">
         <div className="logo">
-          <SunMark size={52} />
           <div>
-            <span className="word">VIA&nbsp;SOL</span>
+            <span className="brand-word lg" role="img" aria-label="Via Sol" />
             <span className="tag">vendas de hoje</span>
           </div>
         </div>

@@ -59,11 +59,18 @@ body {
   flex-wrap: wrap; gap: 12px; margin-bottom: 24px;
 }
 .logo { display: flex; align-items: center; gap: 14px; }
-.logo .sun { color: var(--brand); flex: none; }
-.logo .word {
-  font-family: var(--font-serif);
-  font-size: 26px; font-weight: 600; letter-spacing: 0.30em;
-  color: var(--brand); line-height: 1;
+.brand-word {
+  display: block; width: 218px; height: 30px;
+  background-color: var(--brand);
+  -webkit-mask: url("/logo-word.png") no-repeat center / contain;
+  mask: url("/logo-word.png") no-repeat center / contain;
+}
+.brand-word.lg { width: 320px; height: 44px; }
+.brand-sun {
+  display: inline-block; width: 40px; height: 40px;
+  background-color: var(--brand);
+  -webkit-mask: url("/logo-sun.png") no-repeat center / contain;
+  mask: url("/logo-sun.png") no-repeat center / contain;
 }
 .logo .tag {
   display: block; font-family: var(--font-sans); font-size: 10px;

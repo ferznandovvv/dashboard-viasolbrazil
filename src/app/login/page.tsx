@@ -27,7 +27,12 @@ export default function LoginPage() {
   return (
     <main className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <h1>Via Sol Brazil</h1>
+        <span
+          className="brand-word"
+          role="img"
+          aria-label="Via Sol"
+          style={{ margin: "0 auto" }}
+        />
         <p>Dashboard de vendas online</p>
         <input
           type="password"
