@@ -51,7 +51,7 @@ function AdsInline({
   ads: { spend: number; roas: number; cpa: number; error?: string };
 }) {
   return (
-    <div className="ads-inline">
+    <div className="invest-note">
       <div>
         {label}: <b>{brl.format(ads.spend)}</b>
       </div>

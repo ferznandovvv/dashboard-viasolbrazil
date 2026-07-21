@@ -193,11 +193,11 @@ button.mini.ghost {
   border-top: 2px dashed var(--text-secondary);
 }
 
-.ads-inline {
+.invest-note {
   margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--grid);
   font-size: 12px; color: var(--text-secondary);
 }
-.ads-inline b { color: var(--text-primary); font-weight: 600; }
+.invest-note b { color: var(--text-primary); font-weight: 600; }
 
 .chart-box { position: relative; }
 .chart-box svg { display: block; width: 100%; height: auto; }
