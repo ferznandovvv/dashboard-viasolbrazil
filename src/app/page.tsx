@@ -349,7 +349,10 @@ export default function Dashboard() {
                       <div className="rev">
                         {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
                       </div>
-                      <div className="meta">{c.orders.toLocaleString("pt-BR")} pedidos no período</div>
+                      <div className="meta">
+                        {c.orders.toLocaleString("pt-BR")} pedidos no período
+                        {c.orders > 0 && <> · ticket médio {brl.format(c.revenue / c.orders)}</>}
+                      </div>
                       {id === "shopify" && data.ads.connected && (
                         <AdsInline label="Anúncios (Meta)" ads={data.ads} />
                       )}
