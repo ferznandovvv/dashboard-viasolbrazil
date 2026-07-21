@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import { readConfig } from "@/lib/config";
 import { fetchMetaSpend } from "@/lib/connectors/meta";
+import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
 
 export const dynamic = "force-dynamic";
 
@@ -62,11 +63,12 @@ export async function GET(req: NextRequest) {
   const fetchStartKey = [prevFrom, monthStart, from].sort()[0];
   const fetchStart = spMidnight(fetchStartKey);
 
-  const [shopifyRes, tiktokRes, meliRes, adsRes] = await Promise.all([
+  const [shopifyRes, tiktokRes, meliRes, adsRes, ttAdsRes] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
     fetchMetaSpend(prevFrom, to),
+    fetchTikTokAdsSpend(prevFrom, to),
   ]);
   const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes];
 
@@ -195,6 +197,21 @@ export async function GET(req: NextRequest) {
     daily: adsCurrent,
   };
 
+  // TikTok Ads × TikTok Shop
+  const tiktokCh = channels.find((c) => c.channel === "tiktok");
+  const ttCurrent = ttAdsRes.daily.filter((d) => d.date >= from && d.date <= to);
+  const ttPrev = ttAdsRes.daily.filter((d) => d.date >= prevFrom && d.date <= prevTo);
+  const ttSpend = ttCurrent.reduce((s, d) => s + d.spend, 0);
+  const tiktokAds: DashboardData["tiktokAds"] = {
+    connected: ttAdsRes.connected,
+    error: ttAdsRes.error,
+    spend: ttSpend,
+    prevSpend: ttPrev.reduce((s, d) => s + d.spend, 0),
+    roas: ttSpend > 0 ? (tiktokCh?.revenue ?? 0) / ttSpend : 0,
+    cpa: (tiktokCh?.orders ?? 0) > 0 ? ttSpend / tiktokCh!.orders : 0,
+    daily: ttCurrent,
+  };
+
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),
     from,
@@ -207,6 +224,7 @@ export async function GET(req: NextRequest) {
     topProducts,
     states,
     ads,
+    tiktokAds,
     goal,
   };
 

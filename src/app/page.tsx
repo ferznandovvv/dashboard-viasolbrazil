@@ -50,6 +50,29 @@ function buildPresets(): Period[] {
   ];
 }
 
+function AdsInline({
+  label,
+  ads,
+}: {
+  label: string;
+  ads: { spend: number; roas: number; cpa: number; error?: string };
+}) {
+  return (
+    <div className="ads-inline">
+      <div>
+        {label}: <b>{brl.format(ads.spend)}</b>
+      </div>
+      <div className="muted">
+        {ads.spend > 0 && (
+          <>ROAS {ads.roas.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}×</>
+        )}
+        {ads.cpa > 0 && <> · {brl.format(ads.cpa)} por pedido</>}
+      </div>
+      {ads.error && <div className="err-msg">{ads.error}</div>}
+    </div>
+  );
+}
+
 function Delta({ now, before }: { now: number; before: number }) {
   if (before <= 0) return null;
   const pct = ((now - before) / before) * 100;
@@ -126,6 +149,12 @@ export default function Dashboard() {
   // ?code=... para cá; o state diz de qual plataforma veio.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    // TikTok Ads devolve ?auth_code=...
+    const authCode = params.get("auth_code");
+    if (authCode) {
+      window.location.replace(`/api/tiktok-ads/setup?auth_code=${encodeURIComponent(authCode)}`);
+      return;
+    }
     const code = params.get("code");
     if (!code) return;
     const target = params.get("state") === "meli" ? "meli" : "tiktok";
@@ -133,6 +162,20 @@ export default function Dashboard() {
   }, []);
 
   const anyConnected = data?.channels.some((c) => c.connected) ?? false;
+
+  // Linha de gasto do gráfico: soma Meta + TikTok Ads, respeitando o filtro
+  const spendSeries = (() => {
+    if (!data) return undefined;
+    const sources: { date: string; spend: number }[][] = [];
+    if (data.ads.connected && (!channel || channel === "shopify")) sources.push(data.ads.daily);
+    if (data.tiktokAds.connected && (!channel || channel === "tiktok"))
+      sources.push(data.tiktokAds.daily);
+    if (sources.length === 0) return undefined;
+    const m = new Map<string, number>();
+    for (const src of sources)
+      for (const d of src) m.set(d.date, (m.get(d.date) ?? 0) + d.spend);
+    return Array.from(m.entries()).map(([date, spend]) => ({ date, spend }));
+  })();
   const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
   const maxProd = Math.max(...(data?.topProducts.map((p) => p.revenue) ?? [0]), 1);
 
@@ -316,24 +359,10 @@ export default function Dashboard() {
                       </div>
                       <div className="meta">{c.orders.toLocaleString("pt-BR")} pedidos no período</div>
                       {id === "shopify" && data.ads.connected && (
-                        <div className="ads-inline">
-                          <div>
-                            Anúncios (Meta): <b>{brl.format(data.ads.spend)}</b>
-                          </div>
-                          <div className="muted">
-                            {data.ads.spend > 0 && (
-                              <>
-                                ROAS{" "}
-                                {data.ads.roas.toLocaleString("pt-BR", {
-                                  maximumFractionDigits: 2,
-                                })}
-                                ×
-                              </>
-                            )}
-                            {data.ads.cpa > 0 && <> · {brl.format(data.ads.cpa)} por pedido</>}
-                          </div>
-                          {data.ads.error && <div className="err-msg">{data.ads.error}</div>}
-                        </div>
+                        <AdsInline label="Anúncios (Meta)" ads={data.ads} />
+                      )}
+                      {id === "tiktok" && data.tiktokAds.connected && (
+                        <AdsInline label="Anúncios (TikTok)" ads={data.tiktokAds} />
                       )}
                       {c.error && <div className="err-msg">{c.error}</div>}
                     </>
@@ -366,21 +395,14 @@ export default function Dashboard() {
                   {CHANNEL_META[id].name}
                 </span>
               ))}
-              {data.ads.connected && (!channel || channel === "shopify") && (
+              {spendSeries && (
                 <span className="item">
                   <span className="swatch spend-swatch" />
-                  Gasto anúncios (Meta)
+                  Gasto anúncios
                 </span>
               )}
             </div>
-            <DailyChart
-              daily={data.daily}
-              spend={
-                data.ads.connected && (!channel || channel === "shopify")
-                  ? data.ads.daily
-                  : undefined
-              }
-            />
+            <DailyChart daily={data.daily} spend={spendSeries} />
           </div>
 
           <div className="grid-2">

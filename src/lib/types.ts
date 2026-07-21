@@ -63,6 +63,16 @@ export interface DashboardData {
   recentOrders: NormalizedOrder[];
   topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
   states: { uf: string; revenue: number; orders: number }[];
+  /** TikTok Ads × vendas TikTok Shop */
+  tiktokAds: {
+    connected: boolean;
+    error?: string;
+    spend: number;
+    prevSpend: number;
+    roas: number;
+    cpa: number;
+    daily: { date: string; spend: number }[];
+  };
   /** Meta Ads × vendas Shopify */
   ads: {
     connected: boolean;
