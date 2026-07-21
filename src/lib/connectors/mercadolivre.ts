@@ -4,11 +4,13 @@ const API = "https://api.mercadolibre.com";
 
 // Cache em memória do token renovado (vale enquanto a instância serverless viver)
 let cachedToken: { token: string; expiresAt: number } | null = null;
+// O Mercado Livre rotaciona o refresh token a cada uso; guardamos o mais novo
+let rotatedRefreshToken: string | null = null;
 
 async function getAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
 
-  const refreshToken = process.env.ML_REFRESH_TOKEN;
+  const refreshToken = rotatedRefreshToken ?? process.env.ML_REFRESH_TOKEN;
   const clientId = process.env.ML_CLIENT_ID;
   const clientSecret = process.env.ML_CLIENT_SECRET;
 
@@ -26,6 +28,7 @@ async function getAccessToken(): Promise<string | null> {
     });
     if (res.ok) {
       const json = await res.json();
+      if (json.refresh_token) rotatedRefreshToken = json.refresh_token;
       cachedToken = {
         token: json.access_token,
         expiresAt: Date.now() + (json.expires_in - 300) * 1000,
@@ -56,7 +59,10 @@ export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
 
   try {
     const token = await getAccessToken();
-    if (!token) throw new Error("Não foi possível obter token do Mercado Livre");
+    if (!token)
+      throw new Error(
+        "Token do Mercado Livre expirado — abra /api/meli/setup e autorize novamente"
+      );
     const headers = { Authorization: `Bearer ${token}` };
 
     const meRes = await fetch(`${API}/users/me`, { headers, cache: "no-store" });

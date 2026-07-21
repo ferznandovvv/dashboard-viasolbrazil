@@ -60,13 +60,14 @@ export default function Dashboard() {
     load(days);
   }, [days, load]);
 
-  // Redirect da autorização do TikTok Shop: chega em /?code=... e segue
-  // para a página de configuração que troca o código pelas credenciais.
+  // Redirect das autorizações OAuth: TikTok Shop e Mercado Livre devolvem
+  // ?code=... para cá; o state diz de qual plataforma veio.
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("code");
-    if (code) {
-      window.location.replace(`/api/tiktok/setup?code=${encodeURIComponent(code)}`);
-    }
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (!code) return;
+    const target = params.get("state") === "meli" ? "meli" : "tiktok";
+    window.location.replace(`/api/${target}/setup?code=${encodeURIComponent(code)}`);
   }, []);
 
   const anyConnected = data?.channels.some((c) => c.connected) ?? false;
