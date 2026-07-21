@@ -68,25 +68,34 @@ export async function GET(req: NextRequest) {
     }
     const { access_token, refresh_token, seller_name } = tokenJson.data;
 
-    const shopsPath = "/authorization/202309/shops";
-    const params: Record<string, string> = {
-      app_key: appKey,
-      timestamp: String(Math.floor(Date.now() / 1000)),
-    };
-    params.sign = tiktokSign(shopsPath, params, "", appSecret);
-    const shopsUrl = new URL(`${API_HOST}${shopsPath}`);
-    for (const [k, v] of Object.entries(params)) shopsUrl.searchParams.set(k, v);
-    const shopsRes = await fetch(shopsUrl, {
-      headers: { "x-tts-access-token": access_token },
-      cache: "no-store",
-    });
-    const shopsJson = await shopsRes.json();
-    if (shopsJson.code !== 0) {
-      throw new Error(`Busca das lojas falhou: ${shopsJson.message ?? shopsRes.status}`);
+    // Tenta os dois endpoints que devolvem o cipher — qual funciona depende
+    // do escopo ativado no app (Authorized Shops vs. Get Active Shops).
+    const candidatePaths = ["/authorization/202309/shops", "/seller/202309/shops"];
+    let shops: { cipher: string; name?: string; region?: string }[] = [];
+    const failures: string[] = [];
+    for (const shopsPath of candidatePaths) {
+      const params: Record<string, string> = {
+        app_key: appKey,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+      };
+      params.sign = tiktokSign(shopsPath, params, "", appSecret);
+      const shopsUrl = new URL(`${API_HOST}${shopsPath}`);
+      for (const [k, v] of Object.entries(params)) shopsUrl.searchParams.set(k, v);
+      const shopsRes = await fetch(shopsUrl, {
+        headers: { "x-tts-access-token": access_token },
+        cache: "no-store",
+      });
+      const shopsJson = await shopsRes.json();
+      const found = (shopsJson.data?.shops ?? []).filter((s: { cipher?: string }) => s.cipher);
+      if (shopsJson.code === 0 && found.length > 0) {
+        shops = found;
+        break;
+      }
+      failures.push(`${shopsPath}: ${shopsJson.message ?? shopsRes.status}`);
     }
-    const shops: { cipher: string; name: string; region: string }[] =
-      shopsJson.data?.shops ?? [];
-    if (shops.length === 0) throw new Error("Nenhuma loja autorizada para este app");
+    if (shops.length === 0) {
+      throw new Error(`Busca das lojas falhou — ${failures.join(" | ")}`);
+    }
 
     const rows = shops
       .map(
