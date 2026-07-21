@@ -91,7 +91,11 @@ export async function GET(req: NextRequest) {
         shops = found;
         break;
       }
-      failures.push(`${shopsPath}: ${shopsJson.message ?? shopsRes.status}`);
+      failures.push(
+        shopsJson.code === 0
+          ? `${shopsPath}: respondeu OK mas sem cipher — resposta: ${JSON.stringify(shopsJson.data).slice(0, 400)}`
+          : `${shopsPath}: ${shopsJson.message ?? shopsRes.status}`
+      );
     }
     if (shops.length === 0) {
       throw new Error(`Busca das lojas falhou — ${failures.join(" | ")}`);
