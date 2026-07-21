@@ -9,7 +9,10 @@ export function middleware(req: NextRequest) {
   if (!password) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  if (pathname === "/login" || pathname === "/api/login") {
+  // Rotas públicas: login, modo TV (só agregados, sem dados de cliente)
+  // e o snapshot do cron (protegido por CRON_SECRET quando definido).
+  const publicPaths = ["/login", "/api/login", "/tv", "/api/tv", "/api/snapshot"];
+  if (publicPaths.includes(pathname)) {
     return NextResponse.next();
   }
 

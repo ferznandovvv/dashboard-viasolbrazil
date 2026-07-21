@@ -58,7 +58,12 @@ interface TikTokOrder {
   create_time: number; // epoch segundos
   status: string;
   payment?: { total_amount?: string; currency?: string };
-  recipient_address?: { name?: string };
+  recipient_address?: {
+    name?: string;
+    state?: string;
+    district_info?: { address_level_name?: string; address_name?: string }[];
+  };
+  line_items?: { product_name?: string; sale_price?: string }[];
 }
 
 export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
@@ -118,6 +123,18 @@ export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
           currency: o.payment?.currency ?? "BRL",
           status: o.status,
           customer: o.recipient_address?.name,
+          state:
+            o.recipient_address?.state ??
+            o.recipient_address?.district_info?.find((d) =>
+              /state|province|estado/i.test(d.address_level_name ?? "")
+            )?.address_name,
+          items: (o.line_items ?? [])
+            .filter((li) => li.product_name)
+            .map((li) => ({
+              title: li.product_name!,
+              qty: 1,
+              revenue: parseFloat(li.sale_price ?? "0"),
+            })),
         });
       }
       pageToken = json.data?.next_page_token ?? "";

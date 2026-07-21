@@ -47,6 +47,11 @@ interface MeliOrder {
   total_amount: number;
   currency_id: string;
   buyer?: { nickname?: string; first_name?: string; last_name?: string };
+  order_items?: {
+    item?: { title?: string };
+    quantity?: number;
+    unit_price?: number;
+  }[];
 }
 
 export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
@@ -95,6 +100,13 @@ export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
           currency: o.currency_id || "BRL",
           status: o.status,
           customer: buyer,
+          items: (o.order_items ?? [])
+            .filter((it) => it.item?.title)
+            .map((it) => ({
+              title: it.item!.title!,
+              qty: it.quantity ?? 1,
+              revenue: (it.quantity ?? 1) * (it.unit_price ?? 0),
+            })),
         });
       }
       if (results.length < 50) break;

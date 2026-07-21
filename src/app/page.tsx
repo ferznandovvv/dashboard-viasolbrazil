@@ -1,52 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChannelId, DashboardData } from "@/lib/types";
+import { useCallback, useEffect, useState } from "react";
+import type { DashboardData } from "@/lib/types";
+import {
+  CHANNEL_META,
+  CHANNEL_ORDER,
+  DailyChart,
+  SunMark,
+  brl,
+  fmtDay,
+} from "@/components/viz";
 
-const CHANNEL_META: Record<
-  ChannelId,
-  { name: string; cssVar: string; envVars: string[] }
-> = {
-  shopify: {
-    name: "Shopify",
-    cssVar: "var(--c-shopify)",
-    envVars: ["SHOPIFY_ADMIN_TOKEN"],
-  },
-  tiktok: {
-    name: "TikTok Shop",
-    cssVar: "var(--c-tiktok)",
-    envVars: ["TIKTOK_APP_KEY", "TIKTOK_APP_SECRET", "TIKTOK_REFRESH_TOKEN", "TIKTOK_SHOP_CIPHER"],
-  },
-  meli: {
-    name: "Mercado Livre",
-    cssVar: "var(--c-meli)",
-    envVars: ["ML_CLIENT_ID", "ML_CLIENT_SECRET", "ML_REFRESH_TOKEN"],
-  },
-};
+type Period = { kind: "days"; days: number } | { kind: "custom"; from: string; to: string };
 
-// Ordem fixa de empilhamento/legenda — nunca muda com filtros
-const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli"];
-
-const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const brlShort = (v: number) =>
-  v >= 1000 ? `R$ ${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : brl.format(v);
-
-function fmtDay(dateKey: string) {
-  const [, m, d] = dateKey.split("-");
-  return `${d}/${m}`;
+function Delta({ now, before }: { now: number; before: number }) {
+  if (before <= 0) return null;
+  const pct = ((now - before) / before) * 100;
+  const up = pct >= 0;
+  return (
+    <span className={`delta ${up ? "up" : "down"}`} title="vs período anterior">
+      {up ? "↑" : "↓"} {Math.abs(pct).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+    </span>
+  );
 }
 
 export default function Dashboard() {
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState<Period>({ kind: "days", days: 30 });
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
 
-  const load = useCallback(async (d: number) => {
+  const load = useCallback(async (p: Period) => {
     setLoading(true);
     setFetchError("");
+    const qs =
+      p.kind === "days" ? `days=${p.days}` : `from=${p.from}&to=${p.to}`;
     try {
-      const res = await fetch(`/api/dashboard?days=${d}`, { cache: "no-store" });
+      const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`Erro ${res.status}`);
       setData(await res.json());
     } catch {
@@ -57,8 +50,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    load(days);
-  }, [days, load]);
+    load(period);
+  }, [period, load]);
 
   // Redirect das autorizações OAuth: TikTok Shop e Mercado Livre devolvem
   // ?code=... para cá; o state diz de qual plataforma veio.
@@ -71,6 +64,8 @@ export default function Dashboard() {
   }, []);
 
   const anyConnected = data?.channels.some((c) => c.connected) ?? false;
+  const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
+  const maxProd = Math.max(...(data?.topProducts.map((p) => p.revenue) ?? [0]), 1);
 
   return (
     <main className="wrap">
@@ -84,7 +79,7 @@ export default function Dashboard() {
         </div>
         {data && (
           <span className="updated">
-            Atualizado{" "}
+            {fmtDay(data.from)} – {fmtDay(data.to)} · atualizado{" "}
             {new Date(data.generatedAt).toLocaleTimeString("pt-BR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -96,31 +91,88 @@ export default function Dashboard() {
 
       <div className="filters" role="group" aria-label="Período">
         {[7, 30, 90].map((d) => (
-          <button key={d} className={d === days ? "active" : ""} onClick={() => setDays(d)}>
+          <button
+            key={d}
+            className={period.kind === "days" && period.days === d ? "active" : ""}
+            onClick={() => {
+              setCustomOpen(false);
+              setPeriod({ kind: "days", days: d });
+            }}
+          >
             {d} dias
           </button>
         ))}
+        <button
+          className={period.kind === "custom" ? "active" : ""}
+          onClick={() => setCustomOpen((v) => !v)}
+        >
+          Personalizado
+        </button>
+        {customOpen && (
+          <span className="custom-range">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <span className="muted">até</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            <button
+              className="apply"
+              disabled={!customFrom || !customTo || customFrom > customTo}
+              onClick={() => setPeriod({ kind: "custom", from: customFrom, to: customTo })}
+            >
+              Aplicar
+            </button>
+          </span>
+        )}
       </div>
 
       {fetchError && <div className="card">{fetchError}</div>}
       {loading && !data && <div className="empty">Carregando…</div>}
 
       {data && (
-        <>
+        <div style={{ opacity: loading ? 0.6 : 1 }}>
           <div className="tiles">
             <div className="tile">
-              <div className="label">Faturamento ({data.days} dias)</div>
+              <div className="label">Faturamento</div>
               <div className="value">{brl.format(data.totals.revenue)}</div>
+              <Delta now={data.totals.revenue} before={data.prevTotals.revenue} />
             </div>
             <div className="tile">
               <div className="label">Pedidos</div>
               <div className="value">{data.totals.orders.toLocaleString("pt-BR")}</div>
+              <Delta now={data.totals.orders} before={data.prevTotals.orders} />
             </div>
             <div className="tile">
               <div className="label">Ticket médio</div>
               <div className="value">{brl.format(data.totals.avgTicket)}</div>
+              <Delta now={data.totals.avgTicket} before={data.prevTotals.avgTicket} />
             </div>
           </div>
+
+          {data.goal ? (
+            <div className="card goal">
+              <div className="goal-head">
+                <h2>Meta de {data.goal.monthLabel}</h2>
+                <span className="muted">
+                  {brl.format(data.goal.monthRevenue)} de {brl.format(data.goal.target)} ·
+                  projeção {brl.format(data.goal.projection)}
+                </span>
+              </div>
+              <div className="goal-bar">
+                <div
+                  className="goal-fill"
+                  style={{ width: `${Math.min(data.goal.pct * 100, 100)}%` }}
+                />
+              </div>
+              <div className="goal-pct">
+                {(data.goal.pct * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+                da meta
+              </div>
+            </div>
+          ) : (
+            <div className="card goal muted" style={{ fontSize: 12 }}>
+              Defina a variável <code>META_MENSAL</code> na Vercel (ex.: 100000) para
+              acompanhar a meta do mês aqui.
+            </div>
+          )}
 
           <div className="channels">
             {CHANNEL_ORDER.map((id) => {
@@ -144,7 +196,9 @@ export default function Dashboard() {
                   </div>
                   {c.connected ? (
                     <>
-                      <div className="rev">{brl.format(c.revenue)}</div>
+                      <div className="rev">
+                        {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
+                      </div>
                       <div className="meta">{c.orders.toLocaleString("pt-BR")} pedidos no período</div>
                       {c.error && <div className="err-msg">{c.error}</div>}
                     </>
@@ -173,7 +227,67 @@ export default function Dashboard() {
                 </span>
               ))}
             </div>
-            <DailyChart data={data} />
+            <DailyChart daily={data.daily} />
+          </div>
+
+          <div className="grid-2">
+            <div className="card">
+              <h2>Produtos mais vendidos</h2>
+              {data.topProducts.length === 0 ? (
+                <div className="empty">Sem itens no período.</div>
+              ) : (
+                <div className="rank">
+                  {data.topProducts.map((p) => (
+                    <div key={p.title} className="rank-row" title={p.title}>
+                      <div className="rank-info">
+                        <span className="rank-title">
+                          <span className="ch-dot" style={{ background: CHANNEL_META[p.channel].cssVar }} />
+                          {p.title}
+                        </span>
+                        <span className="rank-nums">
+                          {p.qty}× · <b>{brl.format(p.revenue)}</b>
+                        </span>
+                      </div>
+                      <div className="rank-bar">
+                        <div
+                          className="rank-fill"
+                          style={{
+                            width: `${(p.revenue / maxProd) * 100}%`,
+                            background: CHANNEL_META[p.channel].cssVar,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h2>Vendas por estado</h2>
+              {data.states.length === 0 ? (
+                <div className="empty">Sem dados de entrega no período.</div>
+              ) : (
+                <div className="rank">
+                  {data.states.map((s) => (
+                    <div key={s.uf} className="rank-row">
+                      <div className="rank-info">
+                        <span className="rank-title">{s.uf}</span>
+                        <span className="rank-nums">
+                          {s.orders} ped. · <b>{brl.format(s.revenue)}</b>
+                        </span>
+                      </div>
+                      <div className="rank-bar">
+                        <div
+                          className="rank-fill"
+                          style={{ width: `${(s.revenue / maxState) * 100}%`, background: "var(--brand)" }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="card">
@@ -224,213 +338,8 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </>
-      )}
-    </main>
-  );
-}
-
-/** Sol radial da identidade Via Sol, redesenhado em SVG. */
-function SunMark({ size = 40 }: { size?: number }) {
-  const rays = [];
-  const N = 18;
-  for (let i = 0; i < N; i++) {
-    const a = (i / N) * Math.PI * 2;
-    const long = i % 3 !== 1;
-    const r1 = 11;
-    const r2 = long ? 20 : 16.5;
-    rays.push(
-      <line
-        key={i}
-        x1={22 + r1 * Math.cos(a)}
-        y1={22 + r1 * Math.sin(a)}
-        x2={22 + r2 * Math.cos(a)}
-        y2={22 + r2 * Math.sin(a)}
-      />
-    );
-  }
-  return (
-    <svg
-      className="sun"
-      width={size}
-      height={size}
-      viewBox="0 0 44 44"
-      aria-hidden="true"
-    >
-      <g stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-        {rays}
-      </g>
-    </svg>
-  );
-}
-
-function DailyChart({ data }: { data: DashboardData }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
-
-  const W = 960;
-  const H = 280;
-  const PAD = { top: 12, right: 8, bottom: 28, left: 76 };
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = H - PAD.top - PAD.bottom;
-
-  const daily = data.daily;
-  const totals = daily.map((d) => d.shopify + d.tiktok + d.meli);
-  const max = Math.max(...totals, 1);
-
-  // Escala com teto "redondo"
-  const pow = Math.pow(10, Math.floor(Math.log10(max)));
-  const yMax = Math.ceil(max / pow) * pow;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * yMax);
-
-  const n = daily.length;
-  const slot = plotW / n;
-  const barW = Math.max(3, Math.min(28, slot - 2));
-  const y = (v: number) => PAD.top + plotH - (v / yMax) * plotH;
-
-  const hasData = totals.some((t) => t > 0);
-
-  function onMove(e: React.MouseEvent<SVGSVGElement>) {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * W;
-    const i = Math.floor((px - PAD.left) / slot);
-    if (i >= 0 && i < n) {
-      setHover({ i, x: e.clientX - rect.left, y: e.clientY - rect.top });
-    } else {
-      setHover(null);
-    }
-  }
-
-  return (
-    <div className="chart-box" ref={boxRef}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-        role="img"
-        aria-label="Gráfico de faturamento diário por canal"
-      >
-        {ticks.map((t) => (
-          <g key={t}>
-            <line
-              x1={PAD.left}
-              x2={W - PAD.right}
-              y1={y(t)}
-              y2={y(t)}
-              stroke={t === 0 ? "var(--baseline)" : "var(--grid)"}
-              strokeWidth={1}
-            />
-            <text
-              x={PAD.left - 8}
-              y={y(t) + 4}
-              textAnchor="end"
-              fontSize={11}
-              fill="var(--text-muted)"
-            >
-              {brlShort(t)}
-            </text>
-          </g>
-        ))}
-
-        {daily.map((d, i) => {
-          const x = PAD.left + i * slot + (slot - barW) / 2;
-          const segs: { v: number; color: string }[] = [
-            { v: d.shopify, color: "var(--c-shopify)" },
-            { v: d.tiktok, color: "var(--c-tiktok)" },
-            { v: d.meli, color: "var(--c-meli)" },
-          ];
-          let acc = 0;
-          const total = d.shopify + d.tiktok + d.meli;
-          return (
-            <g key={d.date}>
-              {segs.map((s, si) => {
-                if (s.v <= 0) return null;
-                const y0 = y(acc);
-                const y1 = y(acc + s.v);
-                acc += s.v;
-                const isTop = acc === total;
-                const h = Math.max(y0 - y1, 1);
-                return (
-                  <path
-                    key={si}
-                    d={
-                      isTop && h > 4
-                        ? `M ${x} ${y0} L ${x} ${y1 + 4} Q ${x} ${y1} ${x + 4} ${y1} L ${x + barW - 4} ${y1} Q ${x + barW} ${y1} ${x + barW} ${y1 + 4} L ${x + barW} ${y0} Z`
-                        : `M ${x} ${y0} L ${x} ${y1} L ${x + barW} ${y1} L ${x + barW} ${y0} Z`
-                    }
-                    fill={s.color}
-                    stroke="var(--surface-1)"
-                    strokeWidth={si > 0 ? 2 : 0}
-                  />
-                );
-              })}
-              {hover?.i === i && total > 0 && (
-                <rect
-                  x={x - 2}
-                  y={y(total) - 2}
-                  width={barW + 4}
-                  height={y(0) - y(total) + 2}
-                  fill="none"
-                  stroke="var(--text-muted)"
-                  strokeWidth={1}
-                  rx={5}
-                />
-              )}
-            </g>
-          );
-        })}
-
-        {daily.map((d, i) => {
-          const every = n > 60 ? 14 : n > 14 ? 7 : n > 7 ? 2 : 1;
-          if (i % every !== 0) return null;
-          return (
-            <text
-              key={d.date}
-              x={PAD.left + i * slot + slot / 2}
-              y={H - 8}
-              textAnchor="middle"
-              fontSize={11}
-              fill="var(--text-muted)"
-            >
-              {fmtDay(d.date)}
-            </text>
-          );
-        })}
-
-        {!hasData && (
-          <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="var(--text-muted)">
-            Sem vendas no período — conecte um canal para ver o gráfico
-          </text>
-        )}
-      </svg>
-
-      {hover && (
-        <div
-          className="tooltip"
-          style={{
-            left: Math.min(hover.x + 14, (boxRef.current?.clientWidth ?? 400) - 180),
-            top: Math.max(hover.y - 90, 0),
-          }}
-        >
-          <div className="t-date">{fmtDay(daily[hover.i].date)}</div>
-          {CHANNEL_ORDER.map((id) => (
-            <div key={id} className="t-row">
-              <span>
-                <span className="ch-dot" style={{ background: CHANNEL_META[id].cssVar }} />
-                {CHANNEL_META[id].name}
-              </span>
-              <b>{brl.format(daily[hover.i][id])}</b>
-            </div>
-          ))}
-          <div className="t-row" style={{ marginTop: 4 }}>
-            <span>Total</span>
-            <b>
-              {brl.format(daily[hover.i].shopify + daily[hover.i].tiktok + daily[hover.i].meli)}
-            </b>
-          </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

@@ -9,6 +9,14 @@ interface ShopifyOrderNode {
   displayFinancialStatus: string | null;
   customer: { displayName: string | null } | null;
   currentTotalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+  shippingAddress: { provinceCode: string | null } | null;
+  lineItems: {
+    nodes: {
+      title: string;
+      quantity: number;
+      discountedTotalSet: { shopMoney: { amount: string } };
+    }[];
+  };
 }
 
 export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
@@ -35,6 +43,10 @@ export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
               displayFinancialStatus
               customer { displayName }
               currentTotalPriceSet { shopMoney { amount currencyCode } }
+              shippingAddress { provinceCode }
+              lineItems(first: 10) {
+                nodes { title quantity discountedTotalSet { shopMoney { amount } } }
+              }
             }
           }
         }`;
@@ -74,6 +86,12 @@ export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
           currency: n.currentTotalPriceSet.shopMoney.currencyCode,
           status: n.displayFinancialStatus ?? "—",
           customer: n.customer?.displayName ?? undefined,
+          state: n.shippingAddress?.provinceCode ?? undefined,
+          items: n.lineItems.nodes.map((li) => ({
+            title: li.title,
+            qty: li.quantity,
+            revenue: parseFloat(li.discountedTotalSet.shopMoney.amount),
+          })),
         });
       }
       if (!data.pageInfo.hasNextPage) break;

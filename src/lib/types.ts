@@ -1,5 +1,11 @@
 export type ChannelId = "shopify" | "tiktok" | "meli";
 
+export interface OrderItem {
+  title: string;
+  qty: number;
+  revenue: number;
+}
+
 export interface NormalizedOrder {
   channel: ChannelId;
   id: string;
@@ -10,6 +16,9 @@ export interface NormalizedOrder {
   currency: string;
   status: string;
   customer?: string;
+  /** UF ou nome do estado de entrega, quando a API informa */
+  state?: string;
+  items?: OrderItem[];
 }
 
 export interface ChannelResult {
@@ -28,19 +37,39 @@ export interface DailyPoint {
   meli: number;
 }
 
+export interface Totals {
+  revenue: number;
+  orders: number;
+  avgTicket: number;
+}
+
 export interface DashboardData {
   generatedAt: string;
-  days: number;
+  /** Período atual (datas SP, inclusivas) */
+  from: string;
+  to: string;
   channels: {
     channel: ChannelId;
     connected: boolean;
     error?: string;
     revenue: number;
     orders: number;
+    prevRevenue: number;
   }[];
-  totals: { revenue: number; orders: number; avgTicket: number };
+  totals: Totals;
+  /** Mesmo tamanho de janela, imediatamente anterior */
+  prevTotals: Totals;
   daily: DailyPoint[];
   recentOrders: NormalizedOrder[];
+  topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
+  states: { uf: string; revenue: number; orders: number }[];
+  goal: {
+    target: number;
+    monthRevenue: number;
+    pct: number;
+    projection: number;
+    monthLabel: string;
+  } | null;
 }
 
 const SP_TZ = "America/Sao_Paulo";
@@ -57,12 +86,16 @@ export function spDateKey(iso: string): string {
   return fmt.format(d);
 }
 
-/** Início do período: hoje (SP) menos N-1 dias, à meia-noite SP, como Date UTC. */
-export function periodStart(days: number): Date {
-  const now = new Date();
-  const todayKey = spDateKey(now.toISOString());
-  const [y, m, d] = todayKey.split("-").map(Number);
-  // Meia-noite de São Paulo (UTC-3, sem horário de verão desde 2019)
-  const startOfToday = Date.UTC(y, m - 1, d, 3, 0, 0);
-  return new Date(startOfToday - (days - 1) * 86400000);
+/** Meia-noite de São Paulo do dia YYYY-MM-DD, como Date UTC (SP = UTC-3 fixo). */
+export function spMidnight(dateKey: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 3, 0, 0));
+}
+
+export function todaySpKey(): string {
+  return spDateKey(new Date().toISOString());
+}
+
+export function addDays(dateKey: string, n: number): string {
+  return spDateKey(new Date(spMidnight(dateKey).getTime() + n * 86400000 + 1000).toISOString());
 }
