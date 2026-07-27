@@ -61,7 +61,8 @@ export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
           body: JSON.stringify({
             query,
             variables: {
-              query: `created_at:>='${since.toISOString()}'`,
+              // Só pedidos efetivamente pagos — pagamento pendente não é venda
+              query: `created_at:>='${since.toISOString()}' AND financial_status:paid`,
               cursor,
             },
           }),
