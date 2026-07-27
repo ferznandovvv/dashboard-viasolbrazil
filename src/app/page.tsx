@@ -31,6 +31,7 @@ function buildPresets(): Period[] {
   const lastDayPrev = new Date(y, m - 1, 0).getDate();
   return [
     { key: "Hoje", from: today, to: today },
+    { key: "Ontem", from: shiftDays(today, -1), to: shiftDays(today, -1) },
     { key: "Últimos 7 dias", from: shiftDays(today, -6), to: today },
     { key: "Mês atual", from: `${y}-${pad(m)}-01`, to: today },
     {
