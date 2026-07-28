@@ -1,17 +1,13 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import type { ChannelId, DashboardData } from "@/lib/types";
+import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
 
 type Period = { key: string; from: string; to: string };
 
-/** Unidade em foco: a empresa toda, o site (online) ou uma loja física. */
-type View =
-  | { tipo: "tudo" }
-  | { tipo: "site" }
-  | { tipo: "canal"; ch: "shopify" | "tiktok" | "meli" }
-  | { tipo: "loja"; nome: string };
+/** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
+type Canal = "shopify" | "tiktok" | "meli";
 
 const ONLINE: ("shopify" | "tiktok" | "meli")[] = ["shopify", "tiktok", "meli"];
 
@@ -133,7 +129,8 @@ export default function Dashboard() {
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [view, setView] = useState<View>({ tipo: "tudo" });
+  const [sel, setSel] = useState<string[]>([]);
+  const [canal, setCanal] = useState<Canal | "">("");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -144,16 +141,14 @@ export default function Dashboard() {
   const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
   const [cache] = useState<Map<string, DashboardData>>(() => new Map());
 
-  const channel =
-    view.tipo === "canal"
-      ? view.ch
-      : view.tipo === "loja"
-        ? "lojas"
-        : view.tipo === "site"
-          ? "site"
-          : "";
-  const store = view.tipo === "loja" ? view.nome : "";
-  const unidade = view.tipo === "loja" ? view.nome : view.tipo === "tudo" ? "" : "Site";
+  const soSite = sel.length === 1 && sel[0] === "Site";
+  const unidade = sel.length === 1 ? sel[0] : "";
+  const alternar = (nome: string) => {
+    setCanal("");
+    setSel((atual) =>
+      atual.includes(nome) ? atual.filter((x) => x !== nome) : [...atual, nome]
+    );
+  };
 
   useEffect(() => {
     try {
@@ -164,11 +159,11 @@ export default function Dashboard() {
   }, []);
 
   const load = useCallback(
-    async (p: Period, ch: string, st: string) => {
+    async (p: Period, unidades: string[], ch: string) => {
       const qs =
         `from=${p.from}&to=${p.to}` +
-        (ch ? `&channel=${ch}` : "") +
-        (st ? `&store=${encodeURIComponent(st)}` : "");
+        (unidades.length ? `&units=${encodeURIComponent(unidades.join(","))}` : "") +
+        (ch ? `&channel=${ch}` : "");
       // Mostra na hora o que já foi visto e revalida em segundo plano
       const salvo = cache.get(qs);
       if (salvo) setData(salvo);
@@ -189,9 +184,10 @@ export default function Dashboard() {
     [cache]
   );
 
+  const selKey = sel.join(",");
   useEffect(() => {
-    load(period, channel, store);
-  }, [period, channel, store, load]);
+    load(period, selKey ? selKey.split(",") : [], canal);
+  }, [period, selKey, canal, load]);
 
   // Redirect das autorizações OAuth (TikTok Shop, TikTok Ads e Mercado Livre)
   useEffect(() => {
@@ -226,9 +222,10 @@ export default function Dashboard() {
       setMetasLocais(novas);
       localStorage.setItem("metas", JSON.stringify(novas));
     }
-    load(period, channel, store);
+    load(period, sel, canal);
   }
 
+  const querSite = sel.length === 0 || sel.includes("Site");
   const online = (data?.channels ?? []).filter((c) => c.channel !== "lojas");
   const siteRevenue = online.reduce((s, c) => s + c.revenue, 0);
   const sitePrev = online.reduce((s, c) => s + c.prevRevenue, 0);
@@ -236,19 +233,21 @@ export default function Dashboard() {
   const lojasCh = data?.channels.find((c) => c.channel === "lojas");
 
   // Séries do gráfico conforme a unidade em foco
+  const serieDaUnidade = (u: string) =>
+    u === "Site"
+      ? { key: "site", label: "Site (online)", color: "var(--c-shopify)" }
+      : { key: `loja:${u}`, label: u, color: corDaLoja(u) };
+
   const chartSeries = (() => {
-    if (view.tipo === "canal")
-      return [
-        { key: view.ch, label: CHANNEL_META[view.ch].name, color: CHANNEL_META[view.ch].cssVar },
-      ];
-    if (view.tipo === "loja")
-      return [{ key: `loja:${view.nome}`, label: view.nome, color: corDaLoja(view.nome) }];
-    if (view.tipo === "site")
+    if (canal)
+      return [{ key: canal, label: CHANNEL_META[canal].name, color: CHANNEL_META[canal].cssVar }];
+    if (soSite)
       return ONLINE.map((c) => ({
         key: c,
         label: CHANNEL_META[c].name,
         color: CHANNEL_META[c].cssVar,
       }));
+    if (sel.length > 0) return sel.map(serieDaUnidade);
     if (porLoja)
       return [
         { key: "site", label: "Site (online)", color: "var(--c-shopify)" },
@@ -263,22 +262,17 @@ export default function Dashboard() {
       { key: "lojas", label: "Lojas físicas", color: "var(--c-lojas)" },
     ];
   })();
-  const dailySeries = (data?.daily ?? []).map((d) =>
-    view.tipo === "tudo" ? { ...d, site: d.shopify + d.tiktok + d.meli } : d
-  );
+  const dailySeries: DailyPoint[] = (data?.daily ?? []).map((d) => ({
+    ...d,
+    site: d.shopify + d.tiktok + d.meli,
+  }));
 
   const spendSeries = (() => {
     if (!data) return undefined;
     const fontes: { date: string; spend: number }[][] = [];
-    if (
-      data.ads.connected &&
-      (view.tipo === "site" || (view.tipo === "canal" && view.ch === "shopify"))
-    )
+    if (data.ads.connected && soSite && (!canal || canal === "shopify"))
       fontes.push(data.ads.daily);
-    if (
-      data.tiktokAds.connected &&
-      (view.tipo === "site" || (view.tipo === "canal" && view.ch === "tiktok"))
-    )
+    if (data.tiktokAds.connected && soSite && (!canal || canal === "tiktok"))
       fontes.push(data.tiktokAds.daily);
     if (fontes.length === 0) return undefined;
     const m = new Map<string, number>();
@@ -353,22 +347,22 @@ export default function Dashboard() {
 
       {data && (
         <div style={{ opacity: loading ? 0.6 : 1 }}>
-          {view.tipo !== "tudo" && (
+          {sel.length > 0 && (
             <div className="unit-head">
-              <button className="back" onClick={() => setView({ tipo: "tudo" })}>
-                ← Todas as unidades
+              <h1>{canal ? CHANNEL_META[canal].name : sel.join(" + ")}</h1>
+              <button
+                className="back"
+                onClick={() => {
+                  setSel([]);
+                  setCanal("");
+                }}
+              >
+                limpar filtro ✕
               </button>
-              <h1>
-                {view.tipo === "loja"
-                  ? view.nome
-                  : view.tipo === "canal"
-                    ? CHANNEL_META[view.ch].name
-                    : "Site — vendas online"}
-              </h1>
             </div>
           )}
 
-          {view.tipo !== "tudo" && (
+          {sel.length > 0 && (
           <div className="tiles">
             <div className="tile">
               <div className="label">Faturamento</div>
@@ -376,7 +370,7 @@ export default function Dashboard() {
               <Delta now={data.totals.revenue} before={data.prevTotals.revenue} />
             </div>
             <div className="tile">
-              <div className="label">{view.tipo === "loja" ? "Vendas" : "Pedidos"}</div>
+              <div className="label">{soSite ? "Pedidos" : "Vendas"}</div>
               <div className="value">{data.totals.orders.toLocaleString("pt-BR")}</div>
               <Delta now={data.totals.orders} before={data.prevTotals.orders} />
             </div>
@@ -388,92 +382,100 @@ export default function Dashboard() {
           </div>
           )}
 
-          {/* ——— HOME: só as unidades e o gráfico ——— */}
-          {view.tipo === "tudo" && (
-            <>
-              {lojasCh && !lojasCh.connected ? (
-                <div className="card muted" style={{ fontSize: 12 }}>
-                  Lojas físicas não conectadas — configure{" "}
-                  {CHANNEL_META.lojas.envVars.map((v) => (
-                    <code key={v}>{v}</code>
-                  ))}
-                </div>
-              ) : lojasCh?.error ? (
-                <div className="card">
-                  <div className="err-msg">Lojas físicas: {lojasCh.error}</div>
-                </div>
-              ) : (
-                <div className="channels stores">
-                  <div
-                    className="channel-card clickable"
-                    style={{ ["--ch-color" as string]: "var(--c-shopify)" }}
-                    onClick={() => setView({ tipo: "site" })}
-                  >
-                    <div className="head">
-                      <span className="name">
-                        <span className="ch-dot" style={{ background: "var(--c-shopify)" }} />
-                        Site
-                      </span>
-                    </div>
-                    <div className="rev">
-                      {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
-                    </div>
-                    <div className="meta">
-                      {siteOrders.toLocaleString("pt-BR")} pedidos
-                      {siteOrders > 0 && <> · ticket {brl.format(siteRevenue / siteOrders)}</>}
-                    </div>
-                    <MetaMini feito={data.monthByUnit.Site ?? 0} meta={metaDe("Site")} />
-                  </div>
-                  {data.stores.map((loja) => (
-                    <div
-                      key={loja.name}
-                      className="channel-card clickable"
-                      style={{ ["--ch-color" as string]: corDaLoja(loja.name) }}
-                      onClick={() => setView({ tipo: "loja", nome: loja.name })}
-                    >
-                      <div className="head">
-                        <span className="name">
-                          <span className="ch-dot" style={{ background: corDaLoja(loja.name) }} />
-                          {loja.name}
-                        </span>
-                      </div>
-                      <div className="rev">
-                        {brl.format(loja.revenue)}{" "}
-                        <Delta now={loja.revenue} before={loja.prevRevenue} />
-                      </div>
-                      <div className="meta">
-                        {loja.orders.toLocaleString("pt-BR")} vendas
-                        {loja.orders > 0 && <> · ticket {brl.format(loja.revenue / loja.orders)}</>}
-                      </div>
-                      <MetaMini feito={data.monthByUnit[loja.name] ?? 0} meta={metaDe(loja.name)} />
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* ——— Unidades: sempre visíveis, funcionam como filtro ——— */}
+          {lojasCh && !lojasCh.connected ? (
+            <div className="card muted" style={{ fontSize: 12 }}>
+              Lojas físicas não conectadas — configure{" "}
+              {CHANNEL_META.lojas.envVars.map((v) => (
+                <code key={v}>{v}</code>
+              ))}
+            </div>
+          ) : lojasCh?.error ? (
+            <div className="card">
+              <div className="err-msg">Lojas físicas: {lojasCh.error}</div>
+            </div>
+          ) : null}
 
-              <div className="card">
-                <div className="goal-head">
-                  <h2>Faturamento por dia</h2>
-                  <button className="mini ghost" onClick={() => setPorLoja((v) => !v)}>
-                    {porLoja ? "agrupar lojas" : "ver por loja"}
-                  </button>
-                </div>
-                <div className="legend">
-                  {chartSeries.map((se) => (
-                    <span key={se.key} className="item">
-                      <span className="swatch" style={{ background: se.color }} />
-                      {se.label}
+          <div className="channels stores">
+            {[
+              {
+                nome: "Site",
+                cor: "var(--c-shopify)",
+                receita: siteRevenue,
+                anterior: sitePrev,
+                pedidos: siteOrders,
+                rotulo: "pedidos",
+              },
+              ...data.stores.map((l) => ({
+                nome: l.name,
+                cor: corDaLoja(l.name),
+                receita: l.revenue,
+                anterior: l.prevRevenue,
+                pedidos: l.orders,
+                rotulo: "vendas",
+              })),
+            ].map((u) => {
+              const ativo = sel.includes(u.nome);
+              return (
+                <div
+                  key={u.nome}
+                  className={`channel-card clickable${ativo ? " sel" : ""}${
+                    sel.length > 0 && !ativo ? " dim" : ""
+                  }`}
+                  style={{ ["--ch-color" as string]: u.cor }}
+                  onClick={() => alternar(u.nome)}
+                  title={ativo ? "Clique para tirar do filtro" : "Clique para somar ao filtro"}
+                >
+                  <div className="head">
+                    <span className="name">
+                      <span className="ch-dot" style={{ background: u.cor }} />
+                      {u.nome}
                     </span>
-                  ))}
+                    {ativo && <span className="badge sel-badge">✕</span>}
+                  </div>
+                  <div className="rev">
+                    {brl.format(u.receita)} <Delta now={u.receita} before={u.anterior} />
+                  </div>
+                  <div className="meta">
+                    {u.pedidos.toLocaleString("pt-BR")} {u.rotulo}
+                    {u.pedidos > 0 && <> · ticket {brl.format(u.receita / u.pedidos)}</>}
+                  </div>
+                  <MetaMini feito={data.monthByUnit[u.nome] ?? 0} meta={metaDe(u.nome)} />
                 </div>
-                <DailyChart daily={dailySeries} series={chartSeries} />
-              </div>
-            </>
-          )}
+              );
+            })}
+          </div>
 
-          {/* ——— DETALHE: site, canal ou loja ——— */}
-          {view.tipo !== "tudo" && (
+          <div className="card">
+            <div className="goal-head">
+              <h2>Faturamento por dia</h2>
+              {sel.length === 0 && (
+                <button className="mini ghost" onClick={() => setPorLoja((v) => !v)}>
+                  {porLoja ? "agrupar lojas" : "ver por loja"}
+                </button>
+              )}
+            </div>
+            <div className="legend">
+              {chartSeries.map((se) => (
+                <span key={se.key} className="item">
+                  <span className="swatch" style={{ background: se.color }} />
+                  {se.label}
+                </span>
+              ))}
+              {spendSeries && (
+                <span className="item">
+                  <span className="swatch spend-swatch" />
+                  Gasto anúncios
+                </span>
+              )}
+            </div>
+            <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
+          </div>
+
+          {/* ——— Detalhe da seleção ——— */}
+          {sel.length > 0 && (
             <>
+              {unidade && (
               <div className="card goal">
                 <div className="goal-head">
                   <h2>Meta de {data.goal?.monthLabel ?? "este mês"}</h2>
@@ -535,29 +537,30 @@ export default function Dashboard() {
                   </>
                 )}
               </div>
+              )}
 
-              {(view.tipo === "site" || view.tipo === "canal") && (
+              {soSite && (
                 <div className="channels">
                   {ONLINE.map((id) => {
                     const c = data.channels.find((x) => x.channel === id);
                     const meta = CHANNEL_META[id];
                     if (!c) return null;
-                    const sel = view.tipo === "canal" && view.ch === id;
+                    const ativo = canal === id;
                     return (
                       <div
                         key={id}
-                        className={`channel-card clickable${sel ? " sel" : ""}${
-                          view.tipo === "canal" && !sel ? " dim" : ""
+                        className={`channel-card clickable${ativo ? " sel" : ""}${
+                          canal && !ativo ? " dim" : ""
                         }`}
                         style={{ ["--ch-color" as string]: meta.cssVar }}
-                        onClick={() => setView(sel ? { tipo: "site" } : { tipo: "canal", ch: id })}
+                        onClick={() => setCanal(ativo ? "" : id)}
                       >
                         <div className="head">
                           <span className="name">
                             <span className="ch-dot" style={{ background: meta.cssVar }} />
                             {meta.name}
                           </span>
-                          {sel ? (
+                          {ativo ? (
                             <span className="badge sel-badge">filtrando ✕</span>
                           ) : !c.connected ? (
                             <span className="badge">não conectado</span>
@@ -601,25 +604,6 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="card">
-                <h2>Faturamento por dia</h2>
-                <div className="legend">
-                  {chartSeries.map((se) => (
-                    <span key={se.key} className="item">
-                      <span className="swatch" style={{ background: se.color }} />
-                      {se.label}
-                    </span>
-                  ))}
-                  {spendSeries && (
-                    <span className="item">
-                      <span className="swatch spend-swatch" />
-                      Gasto anúncios
-                    </span>
-                  )}
-                </div>
-                <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
-              </div>
-
               <div className="grid-2">
                 <div className="card">
                   <div className="goal-head">
@@ -660,8 +644,8 @@ export default function Dashboard() {
                               style={{
                                 width: `${(p.revenue / maxProd) * 100}%`,
                                 background:
-                                  view.tipo === "loja"
-                                    ? corDaLoja(view.nome)
+                                  unidade && unidade !== "Site"
+                                    ? corDaLoja(unidade)
                                     : CHANNEL_META[p.channel as ChannelId].cssVar,
                               }}
                             />
@@ -672,7 +656,7 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {view.tipo !== "loja" && (
+                {querSite && (
                   <div className="card">
                     <h2>Vendas por estado</h2>
                     {data.states.length === 0 ? (
@@ -891,7 +875,7 @@ export default function Dashboard() {
               })()}
 
               <div className="card">
-                <h2>{view.tipo === "loja" ? "Últimas vendas" : "Últimos pedidos"}</h2>
+                <h2>{soSite ? "Últimos pedidos" : "Últimas vendas"}</h2>
                 {data.recentOrders.length === 0 ? (
                   <div className="empty">Nenhuma venda no período.</div>
                 ) : (
@@ -899,7 +883,7 @@ export default function Dashboard() {
                     <table>
                       <thead>
                         <tr>
-                          <th>{view.tipo === "loja" ? "Loja" : "Canal"}</th>
+                          <th>Unidade</th>
                           <th>Pedido</th>
                           <th>Data</th>
                           <th>Cliente</th>

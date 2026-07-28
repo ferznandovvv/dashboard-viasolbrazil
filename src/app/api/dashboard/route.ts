@@ -78,23 +78,25 @@ export async function GET(req: NextRequest) {
 
   // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
   // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
-  // channel aceita um canal específico ou "site" (os três canais online)
+  // units = unidades selecionadas ("Site" e/ou nomes de lojas); vazio = tudo.
+  // channel restringe os canais online quando só o Site está selecionado.
+  const units = (sp.get("units") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
+  const querSite = units.includes("Site");
+  const lojasSel = units.filter((u) => u !== "Site");
   const channelParam = sp.get("channel") ?? "";
-  const isSite = channelParam === "site";
-  const channelFilter: ChannelId | null =
-    !isSite && ["shopify", "tiktok", "meli", "lojas"].includes(channelParam)
-      ? (channelParam as ChannelId)
-      : null;
-  const storeFilter = sp.get("store") ?? "";
-  const filteredResults = isSite
-    ? results.filter((r) => r.channel !== "lojas")
-    : channelFilter
-      ? results.filter((r) => r.channel === channelFilter)
-      : results;
+  const channelFilter: ChannelId | null = ["shopify", "tiktok", "meli"].includes(channelParam)
+    ? (channelParam as ChannelId)
+    : null;
 
-  const all = filteredResults
-    .flatMap((r) => r.orders)
-    .filter((o) => !storeFilter || o.store === storeFilter);
+  const naSelecao = (o: NormalizedOrder) => {
+    if (o.channel === "lojas") {
+      return units.length === 0 ? true : lojasSel.includes(o.store ?? "");
+    }
+    if (units.length > 0 && !querSite) return false;
+    return !channelFilter || o.channel === channelFilter;
+  };
+
+  const all = results.flatMap((r) => r.orders).filter(naSelecao);
   const allChannels = results.flatMap((r) => r.orders);
   const inWindow = (o: NormalizedOrder, a: string, b: string) => {
     const k = spDateKey(o.createdAt);
@@ -120,7 +122,7 @@ export async function GET(req: NextRequest) {
   }
 
   const channels = results.map((r) => {
-    const escopo = r.orders.filter((o) => !storeFilter || o.store === storeFilter);
+    const escopo = r.orders.filter((o) => o.channel !== "lojas" || naSelecao(o));
     const cur = escopo.filter((o) => inWindow(o, from, to));
     const prev = escopo.filter((o) => inWindow(o, prevFrom, prevTo));
     return {
@@ -311,8 +313,7 @@ export async function GET(req: NextRequest) {
   };
 
   // Clima da unidade em foco (correlação com as vendas) e mapa de horários
-  const unidadeFoco =
-    storeFilter || (isSite || (channelFilter && channelFilter !== "lojas") ? "Site" : "");
+  const unidadeFoco = units.length === 1 ? units[0] : "";
   const weather = unidadeFoco ? await fetchClima(unidadeFoco, from, to) : [];
 
   const horasMap = new Map<string, { dow: number; hour: number; revenue: number; orders: number }>();
