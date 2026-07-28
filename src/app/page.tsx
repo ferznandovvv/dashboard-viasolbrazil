@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
 
@@ -140,6 +140,9 @@ export default function Dashboard() {
   const [porLoja, setPorLoja] = useState(true);
   const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
   const [cache] = useState<Map<string, DashboardData>>(() => new Map());
+  // Identifica a última busca pedida: respostas atrasadas de filtros antigos
+  // não podem sobrescrever o filtro atual
+  const pedidoAtual = useRef(0);
 
   const soSite = sel.length === 1 && sel[0] === "Site";
   const unidade = sel.length === 1 ? sel[0] : "";
@@ -164,6 +167,7 @@ export default function Dashboard() {
         `from=${p.from}&to=${p.to}` +
         (unidades.length ? `&units=${encodeURIComponent(unidades.join(","))}` : "") +
         (ch ? `&channel=${ch}` : "");
+      const id = ++pedidoAtual.current;
       // Mostra na hora o que já foi visto e revalida em segundo plano
       const salvo = cache.get(qs);
       if (salvo) setData(salvo);
@@ -174,11 +178,12 @@ export default function Dashboard() {
         if (!res.ok) throw new Error(`Erro ${res.status}`);
         const json = (await res.json()) as DashboardData;
         cache.set(qs, json);
-        setData(json);
+        if (id === pedidoAtual.current) setData(json);
       } catch {
-        if (!salvo) setFetchError("Não foi possível carregar os dados. Tente recarregar a página.");
+        if (!salvo && id === pedidoAtual.current)
+          setFetchError("Não foi possível carregar os dados. Tente recarregar a página.");
       } finally {
-        setLoading(false);
+        if (id === pedidoAtual.current) setLoading(false);
       }
     },
     [cache]
