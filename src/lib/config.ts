@@ -2,6 +2,8 @@ import { list, put } from "@vercel/blob";
 
 export interface AppConfig {
   metaMensal?: number;
+  /** Meta mensal por unidade: "Site", "Centro", "Ribeirão Preto"… */
+  metas?: Record<string, number>;
 }
 
 const PATH = "config/settings.json";

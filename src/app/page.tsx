@@ -1,10 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { DashboardData } from "@/lib/types";
+import type { ChannelId, DashboardData } from "@/lib/types";
 import { CHANNEL_META, DailyChart, brl, fmtDay } from "@/components/viz";
 
 type Period = { key: string; from: string; to: string };
+
+/** Unidade em foco: a empresa toda, o site (online) ou uma loja física. */
+type View =
+  | { tipo: "tudo" }
+  | { tipo: "site" }
+  | { tipo: "canal"; ch: "shopify" | "tiktok" | "meli" }
+  | { tipo: "loja"; nome: string };
+
+const ONLINE: ("shopify" | "tiktok" | "meli")[] = ["shopify", "tiktok", "meli"];
 
 /** Data de hoje no fuso de São Paulo (YYYY-MM-DD), calculada no navegador. */
 function spToday(): string {
@@ -18,8 +27,7 @@ function spToday(): string {
 
 function shiftDays(dateKey: string, n: number): string {
   const [y, m, d] = dateKey.split("-").map(Number);
-  const t = new Date(Date.UTC(y, m - 1, d + n));
-  return t.toISOString().slice(0, 10);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
 function buildPresets(): Period[] {
@@ -42,6 +50,17 @@ function buildPresets(): Period[] {
     { key: "Últimos 3 meses", from: shiftDays(today, -89), to: today },
     { key: "Ano atual", from: `${y}-01-01`, to: today },
   ];
+}
+
+function Delta({ now, before }: { now: number; before: number }) {
+  if (before <= 0) return null;
+  const pct = ((now - before) / before) * 100;
+  const up = pct >= 0;
+  return (
+    <span className={`delta ${up ? "up" : "down"}`} title="vs período anterior">
+      {up ? "↑" : "↓"} {Math.abs(pct).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+    </span>
+  );
 }
 
 function AdsInline({
@@ -67,43 +86,44 @@ function AdsInline({
   );
 }
 
-function Delta({ now, before }: { now: number; before: number }) {
-  if (before <= 0) return null;
-  const pct = ((now - before) / before) * 100;
-  const up = pct >= 0;
+/** Barrinha de meta do mês usada nos cards da home. */
+function MetaMini({ feito, meta }: { feito: number; meta: number }) {
+  if (!(meta > 0)) return null;
+  const pct = feito / meta;
   return (
-    <span className={`delta ${up ? "up" : "down"}`} title="vs período anterior">
-      {up ? "↑" : "↓"} {Math.abs(pct).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
-    </span>
+    <div className="meta-mini" title={`${brl.format(feito)} de ${brl.format(meta)} no mês`}>
+      <div className="meta-mini-bar">
+        <div className="meta-mini-fill" style={{ width: `${Math.min(pct * 100, 100)}%` }} />
+      </div>
+      <span>{(pct * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% da meta</span>
+    </div>
   );
 }
 
 export default function Dashboard() {
   const [presets] = useState(buildPresets);
-  const [period, setPeriod] = useState<Period>(presets[2]); // padrão: Mês atual
+  const [period, setPeriod] = useState<Period>(presets[3]); // padrão: Mês atual
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  // Visão: tudo | site (online agregado) | canal online | loja física
-  const [view, setView] = useState<
-    | { tipo: "tudo" }
-    | { tipo: "site" }
-    | { tipo: "canal"; ch: "shopify" | "tiktok" | "meli" }
-    | { tipo: "loja"; nome: string }
-  >({ tipo: "tudo" });
-  const channel = view.tipo === "canal" ? view.ch : view.tipo === "loja" ? "lojas" : "";
-  const store = view.tipo === "loja" ? view.nome : "";
+  const [view, setView] = useState<View>({ tipo: "tudo" });
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
-  // Meta editável na tela
-  const [editingGoal, setEditingGoal] = useState(false);
-  const [goalInput, setGoalInput] = useState("");
-  const [localGoal, setLocalGoal] = useState(0);
+  const [editandoMeta, setEditandoMeta] = useState(false);
+  const [metaInput, setMetaInput] = useState("");
+  const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
+
+  const channel = view.tipo === "canal" ? view.ch : view.tipo === "loja" ? "lojas" : "";
+  const store = view.tipo === "loja" ? view.nome : "";
+  const unidade = view.tipo === "loja" ? view.nome : view.tipo === "tudo" ? "" : "Site";
 
   useEffect(() => {
-    const v = parseFloat(localStorage.getItem("metaMensal") ?? "");
-    if (v > 0) setLocalGoal(v);
+    try {
+      setMetasLocais(JSON.parse(localStorage.getItem("metas") ?? "{}"));
+    } catch {
+      /* sem metas locais */
+    }
   }, []);
 
   const load = useCallback(async (p: Period, ch: string, st: string) => {
@@ -128,33 +148,9 @@ export default function Dashboard() {
     load(period, channel, store);
   }, [period, channel, store, load]);
 
-  async function saveGoal() {
-    const v = parseFloat(goalInput.replace(/\./g, "").replace(",", "."));
-    if (!(v >= 0)) return;
-    setEditingGoal(false);
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metaMensal: v }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!json.persisted) {
-        localStorage.setItem("metaMensal", String(v));
-        setLocalGoal(v);
-      }
-    } catch {
-      localStorage.setItem("metaMensal", String(v));
-      setLocalGoal(v);
-    }
-    load(period, channel, store);
-  }
-
-  // Redirect das autorizações OAuth: TikTok Shop e Mercado Livre devolvem
-  // ?code=... para cá; o state diz de qual plataforma veio.
+  // Redirect das autorizações OAuth (TikTok Shop, TikTok Ads e Mercado Livre)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // TikTok Ads devolve ?auth_code=...
     const authCode = params.get("auth_code");
     if (authCode) {
       window.location.replace(`/api/tiktok-ads/setup?auth_code=${encodeURIComponent(authCode)}`);
@@ -166,30 +162,39 @@ export default function Dashboard() {
     window.location.replace(`/api/${target}/setup?code=${encodeURIComponent(code)}`);
   }, []);
 
-  const anyConnected = data?.channels.some((c) => c.connected) ?? false;
+  const metaDe = (u: string) => data?.metas[u] ?? metasLocais[u] ?? 0;
 
-  // Linha de gasto do gráfico: soma Meta + TikTok Ads, respeitando o filtro
-  const spendSeries = (() => {
-    if (!data) return undefined;
-    const sources: { date: string; spend: number }[][] = [];
-    if (data.ads.connected && (!channel || channel === "shopify")) sources.push(data.ads.daily);
-    if (data.tiktokAds.connected && (!channel || channel === "tiktok"))
-      sources.push(data.tiktokAds.daily);
-    if (sources.length === 0) return undefined;
-    const m = new Map<string, number>();
-    for (const src of sources)
-      for (const d of src) m.set(d.date, (m.get(d.date) ?? 0) + d.spend);
-    return Array.from(m.entries()).map(([date, spend]) => ({ date, spend }));
-  })();
-  const ONLINE: ("shopify" | "tiktok" | "meli")[] = ["shopify", "tiktok", "meli"];
+  async function salvarMeta(u: string) {
+    const v = parseFloat(metaInput.replace(/\./g, "").replace(",", "."));
+    if (!(v >= 0)) return;
+    setEditandoMeta(false);
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unidade: u, meta: v }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!json.persisted) throw new Error("sem blob");
+    } catch {
+      const novas = { ...metasLocais, [u]: v };
+      setMetasLocais(novas);
+      localStorage.setItem("metas", JSON.stringify(novas));
+    }
+    load(period, channel, store);
+  }
+
+  const online = (data?.channels ?? []).filter((c) => c.channel !== "lojas");
+  const siteRevenue = online.reduce((s, c) => s + c.revenue, 0);
+  const sitePrev = online.reduce((s, c) => s + c.prevRevenue, 0);
+  const siteOrders = online.reduce((s, c) => s + c.orders, 0);
+  const lojasCh = data?.channels.find((c) => c.channel === "lojas");
+
+  // Séries do gráfico conforme a unidade em foco
   const chartSeries = (() => {
     if (view.tipo === "canal")
       return [
-        {
-          key: view.ch,
-          label: CHANNEL_META[view.ch].name,
-          color: CHANNEL_META[view.ch].cssVar,
-        },
+        { key: view.ch, label: CHANNEL_META[view.ch].name, color: CHANNEL_META[view.ch].cssVar },
       ];
     if (view.tipo === "loja")
       return [{ key: `loja:${view.nome}`, label: view.nome, color: "var(--c-lojas)" }];
@@ -204,19 +209,31 @@ export default function Dashboard() {
       { key: "lojas", label: "Lojas físicas", color: "var(--c-lojas)" },
     ];
   })();
-  // Na visão geral, a série "site" é a soma dos três canais online
   const dailySeries = (data?.daily ?? []).map((d) =>
     view.tipo === "tudo" ? { ...d, site: d.shopify + d.tiktok + d.meli } : d
   );
 
-  const online = (data?.channels ?? []).filter((c) => c.channel !== "lojas");
-  const siteRevenue = online.reduce((s, c) => s + c.revenue, 0);
-  const sitePrev = online.reduce((s, c) => s + c.prevRevenue, 0);
-  const siteOrders = online.reduce((s, c) => s + c.orders, 0);
-  const maxLoja = Math.max(...(data?.stores.map((s) => s.revenue) ?? [0]), 1);
+  const spendSeries = (() => {
+    if (!data) return undefined;
+    const fontes: { date: string; spend: number }[][] = [];
+    if (
+      data.ads.connected &&
+      (view.tipo === "site" || (view.tipo === "canal" && view.ch === "shopify"))
+    )
+      fontes.push(data.ads.daily);
+    if (
+      data.tiktokAds.connected &&
+      (view.tipo === "site" || (view.tipo === "canal" && view.ch === "tiktok"))
+    )
+      fontes.push(data.tiktokAds.daily);
+    if (fontes.length === 0) return undefined;
+    const m = new Map<string, number>();
+    for (const src of fontes) for (const d of src) m.set(d.date, (m.get(d.date) ?? 0) + d.spend);
+    return Array.from(m.entries()).map(([date, spend]) => ({ date, spend }));
+  })();
 
-  const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
   const maxProd = Math.max(...(data?.topProducts.map((p) => p.revenue) ?? [0]), 1);
+  const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
 
   return (
     <main className="wrap">
@@ -279,6 +296,21 @@ export default function Dashboard() {
 
       {data && (
         <div style={{ opacity: loading ? 0.6 : 1 }}>
+          {view.tipo !== "tudo" && (
+            <div className="unit-head">
+              <button className="back" onClick={() => setView({ tipo: "tudo" })}>
+                ← Todas as unidades
+              </button>
+              <h1>
+                {view.tipo === "loja"
+                  ? view.nome
+                  : view.tipo === "canal"
+                    ? CHANNEL_META[view.ch].name
+                    : "Site — vendas online"}
+              </h1>
+            </div>
+          )}
+
           <div className="tiles">
             <div className="tile">
               <div className="label">Faturamento</div>
@@ -286,7 +318,7 @@ export default function Dashboard() {
               <Delta now={data.totals.revenue} before={data.prevTotals.revenue} />
             </div>
             <div className="tile">
-              <div className="label">Pedidos</div>
+              <div className="label">{view.tipo === "loja" ? "Vendas" : "Pedidos"}</div>
               <div className="value">{data.totals.orders.toLocaleString("pt-BR")}</div>
               <Delta now={data.totals.orders} before={data.prevTotals.orders} />
             </div>
@@ -297,219 +329,58 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {data.goal && (() => {
-            const target = data.goal.target > 0 ? data.goal.target : localGoal;
-            const pct = target > 0 ? data.goal.monthRevenue / target : 0;
-            return (
-              <div className="card goal">
-                <div className="goal-head">
-                  <h2>Meta de {data.goal.monthLabel}</h2>
-                  <span className="muted">
-                    {editingGoal ? (
-                      <span className="goal-edit">
-                        <input
-                          autoFocus
-                          inputMode="numeric"
-                          placeholder="ex.: 150000"
-                          value={goalInput}
-                          onChange={(e) => setGoalInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && saveGoal()}
-                        />
-                        <button className="mini" onClick={saveGoal}>Salvar</button>
-                        <button className="mini ghost" onClick={() => setEditingGoal(false)}>
-                          Cancelar
-                        </button>
-                      </span>
-                    ) : (
-                      <>
-                        {target > 0 ? (
-                          <>
-                            {brl.format(data.goal.monthRevenue)} de {brl.format(target)} ·
-                            projeção {brl.format(data.goal.projection)}{" "}
-                          </>
-                        ) : (
-                          <>
-                            {brl.format(data.goal.monthRevenue)} no mês ·
-                            projeção {brl.format(data.goal.projection)}{" "}
-                          </>
-                        )}
-                        <button
-                          className="mini ghost"
-                          onClick={() => {
-                            setGoalInput(target > 0 ? String(target) : "");
-                            setEditingGoal(true);
-                          }}
-                        >
-                          {target > 0 ? "editar meta" : "definir meta"}
-                        </button>
-                      </>
-                    )}
-                  </span>
-                </div>
-                {target > 0 && (
-                  <>
-                    <div className="goal-bar">
-                      <div className="goal-fill" style={{ width: `${Math.min(pct * 100, 100)}%` }} />
-                    </div>
-                    <div className="goal-pct">
-                      {(pct * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% da meta
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Site (online) — agregado dos três canais, clicável para abrir */}
-          <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
-            <div
-              className={`channel-card clickable${view.tipo === "site" ? " sel" : ""}${
-                view.tipo === "loja" || view.tipo === "canal" ? " dim" : ""
-              }`}
-              style={{ ["--ch-color" as string]: "var(--c-shopify)" }}
-              onClick={() => setView(view.tipo === "site" ? { tipo: "tudo" } : { tipo: "site" })}
-              title="Clique para abrir os canais online"
-            >
-              <div className="head">
-                <span className="name">
-                  <span className="ch-dot" style={{ background: "var(--c-shopify)" }} />
-                  Site — vendas online
-                </span>
-                <span className="badge sel-badge">
-                  {view.tipo === "site" ? "aberto ✕" : "ver canais"}
-                </span>
-              </div>
-              <div className="rev">
-                {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
-              </div>
-              <div className="meta">
-                {siteOrders.toLocaleString("pt-BR")} pedidos no período
-                {siteOrders > 0 && <> · ticket médio {brl.format(siteRevenue / siteOrders)}</>}
-              </div>
-            </div>
-          </div>
-
-          {view.tipo === "site" || view.tipo === "canal" ? (
-            <div className="channels">
-              {ONLINE.map((id) => {
-                const c = data.channels.find((x) => x.channel === id);
-                const meta = CHANNEL_META[id];
-                if (!c) return null;
-                const sel = view.tipo === "canal" && view.ch === id;
-                return (
-                  <div
-                    key={id}
-                    className={`channel-card clickable${sel ? " sel" : ""}${
-                      view.tipo === "canal" && !sel ? " dim" : ""
-                    }`}
-                    style={{ ["--ch-color" as string]: meta.cssVar }}
-                    onClick={() => setView(sel ? { tipo: "site" } : { tipo: "canal", ch: id })}
-                  >
-                    <div className="head">
-                      <span className="name">
-                        <span className="ch-dot" style={{ background: meta.cssVar }} />
-                        {meta.name}
-                      </span>
-                      {sel ? (
-                        <span className="badge sel-badge">filtrando ✕</span>
-                      ) : !c.connected ? (
-                        <span className="badge">não conectado</span>
-                      ) : c.error ? (
-                        <span className="badge err">erro</span>
-                      ) : (
-                        <span className="badge on">conectado</span>
-                      )}
-                    </div>
-                    {c.connected ? (
-                      <>
-                        <div className="rev">
-                          {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
-                        </div>
-                        <div className="meta">
-                          {c.orders.toLocaleString("pt-BR")} pedidos
-                          {c.orders > 0 && <> · ticket {brl.format(c.revenue / c.orders)}</>}
-                        </div>
-                        {id === "shopify" && data.ads.connected && (
-                          <AdsInline label="Anúncios (Meta)" ads={data.ads} />
-                        )}
-                        {id === "tiktok" && data.tiktokAds.connected && (
-                          <AdsInline label="Anúncios (TikTok)" ads={data.tiktokAds} />
-                        )}
-                        {c.error && <div className="err-msg">{c.error}</div>}
-                      </>
-                    ) : (
-                      <div className="setup">
-                        Para conectar, adicione nas variáveis de ambiente:
-                        {meta.envVars.map((v) => (
-                          <div key={v}>
-                            <code>{v}</code>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+          {/* ——— HOME: só as unidades e o gráfico ——— */}
+          {view.tipo === "tudo" && (
+            <>
+              <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
+                <div
+                  className="channel-card clickable"
+                  style={{ ["--ch-color" as string]: "var(--c-shopify)" }}
+                  onClick={() => setView({ tipo: "site" })}
+                >
+                  <div className="head">
+                    <span className="name">
+                      <span className="ch-dot" style={{ background: "var(--c-shopify)" }} />
+                      Site — vendas online
+                    </span>
+                    <span className="badge sel-badge">abrir →</span>
                   </div>
-                );
-              })}
-            </div>
-          ) : null}
+                  <div className="rev">
+                    {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
+                  </div>
+                  <div className="meta">
+                    {siteOrders.toLocaleString("pt-BR")} pedidos
+                    {siteOrders > 0 && <> · ticket {brl.format(siteRevenue / siteOrders)}</>}
+                  </div>
+                  <MetaMini feito={data.monthByUnit.Site ?? 0} meta={metaDe("Site")} />
+                </div>
+              </div>
 
-          {/* Lojas físicas — uma por card */}
-          {(() => {
-            const lojasCh = data.channels.find((c) => c.channel === "lojas");
-            if (lojasCh && !lojasCh.connected) {
-              return (
-                <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
-                  <div className="channel-card" style={{ ["--ch-color" as string]: "var(--c-lojas)" }}>
-                    <div className="head">
-                      <span className="name">Lojas físicas</span>
-                      <span className="badge">não conectado</span>
-                    </div>
-                    <div className="setup">
-                      Para conectar, adicione nas variáveis de ambiente:
-                      {CHANNEL_META.lojas.envVars.map((v) => (
-                        <div key={v}>
-                          <code>{v}</code>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {lojasCh && !lojasCh.connected ? (
+                <div className="card muted" style={{ fontSize: 12 }}>
+                  Lojas físicas não conectadas — configure{" "}
+                  {CHANNEL_META.lojas.envVars.map((v) => (
+                    <code key={v}>{v}</code>
+                  ))}
                 </div>
-              );
-            }
-            if (lojasCh?.error) {
-              return (
-                <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
-                  <div className="channel-card" style={{ ["--ch-color" as string]: "var(--c-lojas)" }}>
-                    <div className="head">
-                      <span className="name">Lojas físicas</span>
-                      <span className="badge err">erro</span>
-                    </div>
-                    <div className="err-msg">{lojasCh.error}</div>
-                  </div>
+              ) : lojasCh?.error ? (
+                <div className="card">
+                  <div className="err-msg">Lojas físicas: {lojasCh.error}</div>
                 </div>
-              );
-            }
-            return (
-              <div className="channels stores">
-                {data.stores.map((loja) => {
-                  const sel = view.tipo === "loja" && view.nome === loja.name;
-                  return (
+              ) : (
+                <div className="channels stores">
+                  {data.stores.map((loja) => (
                     <div
                       key={loja.name}
-                      className={`channel-card clickable${sel ? " sel" : ""}${
-                        view.tipo === "loja" && !sel ? " dim" : ""
-                      }`}
+                      className="channel-card clickable"
                       style={{ ["--ch-color" as string]: "var(--c-lojas)" }}
-                      onClick={() =>
-                        setView(sel ? { tipo: "tudo" } : { tipo: "loja", nome: loja.name })
-                      }
+                      onClick={() => setView({ tipo: "loja", nome: loja.name })}
                     >
                       <div className="head">
                         <span className="name">
                           <span className="ch-dot" style={{ background: "var(--c-lojas)" }} />
                           {loja.name}
                         </span>
-                        {sel && <span className="badge sel-badge">filtrando ✕</span>}
                       </div>
                       <div className="rev">
                         {brl.format(loja.revenue)}{" "}
@@ -519,147 +390,285 @@ export default function Dashboard() {
                         {loja.orders.toLocaleString("pt-BR")} vendas
                         {loja.orders > 0 && <> · ticket {brl.format(loja.revenue / loja.orders)}</>}
                       </div>
+                      <MetaMini feito={data.monthByUnit[loja.name] ?? 0} meta={metaDe(loja.name)} />
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              )}
+
+              <div className="card">
+                <h2>Faturamento por dia</h2>
+                <div className="legend">
+                  {chartSeries.map((se) => (
+                    <span key={se.key} className="item">
+                      <span className="swatch" style={{ background: se.color }} />
+                      {se.label}
+                    </span>
+                  ))}
+                </div>
+                <DailyChart daily={dailySeries} series={chartSeries} />
               </div>
-            );
-          })()}
+            </>
+          )}
 
-          <div className="card">
-            <h2>
-              Faturamento por dia
-              {view.tipo === "loja" && <span className="filter-note"> — {view.nome}</span>}
-              {view.tipo === "canal" && (
-                <span className="filter-note"> — só {CHANNEL_META[view.ch].name}</span>
-              )}
-              {view.tipo === "site" && <span className="filter-note"> — canais online</span>}
-            </h2>
-            <div className="legend">
-              {chartSeries.map((se) => (
-                <span key={se.key} className="item">
-                  <span className="swatch" style={{ background: se.color }} />
-                  {se.label}
-                </span>
-              ))}
-              {spendSeries && (
-                <span className="item">
-                  <span className="swatch spend-swatch" />
-                  Gasto anúncios
-                </span>
-              )}
-            </div>
-            <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
-          </div>
-
-          <div className="grid-2">
-            <div className="card">
-              <h2>Produtos mais vendidos</h2>
-              {data.topProducts.length === 0 ? (
-                <div className="empty">Sem itens no período.</div>
-              ) : (
-                <div className="rank">
-                  {data.topProducts.map((p) => (
-                    <div key={p.title} className="rank-row" title={p.title}>
-                      <div className="rank-info">
-                        <span className="rank-title">
-                          <span className="ch-dot" style={{ background: CHANNEL_META[p.channel].cssVar }} />
-                          {p.title}
-                        </span>
-                        <span className="rank-nums">
-                          {p.qty}× · <b>{brl.format(p.revenue)}</b>
-                        </span>
-                      </div>
-                      <div className="rank-bar">
-                        <div
-                          className="rank-fill"
-                          style={{
-                            width: `${(p.revenue / maxProd) * 100}%`,
-                            background: CHANNEL_META[p.channel].cssVar,
+          {/* ——— DETALHE: site, canal ou loja ——— */}
+          {view.tipo !== "tudo" && (
+            <>
+              <div className="card goal">
+                <div className="goal-head">
+                  <h2>Meta de {data.goal?.monthLabel ?? "este mês"}</h2>
+                  <span className="muted">
+                    {editandoMeta ? (
+                      <span className="goal-edit">
+                        <input
+                          autoFocus
+                          inputMode="numeric"
+                          placeholder="ex.: 80000"
+                          value={metaInput}
+                          onChange={(e) => setMetaInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && salvarMeta(unidade)}
+                        />
+                        <button className="mini" onClick={() => salvarMeta(unidade)}>
+                          Salvar
+                        </button>
+                        <button className="mini ghost" onClick={() => setEditandoMeta(false)}>
+                          Cancelar
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        {brl.format(data.monthByUnit[unidade] ?? 0)}
+                        {metaDe(unidade) > 0 && <> de {brl.format(metaDe(unidade))}</>} no mês{" "}
+                        <button
+                          className="mini ghost"
+                          onClick={() => {
+                            setMetaInput(metaDe(unidade) > 0 ? String(metaDe(unidade)) : "");
+                            setEditandoMeta(true);
                           }}
-                        />
-                      </div>
+                        >
+                          {metaDe(unidade) > 0 ? "editar meta" : "definir meta"}
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+                {metaDe(unidade) > 0 && (
+                  <>
+                    <div className="goal-bar">
+                      <div
+                        className="goal-fill"
+                        style={{
+                          width: `${Math.min(
+                            ((data.monthByUnit[unidade] ?? 0) / metaDe(unidade)) * 100,
+                            100
+                          )}%`,
+                        }}
+                      />
                     </div>
-                  ))}
+                    <div className="goal-pct">
+                      {(((data.monthByUnit[unidade] ?? 0) / metaDe(unidade)) * 100).toLocaleString(
+                        "pt-BR",
+                        { maximumFractionDigits: 0 }
+                      )}
+                      % da meta de {unidade}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {(view.tipo === "site" || view.tipo === "canal") && (
+                <div className="channels">
+                  {ONLINE.map((id) => {
+                    const c = data.channels.find((x) => x.channel === id);
+                    const meta = CHANNEL_META[id];
+                    if (!c) return null;
+                    const sel = view.tipo === "canal" && view.ch === id;
+                    return (
+                      <div
+                        key={id}
+                        className={`channel-card clickable${sel ? " sel" : ""}${
+                          view.tipo === "canal" && !sel ? " dim" : ""
+                        }`}
+                        style={{ ["--ch-color" as string]: meta.cssVar }}
+                        onClick={() => setView(sel ? { tipo: "site" } : { tipo: "canal", ch: id })}
+                      >
+                        <div className="head">
+                          <span className="name">
+                            <span className="ch-dot" style={{ background: meta.cssVar }} />
+                            {meta.name}
+                          </span>
+                          {sel ? (
+                            <span className="badge sel-badge">filtrando ✕</span>
+                          ) : !c.connected ? (
+                            <span className="badge">não conectado</span>
+                          ) : c.error ? (
+                            <span className="badge err">erro</span>
+                          ) : (
+                            <span className="badge on">conectado</span>
+                          )}
+                        </div>
+                        {c.connected ? (
+                          <>
+                            <div className="rev">
+                              {brl.format(c.revenue)}{" "}
+                              <Delta now={c.revenue} before={c.prevRevenue} />
+                            </div>
+                            <div className="meta">
+                              {c.orders.toLocaleString("pt-BR")} pedidos
+                              {c.orders > 0 && <> · ticket {brl.format(c.revenue / c.orders)}</>}
+                            </div>
+                            {id === "shopify" && data.ads.connected && (
+                              <AdsInline label="Anúncios (Meta)" ads={data.ads} />
+                            )}
+                            {id === "tiktok" && data.tiktokAds.connected && (
+                              <AdsInline label="Anúncios (TikTok)" ads={data.tiktokAds} />
+                            )}
+                            {c.error && <div className="err-msg">{c.error}</div>}
+                          </>
+                        ) : (
+                          <div className="setup">
+                            Para conectar, adicione nas variáveis de ambiente:
+                            {meta.envVars.map((v) => (
+                              <div key={v}>
+                                <code>{v}</code>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-            </div>
 
-            <div className="card">
-              <h2>Vendas por estado</h2>
-              {data.states.length === 0 ? (
-                <div className="empty">Sem dados de entrega no período.</div>
-              ) : (
-                <div className="rank">
-                  {data.states.map((s) => (
-                    <div key={s.uf} className="rank-row">
-                      <div className="rank-info">
-                        <span className="rank-title">{s.uf}</span>
-                        <span className="rank-nums">
-                          {s.orders} ped. · <b>{brl.format(s.revenue)}</b>
-                        </span>
-                      </div>
-                      <div className="rank-bar">
-                        <div
-                          className="rank-fill"
-                          style={{ width: `${(s.revenue / maxState) * 100}%`, background: "var(--brand)" }}
-                        />
-                      </div>
-                    </div>
+              <div className="card">
+                <h2>Faturamento por dia</h2>
+                <div className="legend">
+                  {chartSeries.map((se) => (
+                    <span key={se.key} className="item">
+                      <span className="swatch" style={{ background: se.color }} />
+                      {se.label}
+                    </span>
                   ))}
+                  {spendSeries && (
+                    <span className="item">
+                      <span className="swatch spend-swatch" />
+                      Gasto anúncios
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+                <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
+              </div>
 
-          <div className="card">
-            <h2>Últimos pedidos</h2>
-            {data.recentOrders.length === 0 ? (
-              <div className="empty">
-                {anyConnected
-                  ? "Nenhum pedido no período."
-                  : "Conecte pelo menos um canal para ver os pedidos aqui."}
+              <div className="grid-2">
+                <div className="card">
+                  <h2>Produtos mais vendidos</h2>
+                  {data.topProducts.length === 0 ? (
+                    <div className="empty">Sem itens no período.</div>
+                  ) : (
+                    <div className="rank">
+                      {data.topProducts.map((p) => (
+                        <div key={p.title} className="rank-row" title={p.title}>
+                          <div className="rank-info">
+                            <span className="rank-title">{p.title}</span>
+                            <span className="rank-nums">
+                              {p.qty}× · <b>{brl.format(p.revenue)}</b>
+                            </span>
+                          </div>
+                          <div className="rank-bar">
+                            <div
+                              className="rank-fill"
+                              style={{
+                                width: `${(p.revenue / maxProd) * 100}%`,
+                                background: CHANNEL_META[p.channel as ChannelId].cssVar,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {view.tipo !== "loja" && (
+                  <div className="card">
+                    <h2>Vendas por estado</h2>
+                    {data.states.length === 0 ? (
+                      <div className="empty">Sem dados de entrega no período.</div>
+                    ) : (
+                      <div className="rank">
+                        {data.states.map((s) => (
+                          <div key={s.uf} className="rank-row">
+                            <div className="rank-info">
+                              <span className="rank-title">{s.uf}</span>
+                              <span className="rank-nums">
+                                {s.orders} ped. · <b>{brl.format(s.revenue)}</b>
+                              </span>
+                            </div>
+                            <div className="rank-bar">
+                              <div
+                                className="rank-fill"
+                                style={{
+                                  width: `${(s.revenue / maxState) * 100}%`,
+                                  background: "var(--brand)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="orders-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Canal</th>
-                      <th>Pedido</th>
-                      <th>Data</th>
-                      <th>Cliente</th>
-                      <th>Status</th>
-                      <th className="num">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recentOrders.map((o) => (
-                      <tr key={`${o.channel}-${o.id}`}>
-                        <td>
-                          <span className="ch-dot" style={{ background: CHANNEL_META[o.channel].cssVar }} />
-                          {CHANNEL_META[o.channel].name}
-                        </td>
-                        <td>{o.label}</td>
-                        <td className="muted">
-                          {new Date(o.createdAt).toLocaleString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            timeZone: "America/Sao_Paulo",
-                          })}
-                        </td>
-                        <td>{o.customer ?? <span className="muted">—</span>}</td>
-                        <td className="muted">{o.status.toLowerCase()}</td>
-                        <td className="num">{brl.format(o.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              <div className="card">
+                <h2>{view.tipo === "loja" ? "Últimas vendas" : "Últimos pedidos"}</h2>
+                {data.recentOrders.length === 0 ? (
+                  <div className="empty">Nenhuma venda no período.</div>
+                ) : (
+                  <div className="orders-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{view.tipo === "loja" ? "Loja" : "Canal"}</th>
+                          <th>Pedido</th>
+                          <th>Data</th>
+                          <th>Cliente</th>
+                          <th className="num">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.recentOrders.map((o) => (
+                          <tr key={`${o.channel}-${o.id}`}>
+                            <td>
+                              <span
+                                className="ch-dot"
+                                style={{ background: CHANNEL_META[o.channel].cssVar }}
+                              />
+                              {o.store ?? CHANNEL_META[o.channel].name}
+                            </td>
+                            <td>{o.label}</td>
+                            <td className="muted">
+                              {new Date(o.createdAt).toLocaleString("pt-BR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZone: "America/Sao_Paulo",
+                              })}
+                            </td>
+                            <td>{o.customer ?? <span className="muted">—</span>}</td>
+                            <td className="num">{brl.format(o.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       )}
     </main>

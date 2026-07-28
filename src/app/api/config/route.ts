@@ -10,7 +10,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  const meta = parseFloat(body.metaMensal);
+  const meta = parseFloat(body.meta ?? body.metaMensal);
+  const unidade = typeof body.unidade === "string" ? body.unidade : "";
   if (!(meta >= 0)) {
     return NextResponse.json({ error: "Valor inválido" }, { status: 400 });
   }
@@ -19,6 +20,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ persisted: false });
   }
   const cfg = await readConfig();
-  await writeConfig({ ...cfg, metaMensal: meta });
+  if (unidade) {
+    await writeConfig({ ...cfg, metas: { ...(cfg.metas ?? {}), [unidade]: meta } });
+  } else {
+    await writeConfig({ ...cfg, metaMensal: meta });
+  }
   return NextResponse.json({ persisted: true });
 }

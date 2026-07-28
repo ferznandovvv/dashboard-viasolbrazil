@@ -196,6 +196,17 @@ export async function GET(req: NextRequest) {
     return k >= monthStart && k <= today;
   });
   const monthRevenue = monthOrders.reduce((s, o) => s + o.total, 0);
+
+  // Faturamento do mês por unidade (Site = canais online; lojas pelo nome)
+  const monthByUnit: Record<string, number> = { Site: 0 };
+  for (const o of monthOrders) {
+    if (o.channel === "lojas") {
+      const k = o.store ?? "Loja";
+      monthByUnit[k] = (monthByUnit[k] ?? 0) + o.total;
+    } else {
+      monthByUnit.Site += o.total;
+    }
+  }
   const dayOfMonth = parseInt(today.slice(8), 10);
   const [yy, mm] = today.split("-").map(Number);
   const daysInMonth = new Date(yy, mm, 0).getDate();
@@ -252,6 +263,8 @@ export async function GET(req: NextRequest) {
     topProducts,
     states,
     stores,
+    monthByUnit,
+    metas: cfg.metas ?? {},
     ads,
     tiktokAds,
     goal,

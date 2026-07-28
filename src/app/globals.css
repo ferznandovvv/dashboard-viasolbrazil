@@ -216,6 +216,24 @@ button.mini.ghost {
 .channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .channels.stores { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .channels.stores .rev { font-size: 20px; }
+
+.meta-mini { margin-top: 10px; font-size: 11px; color: var(--text-muted); }
+.meta-mini-bar {
+  height: 5px; border-radius: 999px; background: var(--page);
+  border: 1px solid var(--border); overflow: hidden; margin-bottom: 3px;
+}
+.meta-mini-fill { height: 100%; background: var(--ch-color, var(--brand)); border-radius: 999px; }
+
+.unit-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.unit-head h1 {
+  font-family: var(--font-serif); font-size: 24px; font-weight: 600; color: var(--text-primary);
+}
+.unit-head .back {
+  background: transparent; border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 14px; font-family: inherit; font-size: 13px; color: var(--text-secondary);
+  cursor: pointer;
+}
+.unit-head .back:hover { color: var(--text-primary); background: var(--surface-1); }
 .channel-card {
   background: var(--surface-1); border: 1px solid var(--border);
   border-radius: 14px; padding: 18px 20px; border-top: 3px solid var(--ch-color, var(--border));

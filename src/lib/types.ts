@@ -92,6 +92,10 @@ export interface DashboardData {
     cpa: number;
     daily: { date: string; spend: number }[];
   };
+  /** Faturamento do mês corrente por unidade ("Site" e cada loja) */
+  monthByUnit: Record<string, number>;
+  /** Metas mensais configuradas por unidade */
+  metas: Record<string, number>;
   goal: {
     target: number;
     monthRevenue: number;
