@@ -1,4 +1,5 @@
 import { ChannelResult, NormalizedOrder } from "../types";
+import { comCache } from "../cache";
 
 const API_VERSION = "2024-10";
 
@@ -20,6 +21,10 @@ interface ShopifyOrderNode {
 }
 
 export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
+  return comCache(`shopify|${since.toISOString().slice(0,10)}`, () => buscar(since));
+}
+
+async function buscar(since: Date): Promise<ChannelResult> {
   const domain =
     process.env.SHOPIFY_STORE_DOMAIN ?? "totvs-ibirapuera-viasolbrazil-dc.myshopify.com";
   const token = process.env.SHOPIFY_ADMIN_TOKEN;

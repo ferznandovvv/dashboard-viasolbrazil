@@ -1,9 +1,15 @@
 import type { AdsSpendResult } from "./meta";
 
+import { comCache } from "../cache";
+
 const API = "https://business-api.tiktok.com/open_api/v1.3";
 
 /** Gasto diário de anúncios do TikTok Ads (Marketing API, relatório por dia). */
 export async function fetchTikTokAdsSpend(fromKey: string, toKey: string): Promise<AdsSpendResult> {
+  return comCache(`ttads|${fromKey}|${toKey}`, () => buscarTikTokAds(fromKey, toKey));
+}
+
+async function buscarTikTokAds(fromKey: string, toKey: string): Promise<AdsSpendResult> {
   const token = process.env.TIKTOK_ADS_ACCESS_TOKEN;
   const advertiserId = process.env.TIKTOK_ADS_ADVERTISER_ID;
   if (!token || !advertiserId) {

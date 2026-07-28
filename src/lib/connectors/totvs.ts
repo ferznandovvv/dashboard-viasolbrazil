@@ -9,6 +9,7 @@
  */
 
 import { ChannelResult, NormalizedOrder } from "../types";
+import { comCache } from "../cache";
 
 const DEFAULT_URL = "https://apitotvsmoda.bhan.com.br";
 const INVOICES = "/api/totvsmoda/fiscal/v2/invoices/search";
@@ -146,8 +147,6 @@ function janelas(from: string, to: string): { start: string; end: string }[] {
   return out;
 }
 
-const cache = new Map<string, { at: number; result: ChannelResult }>();
-
 /**
  * Vendas das lojas físicas no período (datas YYYY-MM-DD no fuso de SP).
  */
@@ -155,11 +154,10 @@ export async function fetchTotvsSales(from: string, to: string): Promise<Channel
   if (!totvsConfigured()) {
     return { channel: "lojas", connected: false, orders: [] };
   }
+  return comCache(`totvs|${from}|${to}`, () => buscarTotvs(from, to), 5 * 60000);
+}
 
-  const chave = `${from}|${to}`;
-  const hit = cache.get(chave);
-  if (hit && Date.now() - hit.at < 5 * 60000) return hit.result;
-
+async function buscarTotvs(from: string, to: string): Promise<ChannelResult> {
   const orders: NormalizedOrder[] = [];
   try {
     const hoje = new Date().toISOString().slice(0, 10);
@@ -229,9 +227,7 @@ export async function fetchTotvsSales(from: string, to: string): Promise<Channel
       }
     }
 
-    const result: ChannelResult = { channel: "lojas", connected: true, orders };
-    cache.set(chave, { at: Date.now(), result });
-    return result;
+    return { channel: "lojas", connected: true, orders };
   } catch (e) {
     return {
       channel: "lojas",

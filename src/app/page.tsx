@@ -141,6 +141,8 @@ export default function Dashboard() {
   const [metaInput, setMetaInput] = useState("");
   const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
   const [porLoja, setPorLoja] = useState(true);
+  const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
+  const [cache] = useState<Map<string, DashboardData>>(() => new Map());
 
   const channel =
     view.tipo === "canal"
@@ -161,23 +163,31 @@ export default function Dashboard() {
     }
   }, []);
 
-  const load = useCallback(async (p: Period, ch: string, st: string) => {
-    setLoading(true);
-    setFetchError("");
-    const qs =
-      `from=${p.from}&to=${p.to}` +
-      (ch ? `&channel=${ch}` : "") +
-      (st ? `&store=${encodeURIComponent(st)}` : "");
-    try {
-      const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`Erro ${res.status}`);
-      setData(await res.json());
-    } catch {
-      setFetchError("Não foi possível carregar os dados. Tente recarregar a página.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (p: Period, ch: string, st: string) => {
+      const qs =
+        `from=${p.from}&to=${p.to}` +
+        (ch ? `&channel=${ch}` : "") +
+        (st ? `&store=${encodeURIComponent(st)}` : "");
+      // Mostra na hora o que já foi visto e revalida em segundo plano
+      const salvo = cache.get(qs);
+      if (salvo) setData(salvo);
+      setLoading(true);
+      setFetchError("");
+      try {
+        const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Erro ${res.status}`);
+        const json = (await res.json()) as DashboardData;
+        cache.set(qs, json);
+        setData(json);
+      } catch {
+        if (!salvo) setFetchError("Não foi possível carregar os dados. Tente recarregar a página.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [cache]
+  );
 
   useEffect(() => {
     load(period, channel, store);
@@ -276,7 +286,10 @@ export default function Dashboard() {
     return Array.from(m.entries()).map(([date, spend]) => ({ date, spend }));
   })();
 
-  const maxProd = Math.max(...(data?.topProducts.map((p) => p.revenue) ?? [0]), 1);
+  const maxProd = Math.max(
+    ...((data?.products?.[agrup] ?? data?.topProducts ?? []).map((p) => p.revenue) ?? [0]),
+    1
+  );
   const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
 
   return (
@@ -653,12 +666,31 @@ export default function Dashboard() {
 
               <div className="grid-2">
                 <div className="card">
-                  <h2>Produtos mais vendidos</h2>
-                  {data.topProducts.length === 0 ? (
+                  <div className="goal-head">
+                    <h2>Produtos mais vendidos</h2>
+                    <span className="seg">
+                      {(["modelo", "cor", "tamanho", "completo"] as const).map((g) => (
+                        <button
+                          key={g}
+                          className={agrup === g ? "on" : ""}
+                          onClick={() => setAgrup(g)}
+                        >
+                          {g === "modelo"
+                            ? "Modelo"
+                            : g === "cor"
+                              ? "Cor"
+                              : g === "tamanho"
+                                ? "Tamanho"
+                                : "Completo"}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                  {(data.products?.[agrup] ?? data.topProducts).length === 0 ? (
                     <div className="empty">Sem itens no período.</div>
                   ) : (
                     <div className="rank">
-                      {data.topProducts.map((p) => (
+                      {(data.products?.[agrup] ?? data.topProducts).map((p) => (
                         <div key={p.title} className="rank-row" title={p.title}>
                           <div className="rank-info">
                             <span className="rank-title">{p.title}</span>

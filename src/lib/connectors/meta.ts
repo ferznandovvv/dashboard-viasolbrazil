@@ -5,12 +5,18 @@ export interface AdsSpendResult {
   daily: { date: string; spend: number }[];
 }
 
+import { comCache } from "../cache";
+
 const GRAPH = "https://graph.facebook.com/v21.0";
 // Conta "Via Sol Brazil" — pode ser trocada pela env META_AD_ACCOUNT_ID
 const DEFAULT_ACCOUNT = "804350203009075";
 
 /** Gasto diário de anúncios da conta Meta (Marketing API insights). */
 export async function fetchMetaSpend(fromKey: string, toKey: string): Promise<AdsSpendResult> {
+  return comCache(`meta|${fromKey}|${toKey}`, () => buscarMeta(fromKey, toKey));
+}
+
+async function buscarMeta(fromKey: string, toKey: string): Promise<AdsSpendResult> {
   const token = process.env.META_ACCESS_TOKEN;
   const account = process.env.META_AD_ACCOUNT_ID ?? DEFAULT_ACCOUNT;
   if (!token) {

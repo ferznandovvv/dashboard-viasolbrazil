@@ -67,6 +67,11 @@ export interface DashboardData {
   daily: DailyPoint[];
   recentOrders: NormalizedOrder[];
   topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
+  /** Mesmos produtos em agrupamentos alternativos */
+  products: Record<
+    "modelo" | "cor" | "tamanho" | "completo" | "porCor" | "porTamanho",
+    { title: string; channel: ChannelId; qty: number; revenue: number }[]
+  >;
   states: { uf: string; revenue: number; orders: number }[];
   /** Faturamento por loja física no período */
   stores: { name: string; revenue: number; orders: number; prevRevenue: number }[];

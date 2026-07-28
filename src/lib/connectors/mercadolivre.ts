@@ -1,4 +1,5 @@
 import { ChannelResult, NormalizedOrder } from "../types";
+import { comCache } from "../cache";
 
 const API = "https://api.mercadolibre.com";
 
@@ -55,6 +56,10 @@ interface MeliOrder {
 }
 
 export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
+  return comCache(`meli|${since.toISOString().slice(0,10)}`, () => buscar(since));
+}
+
+async function buscar(since: Date): Promise<ChannelResult> {
   const hasCreds =
     process.env.ML_ACCESS_TOKEN ||
     (process.env.ML_REFRESH_TOKEN && process.env.ML_CLIENT_ID && process.env.ML_CLIENT_SECRET);

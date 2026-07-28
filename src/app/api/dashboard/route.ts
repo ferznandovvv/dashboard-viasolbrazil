@@ -153,20 +153,55 @@ export async function GET(req: NextRequest) {
     return tokens.join(" ");
   };
 
-  const prodMap = new Map<string, { title: string; channel: string; qty: number; revenue: number }>();
-  for (const o of current) {
-    for (const it of o.items ?? []) {
-      const title = modeloDe(it.title).slice(0, 80);
-      const key = title.toLowerCase();
-      const e = prodMap.get(key) ?? { title, channel: o.channel, qty: 0, revenue: 0 };
-      e.qty += it.qty;
-      e.revenue += it.revenue;
-      prodMap.set(key, e);
+  /** Separa o nome em modelo, cor e tamanho. */
+  const partes = (nome: string) => {
+    const tokens = nome.trim().split(/\s+/);
+    let tamanho = "";
+    const cores: string[] = [];
+    while (tokens.length > 2) {
+      const ultimo = tokens[tokens.length - 1];
+      if (!tamanho && TAMANHOS.test(ultimo)) {
+        tamanho = ultimo.toUpperCase();
+        tokens.pop();
+        continue;
+      }
+      if (CORES.test(ultimo) || ultimo.includes("/")) {
+        cores.unshift(ultimo);
+        tokens.pop();
+        continue;
+      }
+      break;
     }
-  }
-  const topProducts = Array.from(prodMap.values())
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 8) as DashboardData["topProducts"];
+    return { modelo: tokens.join(" "), cor: cores.join(" "), tamanho };
+  };
+
+  const agrupar = (rotulo: (p: ReturnType<typeof partes>, cru: string) => string) => {
+    const m = new Map<string, { title: string; channel: string; qty: number; revenue: number }>();
+    for (const o of current) {
+      for (const it of o.items ?? []) {
+        const nome = rotulo(partes(it.title), it.title).trim().slice(0, 80);
+        if (!nome) continue;
+        const k = nome.toLowerCase();
+        const e = m.get(k) ?? { title: nome, channel: o.channel, qty: 0, revenue: 0 };
+        e.qty += it.qty;
+        e.revenue += it.revenue;
+        m.set(k, e);
+      }
+    }
+    return Array.from(m.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10) as DashboardData["topProducts"];
+  };
+
+  const topProducts = agrupar((p) => p.modelo);
+  const products = {
+    modelo: topProducts,
+    cor: agrupar((p) => (p.cor ? `${p.modelo} · ${p.cor}` : p.modelo)),
+    tamanho: agrupar((p) => (p.tamanho ? `${p.modelo} · ${p.tamanho}` : p.modelo)),
+    completo: agrupar((_p, cru) => cru),
+    porCor: agrupar((p) => p.cor || "—"),
+    porTamanho: agrupar((p) => p.tamanho || "—"),
+  };
 
   // Vendas por estado
   const NAME_TO_UF: Record<string, string> = {
@@ -315,6 +350,7 @@ export async function GET(req: NextRequest) {
     daily: Array.from(dayMap.values()),
     recentOrders: current.slice(0, 25),
     topProducts,
+    products,
     states,
     stores,
     monthByUnit,

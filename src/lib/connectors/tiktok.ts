@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { ChannelResult, NormalizedOrder } from "../types";
+import { comCache } from "../cache";
 
 const HOST = "https://open-api.tiktokglobalshop.com";
 const AUTH_HOST = "https://auth.tiktok-shops.com";
@@ -67,6 +68,10 @@ interface TikTokOrder {
 }
 
 export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
+  return comCache(`tiktok|${since.toISOString().slice(0,10)}`, () => buscar(since));
+}
+
+async function buscar(since: Date): Promise<ChannelResult> {
   const appKey = process.env.TIKTOK_APP_KEY;
   const appSecret = process.env.TIKTOK_APP_SECRET;
   // Cipher é opcional: lojas locais de app próprio podem dispensá-lo
