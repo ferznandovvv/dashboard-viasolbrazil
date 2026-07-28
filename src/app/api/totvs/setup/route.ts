@@ -54,53 +54,91 @@ export async function GET() {
   // Sonda endpoints de filial e de faturamento, do mais provável ao alternativo
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const branches = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const branches = [6]; // Ribeirão Preto, como amostra de loja física
+  const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
+  const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
   const probes: { label: string; path: string; body?: unknown }[] = [
     {
-      label: "Notas fiscais — data de emissão",
-      path: "/api/totvsmoda/fiscal/v2/invoices/search",
+      label: "A) Base — filial 6, sem data",
+      path: INV,
+      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 1 },
+    },
+    {
+      label: "B) Data em invoiceDate",
+      path: INV,
+      body: { filter: { branchCodeList: branches, invoiceDate: range }, page: 1, pageSize: 1 },
+    },
+    {
+      label: "C) Data em change/inField",
+      path: INV,
       body: {
-        filter: {
-          branchCodeList: branches,
-          issueDate: { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` },
-        },
-        expand: "items,shippingData",
+        filter: { branchCodeList: branches, change: { ...range, inField: "invoiceDate" } },
         page: 1,
-        pageSize: 2,
+        pageSize: 1,
       },
     },
     {
-      label: "Notas fiscais — sem filtro de data",
-      path: "/api/totvsmoda/fiscal/v2/invoices/search",
-      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 2 },
+      label: "D) Data na raiz do filter",
+      path: INV,
+      body: { filter: { branchCodeList: branches, ...range }, page: 1, pageSize: 1 },
     },
     {
-      label: "Pedidos de venda",
+      label: "E) Só saídas (operationType Output)",
+      path: INV,
+      body: {
+        filter: { branchCodeList: branches, operationType: "Output" },
+        expand: "items,payments",
+        page: 1,
+        pageSize: 1,
+      },
+    },
+    {
+      label: "F) Pedidos da filial 6 com orderDate",
       path: "/api/totvsmoda/sales-order/v2/orders/search",
-      body: {
-        filter: {
-          branchCodeList: branches,
-          issueDate: { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` },
-        },
-        expand: "items",
-        page: 1,
-        pageSize: 2,
-      },
+      body: { filter: { branchCodeList: branches, orderDate: range }, page: 1, pageSize: 1 },
     },
   ];
-
   const blocks: string[] = [];
   for (const p of probes) {
     try {
       const r = await totvsFetch(p.path, p.body);
-      const preview = (r.json ? JSON.stringify(r.json) : r.text).slice(0, 2500);
+      const j = r.json as
+        | { count?: number; items?: Record<string, unknown>[]; [k: string]: unknown }
+        | null;
+      let summary: string;
+      if (r.status !== 200) {
+        summary = (r.json ? JSON.stringify(r.json) : r.text).slice(0, 400);
+      } else {
+        const first = j?.items?.[0] ?? null;
+        const pick = (k: string) => (first && k in first ? `${k}=${JSON.stringify(first[k])}` : "");
+        const destaque = [
+          "branchCode",
+          "invoiceDate",
+          "issueDate",
+          "orderDate",
+          "operationType",
+          "operationName",
+          "totalValue",
+          "netValue",
+          "sellerCpf",
+          "sellerCode",
+          "personName",
+          "customerName",
+        ]
+          .map(pick)
+          .filter(Boolean)
+          .join("  ");
+        summary =
+          `count=${j?.count ?? "?"}\n${destaque}\n\n` +
+          `campos: ${first ? Object.keys(first).join(", ") : "(sem itens)"}`;
+      }
       blocks.push(
-        `<div class="row"><div class="ep">${r.status === 200 ? "✓" : "✗"} ${p.label} — <code>${p.path}</code> (HTTP ${r.status})</div>
-         <pre>${preview.replace(/</g, "&lt;")}</pre></div>`
+        `<div class="row"><div class="ep">${r.status === 200 ? "\u2713" : "\u2717"} ${p.label} (HTTP ${r.status})</div>
+         <pre>${summary.replace(/</g, "&lt;")}</pre></div>`
       );
     } catch (e) {
       blocks.push(
-        `<div class="row"><div class="ep">✗ ${p.label} — <code>${p.path}</code></div>
+        `<div class="row"><div class="ep">\u2717 ${p.label}</div>
          <pre>${(e instanceof Error ? e.message : "erro").replace(/</g, "&lt;")}</pre></div>`
       );
     }
