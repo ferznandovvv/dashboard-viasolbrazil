@@ -78,15 +78,19 @@ export async function GET(req: NextRequest) {
 
   // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
   // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
-  const channelParam = sp.get("channel") as ChannelId | null;
+  // channel aceita um canal específico ou "site" (os três canais online)
+  const channelParam = sp.get("channel") ?? "";
+  const isSite = channelParam === "site";
   const channelFilter: ChannelId | null =
-    channelParam && ["shopify", "tiktok", "meli", "lojas"].includes(channelParam)
-      ? channelParam
+    !isSite && ["shopify", "tiktok", "meli", "lojas"].includes(channelParam)
+      ? (channelParam as ChannelId)
       : null;
   const storeFilter = sp.get("store") ?? "";
-  const filteredResults = channelFilter
-    ? results.filter((r) => r.channel === channelFilter)
-    : results;
+  const filteredResults = isSite
+    ? results.filter((r) => r.channel !== "lojas")
+    : channelFilter
+      ? results.filter((r) => r.channel === channelFilter)
+      : results;
 
   const all = filteredResults
     .flatMap((r) => r.orders)
@@ -253,7 +257,8 @@ export async function GET(req: NextRequest) {
   };
 
   // Clima da unidade em foco (correlação com as vendas) e mapa de horários
-  const unidadeFoco = storeFilter || (channelFilter && channelFilter !== "lojas" ? "Site" : "");
+  const unidadeFoco =
+    storeFilter || (isSite || (channelFilter && channelFilter !== "lojas") ? "Site" : "");
   const weather = unidadeFoco ? await fetchClima(unidadeFoco, from, to) : [];
 
   const horasMap = new Map<string, { dow: number; hour: number; revenue: number; orders: number }>();

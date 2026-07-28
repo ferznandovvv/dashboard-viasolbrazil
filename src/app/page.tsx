@@ -142,7 +142,14 @@ export default function Dashboard() {
   const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
   const [porLoja, setPorLoja] = useState(true);
 
-  const channel = view.tipo === "canal" ? view.ch : view.tipo === "loja" ? "lojas" : "";
+  const channel =
+    view.tipo === "canal"
+      ? view.ch
+      : view.tipo === "loja"
+        ? "lojas"
+        : view.tipo === "site"
+          ? "site"
+          : "";
   const store = view.tipo === "loja" ? view.nome : "";
   const unidade = view.tipo === "loja" ? view.nome : view.tipo === "tudo" ? "" : "Site";
 
