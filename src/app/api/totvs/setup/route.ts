@@ -54,25 +54,37 @@ export async function GET() {
   // Sonda endpoints de filial e de faturamento, do mais provável ao alternativo
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const branches = [1, 2, 3, 4, 5, 6, 7, 8, 9];
   const probes: { label: string; path: string; body?: unknown }[] = [
-    { label: "Filiais (branches)", path: "/api/totvsmoda/general/v2/branches/search", body: { page: 1, pageSize: 50 } },
-    { label: "Filiais (alternativo)", path: "/api/totvsmoda/general/v2/branches", body: undefined },
     {
-      label: "Notas fiscais (invoices)",
+      label: "Notas fiscais — data de emissão",
       path: "/api/totvsmoda/fiscal/v2/invoices/search",
       body: {
-        filter: { issueDate: { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` } },
+        filter: {
+          branchCodeList: branches,
+          issueDate: { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` },
+        },
+        expand: "items,shippingData",
         page: 1,
-        pageSize: 3,
+        pageSize: 2,
       },
     },
     {
-      label: "Pedidos de venda (orders)",
+      label: "Notas fiscais — sem filtro de data",
+      path: "/api/totvsmoda/fiscal/v2/invoices/search",
+      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 2 },
+    },
+    {
+      label: "Pedidos de venda",
       path: "/api/totvsmoda/sales-order/v2/orders/search",
       body: {
-        filter: { changeDate: { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` } },
+        filter: {
+          branchCodeList: branches,
+          issueDate: { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` },
+        },
+        expand: "items",
         page: 1,
-        pageSize: 3,
+        pageSize: 2,
       },
     },
   ];
@@ -81,7 +93,7 @@ export async function GET() {
   for (const p of probes) {
     try {
       const r = await totvsFetch(p.path, p.body);
-      const preview = (r.json ? JSON.stringify(r.json) : r.text).slice(0, 1200);
+      const preview = (r.json ? JSON.stringify(r.json) : r.text).slice(0, 2500);
       blocks.push(
         `<div class="row"><div class="ep">${r.status === 200 ? "✓" : "✗"} ${p.label} — <code>${p.path}</code> (HTTP ${r.status})</div>
          <pre>${preview.replace(/</g, "&lt;")}</pre></div>`
