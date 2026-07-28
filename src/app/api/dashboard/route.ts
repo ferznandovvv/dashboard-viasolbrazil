@@ -27,10 +27,14 @@ const MAX_RANGE_DAYS = 370;
 
 function totalsOf(orders: NormalizedOrder[]): Totals {
   const revenue = orders.reduce((s, o) => s + o.total, 0);
+  const pieces = orders.reduce((s, o) => s + (o.qty ?? 0), 0);
   return {
     revenue,
     orders: orders.length,
     avgTicket: orders.length > 0 ? revenue / orders.length : 0,
+    pieces,
+    avgPieces: orders.length > 0 ? pieces / orders.length : 0,
+    discount: orders.reduce((s, o) => s + (o.discount ?? 0), 0),
   };
 }
 
@@ -341,6 +345,19 @@ export async function GET(req: NextRequest) {
   }
   const hours = Array.from(horasMap.values());
 
+  // Formas de pagamento
+  const pagMap = new Map<string, { name: string; revenue: number; orders: number }>();
+  for (const o of current) {
+    const nome = (o.payment ?? "Não informado").trim();
+    const e = pagMap.get(nome) ?? { name: nome, revenue: 0, orders: 0 };
+    e.revenue += o.total;
+    e.orders += 1;
+    pagMap.set(nome, e);
+  }
+  const payments = Array.from(pagMap.values())
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8);
+
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),
     from,
@@ -358,6 +375,7 @@ export async function GET(req: NextRequest) {
     metas: cfg.metas ?? {},
     weather,
     hours,
+    payments,
     ads,
     tiktokAds,
     goal,

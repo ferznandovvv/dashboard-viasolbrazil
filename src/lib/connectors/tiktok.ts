@@ -128,6 +128,7 @@ async function buscar(since: Date): Promise<ChannelResult> {
           currency: o.payment?.currency ?? "BRL",
           status: o.status,
           customer: o.recipient_address?.name,
+          qty: (o.line_items ?? []).length,
           state:
             o.recipient_address?.state ??
             o.recipient_address?.district_info?.find((d) =>

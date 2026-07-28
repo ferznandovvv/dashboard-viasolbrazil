@@ -105,6 +105,8 @@ async function buscar(since: Date): Promise<ChannelResult> {
           currency: o.currency_id || "BRL",
           status: o.status,
           customer: buyer,
+          qty: (o.order_items ?? []).reduce((t, it) => t + (it.quantity ?? 1), 0),
+          payment: "Mercado Pago",
           items: (o.order_items ?? [])
             .filter((it) => it.item?.title)
             .map((it) => ({

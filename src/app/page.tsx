@@ -384,6 +384,34 @@ export default function Dashboard() {
               <div className="value">{brl.format(data.totals.avgTicket)}</div>
               <Delta now={data.totals.avgTicket} before={data.prevTotals.avgTicket} />
             </div>
+            {data.totals.pieces > 0 && (
+              <div className="tile">
+                <div className="label">Peças por venda</div>
+                <div className="value">
+                  {data.totals.avgPieces.toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {data.totals.pieces.toLocaleString("pt-BR")} peças
+                </span>{" "}
+                <Delta now={data.totals.avgPieces} before={data.prevTotals.avgPieces} />
+              </div>
+            )}
+            {data.totals.discount > 0 && (
+              <div className="tile">
+                <div className="label">Descontos</div>
+                <div className="value">{brl.format(data.totals.discount)}</div>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {(
+                    (data.totals.discount / (data.totals.revenue + data.totals.discount)) *
+                    100
+                  ).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+                  % do bruto
+                </span>
+              </div>
+            )}
           </div>
           )}
 
@@ -538,6 +566,39 @@ export default function Dashboard() {
                         { maximumFractionDigits: 0 }
                       )}
                       % da meta de {unidade}
+                      {(() => {
+                        const hoje = spToday();
+                        const [y, m, d] = hoje.split("-").map(Number);
+                        const diasNoMes = new Date(y, m, 0).getDate();
+                        const restam = diasNoMes - d + 1;
+                        const falta = metaDe(unidade) - (data.monthByUnit[unidade] ?? 0);
+                        if (falta <= 0)
+                          return (
+                            <b style={{ color: "var(--good)" }}>
+                              {" "}
+                              · meta batida, {brl.format(-falta)} acima 🎉
+                            </b>
+                          );
+                        const porDia = falta / restam;
+                        const feitoPorDia = (data.monthByUnit[unidade] ?? 0) / d;
+                        return (
+                          <>
+                            {" "}
+                            · faltam <b>{brl.format(falta)}</b> em {restam}{" "}
+                            {restam === 1 ? "dia" : "dias"} ={" "}
+                            <b
+                              style={{
+                                color: porDia <= feitoPorDia ? "var(--good)" : "var(--critical)",
+                              }}
+                            >
+                              {brl.format(porDia)}/dia
+                            </b>{" "}
+                            <span className="muted">
+                              (ritmo atual: {brl.format(feitoPorDia)}/dia)
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </>
                 )}
@@ -660,6 +721,33 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+
+                {data.payments.length > 1 && (
+                  <div className="card">
+                    <h2>Formas de pagamento</h2>
+                    <div className="rank">
+                      {data.payments.map((pg) => (
+                        <div key={pg.name} className="rank-row">
+                          <div className="rank-info">
+                            <span className="rank-title">{pg.name}</span>
+                            <span className="rank-nums">
+                              {pg.orders} · <b>{brl.format(pg.revenue)}</b>
+                            </span>
+                          </div>
+                          <div className="rank-bar">
+                            <div
+                              className="rank-fill"
+                              style={{
+                                width: `${(pg.revenue / Math.max(...data.payments.map((x) => x.revenue), 1)) * 100}%`,
+                                background: "var(--c-tiktok)",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {querSite && (
                   <div className="card">

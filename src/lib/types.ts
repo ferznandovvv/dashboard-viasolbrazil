@@ -16,6 +16,12 @@ export interface NormalizedOrder {
   currency: string;
   status: string;
   customer?: string;
+  /** Peças vendidas no pedido */
+  qty?: number;
+  /** Desconto concedido em R$ */
+  discount?: number;
+  /** Forma/condição de pagamento */
+  payment?: string;
   /** UF ou nome do estado de entrega, quando a API informa */
   state?: string;
   /** Loja física de origem (canal lojas) */
@@ -46,6 +52,11 @@ export interface Totals {
   revenue: number;
   orders: number;
   avgTicket: number;
+  /** Peças vendidas e peças por venda (PA) */
+  pieces: number;
+  avgPieces: number;
+  /** Desconto concedido no período */
+  discount: number;
 }
 
 export interface DashboardData {
@@ -103,6 +114,8 @@ export interface DashboardData {
   metas: Record<string, number>;
   /** Clima diário da unidade em foco */
   weather: { date: string; tmax: number; tmin: number; chuva: number; codigo: number }[];
+  /** Faturamento por forma de pagamento */
+  payments: { name: string; revenue: number; orders: number }[];
   /** Vendas por dia da semana × hora */
   hours: { dow: number; hour: number; revenue: number; orders: number }[];
   goal: {

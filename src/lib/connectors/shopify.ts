@@ -10,6 +10,8 @@ interface ShopifyOrderNode {
   displayFinancialStatus: string | null;
   customer: { displayName: string | null } | null;
   currentTotalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+  currentTotalDiscountsSet: { shopMoney: { amount: string } } | null;
+  paymentGatewayNames: string[] | null;
   shippingAddress: { provinceCode: string | null } | null;
   lineItems: {
     nodes: {
@@ -48,6 +50,8 @@ async function buscar(since: Date): Promise<ChannelResult> {
               displayFinancialStatus
               customer { displayName }
               currentTotalPriceSet { shopMoney { amount currencyCode } }
+              currentTotalDiscountsSet { shopMoney { amount } }
+              paymentGatewayNames
               shippingAddress { provinceCode }
               lineItems(first: 10) {
                 nodes { title quantity discountedTotalSet { shopMoney { amount } } }
@@ -93,6 +97,9 @@ async function buscar(since: Date): Promise<ChannelResult> {
           status: n.displayFinancialStatus ?? "—",
           customer: n.customer?.displayName ?? undefined,
           state: n.shippingAddress?.provinceCode ?? undefined,
+          qty: n.lineItems.nodes.reduce((t, li) => t + li.quantity, 0),
+          discount: parseFloat(n.currentTotalDiscountsSet?.shopMoney.amount ?? "0"),
+          payment: (n.paymentGatewayNames ?? [])[0] ?? undefined,
           items: n.lineItems.nodes.map((li) => ({
             title: li.title,
             qty: li.quantity,

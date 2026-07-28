@@ -113,12 +113,15 @@ interface TotvsInvoice {
   /** Sim, o nome do campo vem com esse typo na API */
   operatioName: string;
   totalValue: number;
+  quantity?: number;
+  paymentConditionName?: string | null;
   exitTime: string | null;
   personName: string | null;
   items?: {
     name?: string;
     quantity?: number;
     netValue?: number;
+    products?: { discountValue?: number }[];
   }[];
 }
 
@@ -192,6 +195,12 @@ async function buscarTotvs(from: string, to: string): Promise<ChannelResult> {
           status: loja,
           customer: inv.personName ?? undefined,
           store: loja,
+          qty: Number(inv.quantity ?? 0),
+          discount: (inv.items ?? []).reduce(
+            (t, it) => t + (it.products ?? []).reduce((s2, pr) => s2 + Number(pr.discountValue ?? 0), 0),
+            0
+          ),
+          payment: inv.paymentConditionName ?? undefined,
           items: (inv.items ?? [])
             .filter((it) => it.name)
             .map((it) => ({
