@@ -368,6 +368,7 @@ export default function Dashboard() {
             </div>
           )}
 
+          {view.tipo !== "tudo" && (
           <div className="tiles">
             <div className="tile">
               <div className="label">Faturamento</div>
@@ -385,76 +386,11 @@ export default function Dashboard() {
               <Delta now={data.totals.avgTicket} before={data.prevTotals.avgTicket} />
             </div>
           </div>
+          )}
 
           {/* ——— HOME: só as unidades e o gráfico ——— */}
           {view.tipo === "tudo" && (
             <>
-              {(() => {
-                const lojas = data.stores.filter((l) => l.revenue > 0);
-                if (lojas.length === 0) return null;
-                const melhor = lojas[0];
-                const media = lojas.reduce((s, l) => s + l.revenue, 0) / lojas.length;
-                const abaixo = lojas
-                  .filter((l) => l.revenue < media * 0.7)
-                  .sort((a, b) => a.revenue - b.revenue)[0];
-                const queda = lojas
-                  .filter((l) => l.prevRevenue > 0 && l.revenue < l.prevRevenue * 0.85)
-                  .sort((a, b) => a.revenue / a.prevRevenue - b.revenue / b.prevRevenue)[0];
-                const perto = data.stores
-                  .map((l) => ({ l, pct: metaDe(l.name) > 0 ? (data.monthByUnit[l.name] ?? 0) / metaDe(l.name) : 0 }))
-                  .filter((x) => x.pct >= 1)
-                  .sort((a, b) => b.pct - a.pct)[0];
-                return (
-                  <div className="highlights">
-                    <span className="hl good">
-                      🏆 Melhor: <b>{melhor.name}</b> — {brl.format(melhor.revenue)}
-                    </span>
-                    {perto && (
-                      <span className="hl good">
-                        🎯 <b>{perto.l.name}</b> bateu a meta do mês
-                      </span>
-                    )}
-                    {queda && (
-                      <span className="hl warn">
-                        📉 <b>{queda.name}</b> caiu{" "}
-                        {Math.round((1 - queda.revenue / queda.prevRevenue) * 100)}% vs período
-                        anterior
-                      </span>
-                    )}
-                    {abaixo && !queda && (
-                      <span className="hl warn">
-                        ⚠️ <b>{abaixo.name}</b> {Math.round((1 - abaixo.revenue / media) * 100)}%
-                        abaixo da média das lojas
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
-
-              <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
-                <div
-                  className="channel-card clickable"
-                  style={{ ["--ch-color" as string]: "var(--c-shopify)" }}
-                  onClick={() => setView({ tipo: "site" })}
-                >
-                  <div className="head">
-                    <span className="name">
-                      <span className="ch-dot" style={{ background: "var(--c-shopify)" }} />
-                      Site — vendas online
-                    </span>
-                    <span className="badge sel-badge">abrir →</span>
-                  </div>
-                  <div className="rev">
-                    {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
-                  </div>
-                  <div className="meta">
-                    {siteOrders.toLocaleString("pt-BR")} pedidos
-                    {siteOrders > 0 && <> · ticket {brl.format(siteRevenue / siteOrders)}</>}
-                  </div>
-                  <MetaMini feito={data.monthByUnit.Site ?? 0} meta={metaDe("Site")} />
-                </div>
-              </div>
-
               {lojasCh && !lojasCh.connected ? (
                 <div className="card muted" style={{ fontSize: 12 }}>
                   Lojas físicas não conectadas — configure{" "}
@@ -468,6 +404,26 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="channels stores">
+                  <div
+                    className="channel-card clickable"
+                    style={{ ["--ch-color" as string]: "var(--c-shopify)" }}
+                    onClick={() => setView({ tipo: "site" })}
+                  >
+                    <div className="head">
+                      <span className="name">
+                        <span className="ch-dot" style={{ background: "var(--c-shopify)" }} />
+                        Site
+                      </span>
+                    </div>
+                    <div className="rev">
+                      {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
+                    </div>
+                    <div className="meta">
+                      {siteOrders.toLocaleString("pt-BR")} pedidos
+                      {siteOrders > 0 && <> · ticket {brl.format(siteRevenue / siteOrders)}</>}
+                    </div>
+                    <MetaMini feito={data.monthByUnit.Site ?? 0} meta={metaDe("Site")} />
+                  </div>
                   {data.stores.map((loja) => (
                     <div
                       key={loja.name}
@@ -756,27 +712,60 @@ export default function Dashboard() {
                   ])
                 );
                 const dias = data.weather.filter((w) => porData.has(w.date));
-                if (dias.length < 3) return null;
-                const vendas = dias.map((w) => porData.get(w.date) ?? 0);
+                if (dias.length < 5) return null;
+
+                // Cada dia entra em exatamente uma categoria
+                const categoria = (w: (typeof dias)[0]) =>
+                  w.chuva >= 1 || w.codigo >= 51 ? "chuva" : w.codigo <= 1 ? "sol" : "nublado";
+
+                // Sábado vende mais que terça: comparamos cada dia com a média
+                // do mesmo dia da semana, para o tempo não levar a culpa/crédito
+                const semana = new Map<number, number[]>();
+                for (const w of dias) {
+                  const dow = new Date(`${w.date}T12:00:00-03:00`).getDay();
+                  semana.set(dow, [...(semana.get(dow) ?? []), porData.get(w.date) ?? 0]);
+                }
+                const mediaDow = new Map(
+                  Array.from(semana.entries()).map(([dow, vs]) => [
+                    dow,
+                    vs.reduce((a, b) => a + b, 0) / vs.length,
+                  ])
+                );
+
+                const grupos = (["sol", "nublado", "chuva"] as const).map((cat) => {
+                  const ds = dias.filter((w) => categoria(w) === cat);
+                  const valores = ds.map((w) => porData.get(w.date) ?? 0);
+                  const indices = ds.map((w) => {
+                    const dow = new Date(`${w.date}T12:00:00-03:00`).getDay();
+                    const base = mediaDow.get(dow) ?? 0;
+                    return base > 0 ? (porData.get(w.date) ?? 0) / base : 1;
+                  });
+                  return {
+                    cat,
+                    dias: ds.length,
+                    media: valores.length
+                      ? valores.reduce((a, b) => a + b, 0) / valores.length
+                      : 0,
+                    indice: indices.length
+                      ? indices.reduce((a, b) => a + b, 0) / indices.length
+                      : 1,
+                  };
+                });
+
                 const corrTemp = correlacao(
                   dias.map((w) => w.tmax),
-                  vendas
+                  dias.map((w) => porData.get(w.date) ?? 0)
                 );
-                const comSol = dias.filter((w) => w.codigo <= 2 && w.chuva < 1);
-                const comChuva = dias.filter((w) => w.chuva >= 1);
-                const media = (ds: typeof dias) =>
-                  ds.length
-                    ? ds.reduce((s, w) => s + (porData.get(w.date) ?? 0), 0) / ds.length
-                    : 0;
-                const mediaSol = media(comSol);
-                const mediaChuva = media(comChuva);
-                const quentes = [...dias].sort((a, b) => b.tmax - a.tmax).slice(0, Math.max(3, Math.floor(dias.length / 3)));
-                const frios = [...dias].sort((a, b) => a.tmax - b.tmax).slice(0, Math.max(3, Math.floor(dias.length / 3)));
+                const sol = grupos.find((g) => g.cat === "sol")!;
+                const chuva = grupos.find((g) => g.cat === "chuva")!;
+                const rotulo = { sol: "☀️ Sol", nublado: "☁️ Nublado", chuva: "🌧️ Chuva" };
+                const confiavel = sol.dias >= 3 && chuva.dias >= 3;
+
                 return (
                   <div className="card">
                     <h2>Tempo × vendas</h2>
                     <div className="weather-row">
-                      {dias.slice(-21).map((w) => (
+                      {dias.slice(-28).map((w) => (
                         <span
                           key={w.date}
                           className="wday"
@@ -790,56 +779,56 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <div className="wcorr">
-                      <span className="item">
-                        <span className="k">Dias de sol</span>
-                        <span className="n">{brl.format(mediaSol)}</span>
-                        <span className="muted" style={{ fontSize: 11 }}>
-                          média por dia ({comSol.length} dias)
+                      {grupos.map((g) => (
+                        <span className="item" key={g.cat}>
+                          <span className="k">{rotulo[g.cat]}</span>
+                          <span className="n">{g.dias > 0 ? brl.format(g.media) : "—"}</span>
+                          <span className="muted" style={{ fontSize: 11 }}>
+                            média por dia · {g.dias} {g.dias === 1 ? "dia" : "dias"}
+                            {g.dias >= 3 && (
+                              <>
+                                {" "}
+                                ·{" "}
+                                <b style={{ color: g.indice >= 1 ? "var(--good)" : "var(--critical)" }}>
+                                  {g.indice >= 1 ? "+" : ""}
+                                  {((g.indice - 1) * 100).toLocaleString("pt-BR", {
+                                    maximumFractionDigits: 0,
+                                  })}
+                                  %
+                                </b>{" "}
+                                vs. o normal do dia da semana
+                              </>
+                            )}
+                          </span>
                         </span>
-                      </span>
-                      <span className="item">
-                        <span className="k">Dias de chuva</span>
-                        <span className="n">{brl.format(mediaChuva)}</span>
-                        <span className="muted" style={{ fontSize: 11 }}>
-                          média por dia ({comChuva.length} dias)
-                        </span>
-                      </span>
-                      <span className="item">
-                        <span className="k">Dias mais quentes</span>
-                        <span className="n">{brl.format(media(quentes))}</span>
-                        <span className="muted" style={{ fontSize: 11 }}>
-                          acima de {quentes[quentes.length - 1]?.tmax.toFixed(0)}°C
-                        </span>
-                      </span>
-                      <span className="item">
-                        <span className="k">Dias mais frios</span>
-                        <span className="n">{brl.format(media(frios))}</span>
-                        <span className="muted" style={{ fontSize: 11 }}>
-                          abaixo de {frios[frios.length - 1]?.tmax.toFixed(0)}°C
-                        </span>
-                      </span>
+                      ))}
                     </div>
                     <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
-                      Correlação entre temperatura máxima e faturamento:{" "}
-                      <b>{corrTemp.toFixed(2)}</b>{" "}
-                      {corrTemp > 0.4
-                        ? "— calor puxa as vendas para cima."
-                        : corrTemp < -0.4
-                          ? "— vende mais nos dias frios."
-                          : "— sem relação forte no período."}
-                      {mediaChuva > 0 && mediaSol > 0 && (
+                      {confiavel ? (
                         <>
-                          {" "}
-                          Dia de sol rende{" "}
+                          Ajustado pelo dia da semana, dia de sol rende{" "}
                           <b>
-                            {(((mediaSol - mediaChuva) / mediaChuva) * 100).toLocaleString("pt-BR", {
-                              maximumFractionDigits: 0,
-                            })}
+                            {(((sol.indice - chuva.indice) / chuva.indice) * 100).toLocaleString(
+                              "pt-BR",
+                              { maximumFractionDigits: 0 }
+                            )}
                             %
                           </b>{" "}
-                          {mediaSol >= mediaChuva ? "a mais" : "a menos"} que dia de chuva.
+                          {sol.indice >= chuva.indice ? "a mais" : "a menos"} que dia de chuva.{" "}
+                        </>
+                      ) : (
+                        <>
+                          Poucos dias de cada tipo no período ({sol.dias} de sol, {chuva.dias} de
+                          chuva) — escolha um período maior para a comparação ficar confiável.{" "}
                         </>
                       )}
+                      Correlação entre temperatura e faturamento: <b>{corrTemp.toFixed(2)}</b>
+                      {Math.abs(corrTemp) < 0.3
+                        ? " (fraca)"
+                        : corrTemp > 0
+                          ? " — calor puxa as vendas para cima"
+                          : " — vende mais no frio"}
+                      .
                     </p>
                   </div>
                 );
