@@ -84,7 +84,7 @@ export default function Dashboard() {
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [channel, setChannel] = useState<"" | "shopify" | "tiktok" | "meli">("");
+  const [channel, setChannel] = useState<"" | "shopify" | "tiktok" | "meli" | "lojas">("");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -179,7 +179,7 @@ export default function Dashboard() {
         <div className="logo">
           <div>
             <span className="brand-word" role="img" aria-label="Via Sol" />
-            <span className="tag">vendas online</span>
+            <span className="tag">vendas</span>
           </div>
         </div>
         {data && (
@@ -425,6 +425,35 @@ export default function Dashboard() {
                           style={{
                             width: `${(p.revenue / maxProd) * 100}%`,
                             background: CHANNEL_META[p.channel].cssVar,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h2>Faturamento por loja</h2>
+              {data.stores.length === 0 ? (
+                <div className="empty">Sem vendas de loja física no período.</div>
+              ) : (
+                <div className="rank">
+                  {data.stores.map((s) => (
+                    <div key={s.name} className="rank-row">
+                      <div className="rank-info">
+                        <span className="rank-title">{s.name}</span>
+                        <span className="rank-nums">
+                          {s.orders} vendas · <b>{brl.format(s.revenue)}</b>
+                        </span>
+                      </div>
+                      <div className="rank-bar">
+                        <div
+                          className="rank-fill"
+                          style={{
+                            width: `${(s.revenue / Math.max(...data.stores.map((x) => x.revenue), 1)) * 100}%`,
+                            background: "var(--c-lojas)",
                           }}
                         />
                       </div>

@@ -17,6 +17,7 @@ import {
 import { readConfig } from "@/lib/config";
 import { fetchMetaSpend } from "@/lib/connectors/meta";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
+import { fetchTotvsSales } from "@/lib/connectors/totvs";
 
 export const dynamic = "force-dynamic";
 
@@ -63,20 +64,23 @@ export async function GET(req: NextRequest) {
   const fetchStartKey = [prevFrom, monthStart, from].sort()[0];
   const fetchStart = spMidnight(fetchStartKey);
 
-  const [shopifyRes, tiktokRes, meliRes, adsRes, ttAdsRes] = await Promise.all([
+  const [shopifyRes, tiktokRes, meliRes, lojasRes, adsRes, ttAdsRes] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
+    fetchTotvsSales(fetchStartKey, to),
     fetchMetaSpend(prevFrom, to),
     fetchTikTokAdsSpend(prevFrom, to),
   ]);
-  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes];
+  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes, lojasRes];
 
   // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
   // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
   const channelParam = sp.get("channel") as ChannelId | null;
   const channelFilter: ChannelId | null =
-    channelParam && ["shopify", "tiktok", "meli"].includes(channelParam) ? channelParam : null;
+    channelParam && ["shopify", "tiktok", "meli", "lojas"].includes(channelParam)
+      ? channelParam
+      : null;
   const filteredResults = channelFilter
     ? results.filter((r) => r.channel === channelFilter)
     : results;
@@ -97,7 +101,7 @@ export async function GET(req: NextRequest) {
   const dayMap = new Map<string, DailyPoint>();
   for (let i = 0; i < windowDays; i++) {
     const key = addDays(from, i);
-    dayMap.set(key, { date: key, shopify: 0, tiktok: 0, meli: 0 });
+    dayMap.set(key, { date: key, shopify: 0, tiktok: 0, meli: 0, lojas: 0 });
   }
   for (const o of current) {
     const p = dayMap.get(spDateKey(o.createdAt));
@@ -158,6 +162,17 @@ export async function GET(req: NextRequest) {
   const states = Array.from(stMap.values())
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
+
+  // Faturamento por loja física
+  const lojaMap = new Map<string, { name: string; revenue: number; orders: number }>();
+  for (const o of current) {
+    if (o.channel !== "lojas" || !o.store) continue;
+    const e = lojaMap.get(o.store) ?? { name: o.store, revenue: 0, orders: 0 };
+    e.revenue += o.total;
+    e.orders += 1;
+    lojaMap.set(o.store, e);
+  }
+  const stores = Array.from(lojaMap.values()).sort((a, b) => b.revenue - a.revenue);
 
   // Meta mensal: configurável pelo sistema (Blob) com fallback na env.
   // A meta é sempre da empresa toda — ignora o filtro de canal.
@@ -223,6 +238,7 @@ export async function GET(req: NextRequest) {
     recentOrders: current.slice(0, 25),
     topProducts,
     states,
+    stores,
     ads,
     tiktokAds,
     goal,

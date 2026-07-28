@@ -22,10 +22,15 @@ export const CHANNEL_META: Record<
     cssVar: "var(--c-meli)",
     envVars: ["ML_CLIENT_ID", "ML_CLIENT_SECRET", "ML_REFRESH_TOKEN"],
   },
+  lojas: {
+    name: "Lojas físicas",
+    cssVar: "var(--c-lojas)",
+    envVars: ["TOTVS_CLIENT_ID", "TOTVS_CLIENT_SECRET", "TOTVS_USERNAME", "TOTVS_PASSWORD"],
+  },
 };
 
 // Ordem fixa de empilhamento/legenda — nunca muda com filtros
-export const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli"];
+export const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli", "lojas"];
 
 export const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 export const brlShort = (v: number) =>
@@ -85,7 +90,7 @@ export function DailyChart({
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
-  const totals = daily.map((d) => d.shopify + d.tiktok + d.meli);
+  const totals = daily.map((d) => d.shopify + d.tiktok + d.meli + d.lojas);
   const spendMap = new Map((spend ?? []).map((s) => [s.date, s.spend]));
   const spendVals = daily.map((d) => spendMap.get(d.date) ?? 0);
   const hasSpend = (spend?.length ?? 0) > 0;
@@ -146,9 +151,10 @@ export function DailyChart({
             { v: d.shopify, color: "var(--c-shopify)" },
             { v: d.tiktok, color: "var(--c-tiktok)" },
             { v: d.meli, color: "var(--c-meli)" },
+            { v: d.lojas, color: "var(--c-lojas)" },
           ];
           let acc = 0;
-          const total = d.shopify + d.tiktok + d.meli;
+          const total = d.shopify + d.tiktok + d.meli + d.lojas;
           return (
             <g key={d.date}>
               {segs.map((s, si) => {
@@ -246,7 +252,14 @@ export function DailyChart({
           ))}
           <div className="t-row" style={{ marginTop: 4 }}>
             <span>Total</span>
-            <b>{brl.format(daily[hover.i].shopify + daily[hover.i].tiktok + daily[hover.i].meli)}</b>
+            <b>
+              {brl.format(
+                daily[hover.i].shopify +
+                  daily[hover.i].tiktok +
+                  daily[hover.i].meli +
+                  daily[hover.i].lojas
+              )}
+            </b>
           </div>
           {hasSpend && (
             <div className="t-row">

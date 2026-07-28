@@ -6,7 +6,14 @@ import { CHANNEL_META, CHANNEL_ORDER, DailyChart, brl } from "@/components/viz";
 
 interface TvData {
   generatedAt: string;
-  today: { revenue: number; orders: number; shopify: number; tiktok: number; meli: number };
+  today: {
+    revenue: number;
+    orders: number;
+    shopify: number;
+    tiktok: number;
+    meli: number;
+    lojas: number;
+  };
   daily: DailyPoint[];
 }
 

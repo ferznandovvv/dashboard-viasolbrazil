@@ -3,6 +3,7 @@ import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import { DailyPoint, addDays, spDateKey, spMidnight, todaySpKey } from "@/lib/types";
+import { fetchTotvsSales } from "@/lib/connectors/totvs";
 
 export const dynamic = "force-dynamic";
 
@@ -19,14 +20,15 @@ export async function GET() {
     fetchShopifyOrders(since),
     fetchTikTokOrders(since),
     fetchMeliOrders(since),
+    fetchTotvsSales(from, today),
   ]);
 
   const dayMap = new Map<string, DailyPoint>();
   for (let i = 0; i < 14; i++) {
     const key = addDays(from, i);
-    dayMap.set(key, { date: key, shopify: 0, tiktok: 0, meli: 0 });
+    dayMap.set(key, { date: key, shopify: 0, tiktok: 0, meli: 0, lojas: 0 });
   }
-  const todayTotals = { shopify: 0, tiktok: 0, meli: 0, orders: 0 };
+  const todayTotals = { shopify: 0, tiktok: 0, meli: 0, lojas: 0, orders: 0 };
   for (const r of results) {
     for (const o of r.orders) {
       const k = spDateKey(o.createdAt);
@@ -42,11 +44,13 @@ export async function GET() {
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     today: {
-      revenue: todayTotals.shopify + todayTotals.tiktok + todayTotals.meli,
+      revenue:
+        todayTotals.shopify + todayTotals.tiktok + todayTotals.meli + todayTotals.lojas,
       orders: todayTotals.orders,
       shopify: todayTotals.shopify,
       tiktok: todayTotals.tiktok,
       meli: todayTotals.meli,
+      lojas: todayTotals.lojas,
     },
     daily: Array.from(dayMap.values()),
   });

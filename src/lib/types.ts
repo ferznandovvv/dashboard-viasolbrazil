@@ -1,4 +1,4 @@
-export type ChannelId = "shopify" | "tiktok" | "meli";
+export type ChannelId = "shopify" | "tiktok" | "meli" | "lojas";
 
 export interface OrderItem {
   title: string;
@@ -18,6 +18,8 @@ export interface NormalizedOrder {
   customer?: string;
   /** UF ou nome do estado de entrega, quando a API informa */
   state?: string;
+  /** Loja física de origem (canal lojas) */
+  store?: string;
   items?: OrderItem[];
 }
 
@@ -35,6 +37,7 @@ export interface DailyPoint {
   shopify: number;
   tiktok: number;
   meli: number;
+  lojas: number;
 }
 
 export interface Totals {
@@ -63,6 +66,8 @@ export interface DashboardData {
   recentOrders: NormalizedOrder[];
   topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
   states: { uf: string; revenue: number; orders: number }[];
+  /** Faturamento por loja física no período */
+  stores: { name: string; revenue: number; orders: number }[];
   /** TikTok Ads × vendas TikTok Shop */
   tiktokAds: {
     connected: boolean;

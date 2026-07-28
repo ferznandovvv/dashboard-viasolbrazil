@@ -20,6 +20,7 @@
   --c-shopify: #bc5714;
   --c-tiktok: #2e9c72;
   --c-meli: #de9a10;
+  --c-lojas: #7a4b8f;
   --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: "Playfair Display", Georgia, serif;
 }
@@ -41,6 +42,7 @@
     --c-shopify: #c6551a;
     --c-tiktok: #33a176;
     --c-meli: #c08a0e;
+    --c-lojas: #9b74b8;
   }
 }
 
