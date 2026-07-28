@@ -96,6 +96,10 @@ export interface DashboardData {
   monthByUnit: Record<string, number>;
   /** Metas mensais configuradas por unidade */
   metas: Record<string, number>;
+  /** Clima diário da unidade em foco */
+  weather: { date: string; tmax: number; tmin: number; chuva: number; codigo: number }[];
+  /** Vendas por dia da semana × hora */
+  hours: { dow: number; hour: number; revenue: number; orders: number }[];
   goal: {
     target: number;
     monthRevenue: number;

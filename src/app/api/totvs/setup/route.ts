@@ -59,6 +59,29 @@ export async function GET() {
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
   const probes: { label: string; path: string; body?: unknown; raw?: boolean }[] = [
     {
+      label: "Vendedores — sellers/search",
+      path: "/api/totvsmoda/seller/v2/sellers/search",
+      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 5 },
+      raw: true,
+    },
+    {
+      label: "Vendedores — representatives/search",
+      path: "/api/totvsmoda/person/v2/representatives/search",
+      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 5 },
+      raw: true,
+    },
+    {
+      label: "Nota com pessoas/vendedor expandido",
+      path: INV,
+      body: {
+        filter: { branchCodeList: branches, operationType: "Output" },
+        expand: "items,payments,person,seller,representative",
+        page: 1,
+        pageSize: 1,
+      },
+      raw: true,
+    },
+    {
       label: "Histórico disponível — change do ano todo",
       path: INV,
       body: {

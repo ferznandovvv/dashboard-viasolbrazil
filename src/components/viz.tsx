@@ -32,6 +32,19 @@ export const CHANNEL_META: Record<
 // Ordem fixa de empilhamento/legenda — nunca muda com filtros
 export const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli", "lojas"];
 
+/** Cor fixa de cada loja física (ordem validada para daltonismo). */
+export const LOJA_CORES: Record<string, string> = {
+  Centro: "var(--l1)",
+  "Franca Shopping": "var(--l2)",
+  "Loja de Fábrica": "var(--l3)",
+  "Rio de Janeiro": "var(--l4)",
+  "Ribeirão Preto": "var(--l5)",
+  "SP — Itaim": "var(--l6)",
+  "Belo Horizonte": "var(--l7)",
+  "Praia Grande": "var(--l8)",
+};
+export const corDaLoja = (nome: string) => LOJA_CORES[nome] ?? "var(--c-lojas)";
+
 export const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 export const brlShort = (v: number) =>
   v >= 1000

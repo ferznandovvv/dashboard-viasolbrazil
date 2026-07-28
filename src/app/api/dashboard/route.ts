@@ -18,6 +18,7 @@ import { readConfig } from "@/lib/config";
 import { fetchMetaSpend } from "@/lib/connectors/meta";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
 import { fetchTotvsSales } from "@/lib/connectors/totvs";
+import { fetchClima } from "@/lib/connectors/weather";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -251,6 +252,35 @@ export async function GET(req: NextRequest) {
     daily: ttCurrent,
   };
 
+  // Clima da unidade em foco (correlação com as vendas) e mapa de horários
+  const unidadeFoco = storeFilter || (channelFilter && channelFilter !== "lojas" ? "Site" : "");
+  const weather = unidadeFoco ? await fetchClima(unidadeFoco, from, to) : [];
+
+  const horasMap = new Map<string, { dow: number; hour: number; revenue: number; orders: number }>();
+  for (const o of current) {
+    const d = new Date(o.createdAt);
+    const dow = Number(
+      new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" })
+        .format(d)
+        .replace(/Sun|Mon|Tue|Wed|Thu|Fri|Sat/, (m) =>
+          String(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(m))
+        )
+    );
+    const hour = Number(
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "America/Sao_Paulo",
+        hour: "2-digit",
+        hour12: false,
+      }).format(d)
+    );
+    const k = `${dow}-${hour}`;
+    const e = horasMap.get(k) ?? { dow, hour, revenue: 0, orders: 0 };
+    e.revenue += o.total;
+    e.orders += 1;
+    horasMap.set(k, e);
+  }
+  const hours = Array.from(horasMap.values());
+
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),
     from,
@@ -265,6 +295,8 @@ export async function GET(req: NextRequest) {
     stores,
     monthByUnit,
     metas: cfg.metas ?? {},
+    weather,
+    hours,
     ads,
     tiktokAds,
     goal,

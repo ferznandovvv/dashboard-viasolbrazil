@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type { ChannelId, DashboardData } from "@/lib/types";
-import { CHANNEL_META, DailyChart, brl, fmtDay } from "@/components/viz";
+import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
 
 type Period = { key: string; from: string; to: string };
 
@@ -86,6 +86,33 @@ function AdsInline({
   );
 }
 
+/** Tempo do dia a partir do código WMO. */
+function tempoIcone(codigo: number): string {
+  if (codigo === 0) return "☀️";
+  if (codigo <= 2) return "🌤️";
+  if (codigo === 3) return "☁️";
+  if (codigo <= 48) return "🌫️";
+  if (codigo <= 67) return "🌧️";
+  if (codigo <= 77) return "🌨️";
+  if (codigo <= 82) return "🌦️";
+  return "⛈️";
+}
+
+/** Correlação simples (Pearson) entre duas séries. */
+function correlacao(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  if (n < 3) return 0;
+  const mA = a.reduce((s, v) => s + v, 0) / n;
+  const mB = b.reduce((s, v) => s + v, 0) / n;
+  let num = 0, dA = 0, dB = 0;
+  for (let i = 0; i < n; i++) {
+    num += (a[i] - mA) * (b[i] - mB);
+    dA += (a[i] - mA) ** 2;
+    dB += (b[i] - mB) ** 2;
+  }
+  return dA && dB ? num / Math.sqrt(dA * dB) : 0;
+}
+
 /** Barrinha de meta do mês usada nos cards da home. */
 function MetaMini({ feito, meta }: { feito: number; meta: number }) {
   if (!(meta > 0)) return null;
@@ -113,6 +140,7 @@ export default function Dashboard() {
   const [editandoMeta, setEditandoMeta] = useState(false);
   const [metaInput, setMetaInput] = useState("");
   const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
+  const [porLoja, setPorLoja] = useState(false);
 
   const channel = view.tipo === "canal" ? view.ch : view.tipo === "loja" ? "lojas" : "";
   const store = view.tipo === "loja" ? view.nome : "";
@@ -197,13 +225,22 @@ export default function Dashboard() {
         { key: view.ch, label: CHANNEL_META[view.ch].name, color: CHANNEL_META[view.ch].cssVar },
       ];
     if (view.tipo === "loja")
-      return [{ key: `loja:${view.nome}`, label: view.nome, color: "var(--c-lojas)" }];
+      return [{ key: `loja:${view.nome}`, label: view.nome, color: corDaLoja(view.nome) }];
     if (view.tipo === "site")
       return ONLINE.map((c) => ({
         key: c,
         label: CHANNEL_META[c].name,
         color: CHANNEL_META[c].cssVar,
       }));
+    if (porLoja)
+      return [
+        { key: "site", label: "Site (online)", color: "var(--c-shopify)" },
+        ...(data?.stores ?? []).map((l) => ({
+          key: `loja:${l.name}`,
+          label: l.name,
+          color: corDaLoja(l.name),
+        })),
+      ];
     return [
       { key: "site", label: "Site (online)", color: "var(--c-shopify)" },
       { key: "lojas", label: "Lojas físicas", color: "var(--c-lojas)" },
@@ -332,6 +369,48 @@ export default function Dashboard() {
           {/* ——— HOME: só as unidades e o gráfico ——— */}
           {view.tipo === "tudo" && (
             <>
+              {(() => {
+                const lojas = data.stores.filter((l) => l.revenue > 0);
+                if (lojas.length === 0) return null;
+                const melhor = lojas[0];
+                const media = lojas.reduce((s, l) => s + l.revenue, 0) / lojas.length;
+                const abaixo = lojas
+                  .filter((l) => l.revenue < media * 0.7)
+                  .sort((a, b) => a.revenue - b.revenue)[0];
+                const queda = lojas
+                  .filter((l) => l.prevRevenue > 0 && l.revenue < l.prevRevenue * 0.85)
+                  .sort((a, b) => a.revenue / a.prevRevenue - b.revenue / b.prevRevenue)[0];
+                const perto = data.stores
+                  .map((l) => ({ l, pct: metaDe(l.name) > 0 ? (data.monthByUnit[l.name] ?? 0) / metaDe(l.name) : 0 }))
+                  .filter((x) => x.pct >= 1)
+                  .sort((a, b) => b.pct - a.pct)[0];
+                return (
+                  <div className="highlights">
+                    <span className="hl good">
+                      🏆 Melhor: <b>{melhor.name}</b> — {brl.format(melhor.revenue)}
+                    </span>
+                    {perto && (
+                      <span className="hl good">
+                        🎯 <b>{perto.l.name}</b> bateu a meta do mês
+                      </span>
+                    )}
+                    {queda && (
+                      <span className="hl warn">
+                        📉 <b>{queda.name}</b> caiu{" "}
+                        {Math.round((1 - queda.revenue / queda.prevRevenue) * 100)}% vs período
+                        anterior
+                      </span>
+                    )}
+                    {abaixo && !queda && (
+                      <span className="hl warn">
+                        ⚠️ <b>{abaixo.name}</b> {Math.round((1 - abaixo.revenue / media) * 100)}%
+                        abaixo da média das lojas
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
                 <div
                   className="channel-card clickable"
@@ -373,12 +452,12 @@ export default function Dashboard() {
                     <div
                       key={loja.name}
                       className="channel-card clickable"
-                      style={{ ["--ch-color" as string]: "var(--c-lojas)" }}
+                      style={{ ["--ch-color" as string]: corDaLoja(loja.name) }}
                       onClick={() => setView({ tipo: "loja", nome: loja.name })}
                     >
                       <div className="head">
                         <span className="name">
-                          <span className="ch-dot" style={{ background: "var(--c-lojas)" }} />
+                          <span className="ch-dot" style={{ background: corDaLoja(loja.name) }} />
                           {loja.name}
                         </span>
                       </div>
@@ -397,7 +476,12 @@ export default function Dashboard() {
               )}
 
               <div className="card">
-                <h2>Faturamento por dia</h2>
+                <div className="goal-head">
+                  <h2>Faturamento por dia</h2>
+                  <button className="mini ghost" onClick={() => setPorLoja((v) => !v)}>
+                    {porLoja ? "agrupar lojas" : "ver por loja"}
+                  </button>
+                </div>
                 <div className="legend">
                   {chartSeries.map((se) => (
                     <span key={se.key} className="item">
@@ -580,7 +664,10 @@ export default function Dashboard() {
                               className="rank-fill"
                               style={{
                                 width: `${(p.revenue / maxProd) * 100}%`,
-                                background: CHANNEL_META[p.channel as ChannelId].cssVar,
+                                background:
+                                  view.tipo === "loja"
+                                    ? corDaLoja(view.nome)
+                                    : CHANNEL_META[p.channel as ChannelId].cssVar,
                               }}
                             />
                           </div>
@@ -622,6 +709,159 @@ export default function Dashboard() {
                 )}
               </div>
 
+              {data.weather.length > 0 && (() => {
+                const porData = new Map(
+                  dailySeries.map((d) => [
+                    d.date,
+                    chartSeries.reduce((t, se) => t + Number(d[se.key] ?? 0), 0),
+                  ])
+                );
+                const dias = data.weather.filter((w) => porData.has(w.date));
+                if (dias.length < 3) return null;
+                const vendas = dias.map((w) => porData.get(w.date) ?? 0);
+                const corrTemp = correlacao(
+                  dias.map((w) => w.tmax),
+                  vendas
+                );
+                const comSol = dias.filter((w) => w.codigo <= 2 && w.chuva < 1);
+                const comChuva = dias.filter((w) => w.chuva >= 1);
+                const media = (ds: typeof dias) =>
+                  ds.length
+                    ? ds.reduce((s, w) => s + (porData.get(w.date) ?? 0), 0) / ds.length
+                    : 0;
+                const mediaSol = media(comSol);
+                const mediaChuva = media(comChuva);
+                const quentes = [...dias].sort((a, b) => b.tmax - a.tmax).slice(0, Math.max(3, Math.floor(dias.length / 3)));
+                const frios = [...dias].sort((a, b) => a.tmax - b.tmax).slice(0, Math.max(3, Math.floor(dias.length / 3)));
+                return (
+                  <div className="card">
+                    <h2>Tempo × vendas</h2>
+                    <div className="weather-row">
+                      {dias.slice(-21).map((w) => (
+                        <span
+                          key={w.date}
+                          className="wday"
+                          title={`${fmtDay(w.date)} · ${w.tmax.toFixed(0)}°C · ${w.chuva.toFixed(
+                            1
+                          )}mm · ${brl.format(porData.get(w.date) ?? 0)}`}
+                        >
+                          <span className="ic">{tempoIcone(w.codigo)}</span>
+                          {w.tmax.toFixed(0)}°
+                        </span>
+                      ))}
+                    </div>
+                    <div className="wcorr">
+                      <span className="item">
+                        <span className="k">Dias de sol</span>
+                        <span className="n">{brl.format(mediaSol)}</span>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          média por dia ({comSol.length} dias)
+                        </span>
+                      </span>
+                      <span className="item">
+                        <span className="k">Dias de chuva</span>
+                        <span className="n">{brl.format(mediaChuva)}</span>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          média por dia ({comChuva.length} dias)
+                        </span>
+                      </span>
+                      <span className="item">
+                        <span className="k">Dias mais quentes</span>
+                        <span className="n">{brl.format(media(quentes))}</span>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          acima de {quentes[quentes.length - 1]?.tmax.toFixed(0)}°C
+                        </span>
+                      </span>
+                      <span className="item">
+                        <span className="k">Dias mais frios</span>
+                        <span className="n">{brl.format(media(frios))}</span>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          abaixo de {frios[frios.length - 1]?.tmax.toFixed(0)}°C
+                        </span>
+                      </span>
+                    </div>
+                    <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
+                      Correlação entre temperatura máxima e faturamento:{" "}
+                      <b>{corrTemp.toFixed(2)}</b>{" "}
+                      {corrTemp > 0.4
+                        ? "— calor puxa as vendas para cima."
+                        : corrTemp < -0.4
+                          ? "— vende mais nos dias frios."
+                          : "— sem relação forte no período."}
+                      {mediaChuva > 0 && mediaSol > 0 && (
+                        <>
+                          {" "}
+                          Dia de sol rende{" "}
+                          <b>
+                            {(((mediaSol - mediaChuva) / mediaChuva) * 100).toLocaleString("pt-BR", {
+                              maximumFractionDigits: 0,
+                            })}
+                            %
+                          </b>{" "}
+                          {mediaSol >= mediaChuva ? "a mais" : "a menos"} que dia de chuva.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {data.hours.length > 0 && (() => {
+                const maxH = Math.max(...data.hours.map((h) => h.revenue), 1);
+                const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+                const mapa = new Map(data.hours.map((h) => [`${h.dow}-${h.hour}`, h]));
+                const horas = Array.from({ length: 24 }, (_, i) => i).filter((h) =>
+                  data.hours.some((x) => x.hour === h)
+                );
+                const hMin = Math.min(...horas, 8);
+                const hMax = Math.max(...horas, 20);
+                const faixa = Array.from({ length: hMax - hMin + 1 }, (_, i) => hMin + i);
+                return (
+                  <div className="card">
+                    <h2>Horários de pico</h2>
+                    <div
+                      className="heat"
+                      style={{ gridTemplateColumns: `34px repeat(${faixa.length}, 1fr)` }}
+                    >
+                      <span />
+                      {faixa.map((h) => (
+                        <span key={h} className="hh">
+                          {h % 3 === 0 ? h : ""}
+                        </span>
+                      ))}
+                      {DIAS.map((nome, dow) => (
+                        <Fragment key={nome}>
+                          <span className="lbl">{nome}</span>
+                          {faixa.map((h) => {
+                            const c = mapa.get(`${dow}-${h}`);
+                            const int = c ? c.revenue / maxH : 0;
+                            return (
+                              <span
+                                key={`${dow}-${h}`}
+                                className="cell"
+                                style={{
+                                  background:
+                                    int > 0
+                                      ? `color-mix(in srgb, var(--brand) ${Math.round(
+                                          15 + int * 85
+                                        )}%, transparent)`
+                                      : undefined,
+                                }}
+                                title={
+                                  c
+                                    ? `${nome} ${h}h · ${c.orders} vendas · ${brl.format(c.revenue)}`
+                                    : `${nome} ${h}h · sem vendas`
+                                }
+                              />
+                            );
+                          })}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="card">
                 <h2>{view.tipo === "loja" ? "Últimas vendas" : "Últimos pedidos"}</h2>
                 {data.recentOrders.length === 0 ? (
@@ -644,7 +884,11 @@ export default function Dashboard() {
                             <td>
                               <span
                                 className="ch-dot"
-                                style={{ background: CHANNEL_META[o.channel].cssVar }}
+                                style={{
+                                  background: o.store
+                                    ? corDaLoja(o.store)
+                                    : CHANNEL_META[o.channel].cssVar,
+                                }}
                               />
                               {o.store ?? CHANNEL_META[o.channel].name}
                             </td>
