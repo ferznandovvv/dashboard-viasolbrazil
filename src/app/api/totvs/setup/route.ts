@@ -57,64 +57,77 @@ export async function GET() {
   const branches = [6]; // Ribeirão Preto, como amostra de loja física
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
-  const dOnly = { startDate: monthAgo, endDate: today };
   const probes: { label: string; path: string; body?: unknown; raw?: boolean }[] = [
     {
-      label: "A) Base — filial 6, sem data",
-      path: INV,
-      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 1 },
-    },
-    {
-      label: "B) invoiceDate só data (sem hora)",
-      path: INV,
-      body: { filter: { branchCodeList: branches, invoiceDate: dOnly }, page: 1, pageSize: 1 },
-    },
-    {
-      label: "C) issueDate só data",
-      path: INV,
-      body: { filter: { branchCodeList: branches, issueDate: dOnly }, page: 1, pageSize: 1 },
-    },
-    {
-      label: "D) change inField=InvoiceDate (maiúsculo)",
+      label: "Histórico disponível — change do ano todo",
       path: INV,
       body: {
-        filter: { branchCodeList: branches, change: { ...range, inField: "InvoiceDate" } },
+        filter: {
+          branchCodeList: branches,
+          operationType: "Output",
+          change: { startDate: "2026-01-01T00:00:00", endDate: `${today}T23:59:59` },
+        },
         page: 1,
         pageSize: 1,
       },
-    },
-    {
-      label: "E) invoiceDateStart/End",
-      path: INV,
-      body: {
-        filter: { branchCodeList: branches, invoiceDateStart: monthAgo, invoiceDateEnd: today },
-        page: 1,
-        pageSize: 1,
-      },
-    },
-    {
-      label: "F) VENDA COMPLETA (1 nota de saída, JSON cru)",
-      path: INV,
-      body: {
-        filter: { branchCodeList: branches, operationType: "Output" },
-        expand: "items,payments,person",
-        page: 1,
-        pageSize: 1,
-      },
-      raw: true,
     },
   ];
 
-  // O swagger da própria API resolve o contrato do filtro sem chute
-  const swaggerPaths = [
-    "/api/totvsmoda/fiscal/v2/swagger.json",
-    "/swagger/fiscal-v2/swagger.json",
-    "/swagger/v1/swagger.json",
-  ];
-  for (const sp of swaggerPaths) {
-    probes.push({ label: `S) swagger ${sp}`, path: sp, body: undefined, raw: true });
+  // Amostra grande de saídas para entender operações, status e vendedores
+  const amostra: Record<string, unknown>[] = [];
+  let amostraErro = "";
+  try {
+    const desde = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    for (let pagina = 1; pagina <= 3; pagina++) {
+      const r = await totvsFetch(INV, {
+        filter: {
+          branchCodeList: branches,
+          operationType: "Output",
+          change: { startDate: `${desde}T00:00:00`, endDate: `${today}T23:59:59` },
+        },
+        expand: "items",
+        page: pagina,
+        pageSize: 100,
+      });
+      const itens = (r.json?.items as Record<string, unknown>[] | undefined) ?? [];
+      amostra.push(...itens);
+      if (itens.length < 100) break;
+    }
+  } catch (e) {
+    amostraErro = e instanceof Error ? e.message : "erro";
   }
-  const blocks: string[] = [];
+
+  const conta = (campo: string) => {
+    const m = new Map<string, { n: number; soma: number }>();
+    for (const it of amostra) {
+      const k = String(it[campo] ?? "—");
+      const e = m.get(k) ?? { n: 0, soma: 0 };
+      e.n += 1;
+      e.soma += Number(it.totalValue ?? 0);
+      m.set(k, e);
+    }
+    return Array.from(m.entries())
+      .sort((a, b) => b[1].n - a[1].n)
+      .slice(0, 12)
+      .map(([k, v]) => `  ${v.n.toString().padStart(4)}×  R$ ${v.soma.toFixed(2).padStart(11)}  ${k}`)
+      .join("\n");
+  };
+  const datas = amostra
+    .map((i) => String(i.invoiceDate ?? ""))
+    .filter(Boolean)
+    .sort();
+  const resumoAmostra = amostraErro
+    ? `erro: ${amostraErro}`
+    : `${amostra.length} notas de saída (filial 6, alteradas nos últimos 90 dias)\n` +
+      `datas de emissão: ${datas[0] ?? "?"} até ${datas[datas.length - 1] ?? "?"}\n\n` +
+      `POR STATUS:\n${conta("invoiceStatus")}\n\n` +
+      `POR OPERAÇÃO:\n${conta("operatioName")}\n\n` +
+      `POR TIPO DE DOCUMENTO:\n${conta("documentType")}\n\n` +
+      `POR USUÁRIO DO PDV (userCode):\n${conta("userCode")}`;
+
+  const blocks: string[] = [
+    `<div class="row"><div class="ep">★ ANÁLISE DA AMOSTRA</div><pre>${resumoAmostra.replace(/</g, "&lt;")}</pre></div>`,
+  ];
   for (const p of probes) {
     try {
       const r = await totvsFetch(p.path, p.body);
