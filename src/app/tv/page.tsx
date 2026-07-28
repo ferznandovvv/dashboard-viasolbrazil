@@ -86,7 +86,15 @@ export default function TvPage() {
 
           <div className="card tv-chart">
             <h2>Últimos 14 dias</h2>
-            <DailyChart daily={data.daily} height={340} />
+            <DailyChart
+              daily={data.daily}
+              series={CHANNEL_ORDER.map((id) => ({
+                key: id,
+                label: CHANNEL_META[id].name,
+                color: CHANNEL_META[id].cssVar,
+              }))}
+              height={340}
+            />
           </div>
         </>
       )}

@@ -71,16 +71,26 @@ export function SunMark({ size = 40 }: { size?: number }) {
   );
 }
 
+export interface Serie {
+  key: string;
+  label: string;
+  color: string;
+}
+
 export function DailyChart({
   daily,
+  series,
   height = 280,
   spend,
 }: {
   daily: DailyPoint[];
+  /** Séries empilhadas, na ordem de baixo para cima */
+  series: Serie[];
   height?: number;
   /** Gasto diário em anúncios — desenhado como linha tracejada sobre as barras */
   spend?: { date: string; spend: number }[];
 }) {
+  const val = (d: DailyPoint, k: string) => Number(d[k] ?? 0);
   const boxRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
 
@@ -90,7 +100,7 @@ export function DailyChart({
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
-  const totals = daily.map((d) => d.shopify + d.tiktok + d.meli + d.lojas);
+  const totals = daily.map((d) => series.reduce((acc, se) => acc + val(d, se.key), 0));
   const spendMap = new Map((spend ?? []).map((s) => [s.date, s.spend]));
   const spendVals = daily.map((d) => spendMap.get(d.date) ?? 0);
   const hasSpend = (spend?.length ?? 0) > 0;
@@ -147,14 +157,9 @@ export function DailyChart({
 
         {daily.map((d, i) => {
           const x = PAD.left + i * slot + (slot - barW) / 2;
-          const segs: { v: number; color: string }[] = [
-            { v: d.shopify, color: "var(--c-shopify)" },
-            { v: d.tiktok, color: "var(--c-tiktok)" },
-            { v: d.meli, color: "var(--c-meli)" },
-            { v: d.lojas, color: "var(--c-lojas)" },
-          ];
+          const segs = series.map((se) => ({ v: val(d, se.key), color: se.color }));
           let acc = 0;
-          const total = d.shopify + d.tiktok + d.meli + d.lojas;
+          const total = segs.reduce((t, x) => t + x.v, 0);
           return (
             <g key={d.date}>
               {segs.map((s, si) => {
@@ -241,26 +246,23 @@ export function DailyChart({
           }}
         >
           <div className="t-date">{fmtDay(daily[hover.i].date)}</div>
-          {CHANNEL_ORDER.map((id) => (
-            <div key={id} className="t-row">
+          {series.map((se) => (
+            <div key={se.key} className="t-row">
               <span>
-                <span className="ch-dot" style={{ background: CHANNEL_META[id].cssVar }} />
-                {CHANNEL_META[id].name}
+                <span className="ch-dot" style={{ background: se.color }} />
+                {se.label}
               </span>
-              <b>{brl.format(daily[hover.i][id])}</b>
+              <b>{brl.format(val(daily[hover.i], se.key))}</b>
             </div>
           ))}
-          <div className="t-row" style={{ marginTop: 4 }}>
-            <span>Total</span>
-            <b>
-              {brl.format(
-                daily[hover.i].shopify +
-                  daily[hover.i].tiktok +
-                  daily[hover.i].meli +
-                  daily[hover.i].lojas
-              )}
-            </b>
-          </div>
+          {series.length > 1 && (
+            <div className="t-row" style={{ marginTop: 4 }}>
+              <span>Total</span>
+              <b>
+                {brl.format(series.reduce((t, se) => t + val(daily[hover.i], se.key), 0))}
+              </b>
+            </div>
+          )}
           {hasSpend && (
             <div className="t-row">
               <span>Gasto anúncios</span>

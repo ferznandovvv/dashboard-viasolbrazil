@@ -11,6 +11,7 @@
 import { ChannelResult, NormalizedOrder } from "../types";
 
 const DEFAULT_URL = "https://apitotvsmoda.bhan.com.br";
+const INVOICES = "/api/totvsmoda/fiscal/v2/invoices/search";
 
 /** Filiais das lojas físicas (a 4 é o site, que já vem pela Shopify). */
 export const LOJAS: Record<number, string> = {
@@ -162,52 +163,72 @@ export async function fetchTotvsSales(from: string, to: string): Promise<Channel
   const orders: NormalizedOrder[] = [];
   try {
     const hoje = new Date().toISOString().slice(0, 10);
-    for (const j of janelas(from, to)) {
-      // A alteração acontece junto com a venda; +2 dias de folga para ajustes
-      const endChange = j.end >= hoje ? hoje : j.end;
-      for (let pagina = 1; pagina <= 40; pagina++) {
-        const r = await totvsFetch("/api/totvsmoda/fiscal/v2/invoices/search", {
-          filter: {
-            branchCodeList: Object.keys(LOJAS).map(Number),
-            operationType: "Output",
-            change: { startDate: `${j.start}T00:00:00`, endDate: `${endChange}T23:59:59` },
-          },
-          expand: "items",
-          page: pagina,
-          pageSize: 500,
+    const PAGE = 100; // limite da API
+    const corpo = (j: { start: string; end: string }, pagina: number) => ({
+      filter: {
+        branchCodeList: Object.keys(LOJAS).map(Number),
+        operationType: "Output",
+        change: {
+          startDate: `${j.start}T00:00:00`,
+          endDate: `${(j.end >= hoje ? hoje : j.end)}T23:59:59`,
+        },
+      },
+      expand: "items",
+      page: pagina,
+      pageSize: PAGE,
+    });
+
+    const coletar = (itens: TotvsInvoice[]) => {
+      for (const inv of itens) {
+        const data = (inv.invoiceDate ?? "").slice(0, 10);
+        if (data < from || data > to) continue;
+        if (!isVenda(inv)) continue;
+        const loja = LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`;
+        orders.push({
+          channel: "lojas",
+          id: `${inv.branchCode}-${inv.invoiceSequence}`,
+          label: `#${inv.invoiceCode ?? inv.invoiceSequence}`,
+          createdAt: `${data}T${inv.exitTime ?? "12:00:00"}-03:00`,
+          total: Number(inv.totalValue ?? 0),
+          currency: "BRL",
+          status: loja,
+          customer: inv.personName ?? undefined,
+          store: loja,
+          items: (inv.items ?? [])
+            .filter((it) => it.name)
+            .map((it) => ({
+              title: it.name!,
+              qty: Number(it.quantity ?? 1),
+              revenue: Number(it.netValue ?? 0),
+            })),
         });
-        if (r.status !== 200) {
-          const msg = r.json ? JSON.stringify(r.json).slice(0, 200) : r.text.slice(0, 200);
-          throw new Error(`Notas fiscais: HTTP ${r.status} — ${msg}`);
+      }
+    };
+
+    for (const j of janelas(from, to)) {
+      const primeira = await totvsFetch(INVOICES, corpo(j, 1));
+      if (primeira.status !== 200) {
+        const msg = primeira.json
+          ? JSON.stringify(primeira.json).slice(0, 200)
+          : primeira.text.slice(0, 200);
+        throw new Error(`Notas fiscais: HTTP ${primeira.status} — ${msg}`);
+      }
+      coletar((primeira.json?.items as TotvsInvoice[] | undefined) ?? []);
+      const total = Number(primeira.json?.count ?? 0);
+      const paginas = Math.min(Math.ceil(total / PAGE), 200);
+
+      // Demais páginas em lotes paralelos, para não estourar o tempo da rota
+      for (let inicio = 2; inicio <= paginas; inicio += 6) {
+        const lote = [];
+        for (let p = inicio; p < inicio + 6 && p <= paginas; p++) {
+          lote.push(totvsFetch(INVOICES, corpo(j, p)));
         }
-        const itens = (r.json?.items as TotvsInvoice[] | undefined) ?? [];
-        for (const inv of itens) {
-          const data = (inv.invoiceDate ?? "").slice(0, 10);
-          if (data < from || data > to) continue;
-          if (!isVenda(inv)) continue;
-          orders.push({
-            channel: "lojas",
-            id: `${inv.branchCode}-${inv.invoiceSequence}`,
-            label: `#${inv.invoiceCode ?? inv.invoiceSequence}`,
-            createdAt: `${data}T${inv.exitTime ?? "12:00:00"}-03:00`,
-            total: Number(inv.totalValue ?? 0),
-            currency: "BRL",
-            status: LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`,
-            customer: inv.personName ?? undefined,
-            state: undefined,
-            store: LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`,
-            items: (inv.items ?? [])
-              .filter((it) => it.name)
-              .map((it) => ({
-                title: it.name!,
-                qty: Number(it.quantity ?? 1),
-                revenue: Number(it.netValue ?? 0),
-              })),
-          });
+        for (const r of await Promise.all(lote)) {
+          if (r.status === 200) coletar((r.json?.items as TotvsInvoice[] | undefined) ?? []);
         }
-        if (itens.length < 500) break;
       }
     }
+
     const result: ChannelResult = { channel: "lojas", connected: true, orders };
     cache.set(chave, { at: Date.now(), result });
     return result;

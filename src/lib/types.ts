@@ -38,6 +38,8 @@ export interface DailyPoint {
   tiktok: number;
   meli: number;
   lojas: number;
+  /** Uma chave por loja física: "loja:Centro" etc. */
+  [serie: string]: number | string;
 }
 
 export interface Totals {
@@ -67,7 +69,7 @@ export interface DashboardData {
   topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
   states: { uf: string; revenue: number; orders: number }[];
   /** Faturamento por loja física no período */
-  stores: { name: string; revenue: number; orders: number }[];
+  stores: { name: string; revenue: number; orders: number; prevRevenue: number }[];
   /** TikTok Ads × vendas TikTok Shop */
   tiktokAds: {
     connected: boolean;

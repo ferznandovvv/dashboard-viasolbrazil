@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { DashboardData } from "@/lib/types";
-import { CHANNEL_META, CHANNEL_ORDER, DailyChart, brl, fmtDay } from "@/components/viz";
+import { CHANNEL_META, DailyChart, brl, fmtDay } from "@/components/viz";
 
 type Period = { key: string; from: string; to: string };
 
@@ -84,7 +84,15 @@ export default function Dashboard() {
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [channel, setChannel] = useState<"" | "shopify" | "tiktok" | "meli" | "lojas">("");
+  // Visão: tudo | site (online agregado) | canal online | loja física
+  const [view, setView] = useState<
+    | { tipo: "tudo" }
+    | { tipo: "site" }
+    | { tipo: "canal"; ch: "shopify" | "tiktok" | "meli" }
+    | { tipo: "loja"; nome: string }
+  >({ tipo: "tudo" });
+  const channel = view.tipo === "canal" ? view.ch : view.tipo === "loja" ? "lojas" : "";
+  const store = view.tipo === "loja" ? view.nome : "";
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -98,10 +106,13 @@ export default function Dashboard() {
     if (v > 0) setLocalGoal(v);
   }, []);
 
-  const load = useCallback(async (p: Period, ch: string) => {
+  const load = useCallback(async (p: Period, ch: string, st: string) => {
     setLoading(true);
     setFetchError("");
-    const qs = `from=${p.from}&to=${p.to}${ch ? `&channel=${ch}` : ""}`;
+    const qs =
+      `from=${p.from}&to=${p.to}` +
+      (ch ? `&channel=${ch}` : "") +
+      (st ? `&store=${encodeURIComponent(st)}` : "");
     try {
       const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`Erro ${res.status}`);
@@ -114,8 +125,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    load(period, channel);
-  }, [period, channel, load]);
+    load(period, channel, store);
+  }, [period, channel, store, load]);
 
   async function saveGoal() {
     const v = parseFloat(goalInput.replace(/\./g, "").replace(",", "."));
@@ -136,7 +147,7 @@ export default function Dashboard() {
       localStorage.setItem("metaMensal", String(v));
       setLocalGoal(v);
     }
-    load(period, channel);
+    load(period, channel, store);
   }
 
   // Redirect das autorizações OAuth: TikTok Shop e Mercado Livre devolvem
@@ -170,6 +181,40 @@ export default function Dashboard() {
       for (const d of src) m.set(d.date, (m.get(d.date) ?? 0) + d.spend);
     return Array.from(m.entries()).map(([date, spend]) => ({ date, spend }));
   })();
+  const ONLINE: ("shopify" | "tiktok" | "meli")[] = ["shopify", "tiktok", "meli"];
+  const chartSeries = (() => {
+    if (view.tipo === "canal")
+      return [
+        {
+          key: view.ch,
+          label: CHANNEL_META[view.ch].name,
+          color: CHANNEL_META[view.ch].cssVar,
+        },
+      ];
+    if (view.tipo === "loja")
+      return [{ key: `loja:${view.nome}`, label: view.nome, color: "var(--c-lojas)" }];
+    if (view.tipo === "site")
+      return ONLINE.map((c) => ({
+        key: c,
+        label: CHANNEL_META[c].name,
+        color: CHANNEL_META[c].cssVar,
+      }));
+    return [
+      { key: "site", label: "Site (online)", color: "var(--c-shopify)" },
+      { key: "lojas", label: "Lojas físicas", color: "var(--c-lojas)" },
+    ];
+  })();
+  // Na visão geral, a série "site" é a soma dos três canais online
+  const dailySeries = (data?.daily ?? []).map((d) =>
+    view.tipo === "tudo" ? { ...d, site: d.shopify + d.tiktok + d.meli } : d
+  );
+
+  const online = (data?.channels ?? []).filter((c) => c.channel !== "lojas");
+  const siteRevenue = online.reduce((s, c) => s + c.revenue, 0);
+  const sitePrev = online.reduce((s, c) => s + c.prevRevenue, 0);
+  const siteOrders = online.reduce((s, c) => s + c.orders, 0);
+  const maxLoja = Math.max(...(data?.stores.map((s) => s.revenue) ?? [0]), 1);
+
   const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
   const maxProd = Math.max(...(data?.topProducts.map((p) => p.revenue) ?? [0]), 1);
 
@@ -315,80 +360,186 @@ export default function Dashboard() {
             );
           })()}
 
-          <div className="channels">
-            {CHANNEL_ORDER.map((id) => {
-              const c = data.channels.find((x) => x.channel === id);
-              const meta = CHANNEL_META[id];
-              if (!c) return null;
-              const sel = channel === id;
-              const dim = channel !== "" && !sel;
-              return (
-                <div
-                  key={id}
-                  className={`channel-card clickable${sel ? " sel" : ""}${dim ? " dim" : ""}`}
-                  style={{ ["--ch-color" as string]: meta.cssVar }}
-                  onClick={() => setChannel(sel ? "" : id)}
-                  title={sel ? "Clique para ver todos os canais" : `Clique para filtrar por ${meta.name}`}
-                >
-                  <div className="head">
-                    <span className="name">
-                      <span className="ch-dot" style={{ background: meta.cssVar }} />
-                      {meta.name}
-                    </span>
-                    {sel ? (
-                      <span className="badge sel-badge">filtrando ✕</span>
-                    ) : !c.connected ? (
-                      <span className="badge">não conectado</span>
-                    ) : c.error ? (
-                      <span className="badge err">erro</span>
+          {/* Site (online) — agregado dos três canais, clicável para abrir */}
+          <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
+            <div
+              className={`channel-card clickable${view.tipo === "site" ? " sel" : ""}${
+                view.tipo === "loja" || view.tipo === "canal" ? " dim" : ""
+              }`}
+              style={{ ["--ch-color" as string]: "var(--c-shopify)" }}
+              onClick={() => setView(view.tipo === "site" ? { tipo: "tudo" } : { tipo: "site" })}
+              title="Clique para abrir os canais online"
+            >
+              <div className="head">
+                <span className="name">
+                  <span className="ch-dot" style={{ background: "var(--c-shopify)" }} />
+                  Site — vendas online
+                </span>
+                <span className="badge sel-badge">
+                  {view.tipo === "site" ? "aberto ✕" : "ver canais"}
+                </span>
+              </div>
+              <div className="rev">
+                {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
+              </div>
+              <div className="meta">
+                {siteOrders.toLocaleString("pt-BR")} pedidos no período
+                {siteOrders > 0 && <> · ticket médio {brl.format(siteRevenue / siteOrders)}</>}
+              </div>
+            </div>
+          </div>
+
+          {view.tipo === "site" || view.tipo === "canal" ? (
+            <div className="channels">
+              {ONLINE.map((id) => {
+                const c = data.channels.find((x) => x.channel === id);
+                const meta = CHANNEL_META[id];
+                if (!c) return null;
+                const sel = view.tipo === "canal" && view.ch === id;
+                return (
+                  <div
+                    key={id}
+                    className={`channel-card clickable${sel ? " sel" : ""}${
+                      view.tipo === "canal" && !sel ? " dim" : ""
+                    }`}
+                    style={{ ["--ch-color" as string]: meta.cssVar }}
+                    onClick={() => setView(sel ? { tipo: "site" } : { tipo: "canal", ch: id })}
+                  >
+                    <div className="head">
+                      <span className="name">
+                        <span className="ch-dot" style={{ background: meta.cssVar }} />
+                        {meta.name}
+                      </span>
+                      {sel ? (
+                        <span className="badge sel-badge">filtrando ✕</span>
+                      ) : !c.connected ? (
+                        <span className="badge">não conectado</span>
+                      ) : c.error ? (
+                        <span className="badge err">erro</span>
+                      ) : (
+                        <span className="badge on">conectado</span>
+                      )}
+                    </div>
+                    {c.connected ? (
+                      <>
+                        <div className="rev">
+                          {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
+                        </div>
+                        <div className="meta">
+                          {c.orders.toLocaleString("pt-BR")} pedidos
+                          {c.orders > 0 && <> · ticket {brl.format(c.revenue / c.orders)}</>}
+                        </div>
+                        {id === "shopify" && data.ads.connected && (
+                          <AdsInline label="Anúncios (Meta)" ads={data.ads} />
+                        )}
+                        {id === "tiktok" && data.tiktokAds.connected && (
+                          <AdsInline label="Anúncios (TikTok)" ads={data.tiktokAds} />
+                        )}
+                        {c.error && <div className="err-msg">{c.error}</div>}
+                      </>
                     ) : (
-                      <span className="badge on">conectado</span>
+                      <div className="setup">
+                        Para conectar, adicione nas variáveis de ambiente:
+                        {meta.envVars.map((v) => (
+                          <div key={v}>
+                            <code>{v}</code>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  {c.connected ? (
-                    <>
-                      <div className="rev">
-                        {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
-                      </div>
-                      <div className="meta">
-                        {c.orders.toLocaleString("pt-BR")} pedidos no período
-                        {c.orders > 0 && <> · ticket médio {brl.format(c.revenue / c.orders)}</>}
-                      </div>
-                      {id === "shopify" && data.ads.connected && (
-                        <AdsInline label="Anúncios (Meta)" ads={data.ads} />
-                      )}
-                      {id === "tiktok" && data.tiktokAds.connected && (
-                        <AdsInline label="Anúncios (TikTok)" ads={data.tiktokAds} />
-                      )}
-                      {c.error && <div className="err-msg">{c.error}</div>}
-                    </>
-                  ) : (
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* Lojas físicas — uma por card */}
+          {(() => {
+            const lojasCh = data.channels.find((c) => c.channel === "lojas");
+            if (lojasCh && !lojasCh.connected) {
+              return (
+                <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
+                  <div className="channel-card" style={{ ["--ch-color" as string]: "var(--c-lojas)" }}>
+                    <div className="head">
+                      <span className="name">Lojas físicas</span>
+                      <span className="badge">não conectado</span>
+                    </div>
                     <div className="setup">
-                      Para conectar, adicione nas variáveis de ambiente do projeto:
-                      {meta.envVars.map((v) => (
+                      Para conectar, adicione nas variáveis de ambiente:
+                      {CHANNEL_META.lojas.envVars.map((v) => (
                         <div key={v}>
                           <code>{v}</code>
                         </div>
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
-            })}
-          </div>
+            }
+            if (lojasCh?.error) {
+              return (
+                <div className="channels" style={{ gridTemplateColumns: "1fr" }}>
+                  <div className="channel-card" style={{ ["--ch-color" as string]: "var(--c-lojas)" }}>
+                    <div className="head">
+                      <span className="name">Lojas físicas</span>
+                      <span className="badge err">erro</span>
+                    </div>
+                    <div className="err-msg">{lojasCh.error}</div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="channels stores">
+                {data.stores.map((loja) => {
+                  const sel = view.tipo === "loja" && view.nome === loja.name;
+                  return (
+                    <div
+                      key={loja.name}
+                      className={`channel-card clickable${sel ? " sel" : ""}${
+                        view.tipo === "loja" && !sel ? " dim" : ""
+                      }`}
+                      style={{ ["--ch-color" as string]: "var(--c-lojas)" }}
+                      onClick={() =>
+                        setView(sel ? { tipo: "tudo" } : { tipo: "loja", nome: loja.name })
+                      }
+                    >
+                      <div className="head">
+                        <span className="name">
+                          <span className="ch-dot" style={{ background: "var(--c-lojas)" }} />
+                          {loja.name}
+                        </span>
+                        {sel && <span className="badge sel-badge">filtrando ✕</span>}
+                      </div>
+                      <div className="rev">
+                        {brl.format(loja.revenue)}{" "}
+                        <Delta now={loja.revenue} before={loja.prevRevenue} />
+                      </div>
+                      <div className="meta">
+                        {loja.orders.toLocaleString("pt-BR")} vendas
+                        {loja.orders > 0 && <> · ticket {brl.format(loja.revenue / loja.orders)}</>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className="card">
             <h2>
               Faturamento por dia
-              {channel && (
-                <span className="filter-note"> — só {CHANNEL_META[channel].name}</span>
+              {view.tipo === "loja" && <span className="filter-note"> — {view.nome}</span>}
+              {view.tipo === "canal" && (
+                <span className="filter-note"> — só {CHANNEL_META[view.ch].name}</span>
               )}
+              {view.tipo === "site" && <span className="filter-note"> — canais online</span>}
             </h2>
             <div className="legend">
-              {(channel ? [channel] : CHANNEL_ORDER).map((id) => (
-                <span key={id} className="item">
-                  <span className="swatch" style={{ background: CHANNEL_META[id].cssVar }} />
-                  {CHANNEL_META[id].name}
+              {chartSeries.map((se) => (
+                <span key={se.key} className="item">
+                  <span className="swatch" style={{ background: se.color }} />
+                  {se.label}
                 </span>
               ))}
               {spendSeries && (
@@ -398,7 +549,7 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <DailyChart daily={data.daily} spend={spendSeries} />
+            <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
           </div>
 
           <div className="grid-2">
@@ -425,35 +576,6 @@ export default function Dashboard() {
                           style={{
                             width: `${(p.revenue / maxProd) * 100}%`,
                             background: CHANNEL_META[p.channel].cssVar,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="card">
-              <h2>Faturamento por loja</h2>
-              {data.stores.length === 0 ? (
-                <div className="empty">Sem vendas de loja física no período.</div>
-              ) : (
-                <div className="rank">
-                  {data.stores.map((s) => (
-                    <div key={s.name} className="rank-row">
-                      <div className="rank-info">
-                        <span className="rank-title">{s.name}</span>
-                        <span className="rank-nums">
-                          {s.orders} vendas · <b>{brl.format(s.revenue)}</b>
-                        </span>
-                      </div>
-                      <div className="rank-bar">
-                        <div
-                          className="rank-fill"
-                          style={{
-                            width: `${(s.revenue / Math.max(...data.stores.map((x) => x.revenue), 1)) * 100}%`,
-                            background: "var(--c-lojas)",
                           }}
                         />
                       </div>

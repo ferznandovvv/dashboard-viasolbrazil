@@ -20,6 +20,7 @@ import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
 import { fetchTotvsSales } from "@/lib/connectors/totvs";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const MAX_RANGE_DAYS = 370;
 
@@ -81,11 +82,14 @@ export async function GET(req: NextRequest) {
     channelParam && ["shopify", "tiktok", "meli", "lojas"].includes(channelParam)
       ? channelParam
       : null;
+  const storeFilter = sp.get("store") ?? "";
   const filteredResults = channelFilter
     ? results.filter((r) => r.channel === channelFilter)
     : results;
 
-  const all = filteredResults.flatMap((r) => r.orders);
+  const all = filteredResults
+    .flatMap((r) => r.orders)
+    .filter((o) => !storeFilter || o.store === storeFilter);
   const allChannels = results.flatMap((r) => r.orders);
   const inWindow = (o: NormalizedOrder, a: string, b: string) => {
     const k = spDateKey(o.createdAt);
@@ -105,12 +109,15 @@ export async function GET(req: NextRequest) {
   }
   for (const o of current) {
     const p = dayMap.get(spDateKey(o.createdAt));
-    if (p) p[o.channel] += o.total;
+    if (!p) continue;
+    p[o.channel] = (p[o.channel] as number) + o.total;
+    if (o.store) p[`loja:${o.store}`] = ((p[`loja:${o.store}`] as number) ?? 0) + o.total;
   }
 
   const channels = results.map((r) => {
-    const cur = r.orders.filter((o) => inWindow(o, from, to));
-    const prev = r.orders.filter((o) => inWindow(o, prevFrom, prevTo));
+    const escopo = r.orders.filter((o) => !storeFilter || o.store === storeFilter);
+    const cur = escopo.filter((o) => inWindow(o, from, to));
+    const prev = escopo.filter((o) => inWindow(o, prevFrom, prevTo));
     return {
       channel: r.channel,
       connected: r.connected,
@@ -163,13 +170,19 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
 
-  // Faturamento por loja física
-  const lojaMap = new Map<string, { name: string; revenue: number; orders: number }>();
-  for (const o of current) {
-    if (o.channel !== "lojas" || !o.store) continue;
-    const e = lojaMap.get(o.store) ?? { name: o.store, revenue: 0, orders: 0 };
-    e.revenue += o.total;
-    e.orders += 1;
+  // Faturamento por loja física (sempre todas as lojas, ignorando o filtro)
+  const lojasTodas = lojasRes.orders;
+  const lojaMap = new Map<string, { name: string; revenue: number; orders: number; prevRevenue: number }>();
+  for (const o of lojasTodas) {
+    if (!o.store) continue;
+    const e =
+      lojaMap.get(o.store) ?? { name: o.store, revenue: 0, orders: 0, prevRevenue: 0 };
+    if (inWindow(o, from, to)) {
+      e.revenue += o.total;
+      e.orders += 1;
+    } else if (inWindow(o, prevFrom, prevTo)) {
+      e.prevRevenue += o.total;
+    }
     lojaMap.set(o.store, e);
   }
   const stores = Array.from(lojaMap.values()).sort((a, b) => b.revenue - a.revenue);
