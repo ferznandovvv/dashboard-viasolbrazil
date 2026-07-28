@@ -133,11 +133,30 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  // Top produtos do período
+  // Top produtos do período, agrupados por modelo (sem cor e tamanho)
+  const TAMANHOS =
+    /^(PP|P|M|G|GG|XG|XGG|XXG|U|UN|UNI|UNICO|ÚNICO|TAM|P\/M|M\/G|G\/GG|\d{1,2})$/i;
+  const CORES =
+    /^(PRETO|PRETA|BRANCO|BRANCA|OFF|WHITE|CRU|BEGE|NUDE|MARROM|CACAU|CAQUI|CEREJA|VINHO|VERMELHO|ROSA|PINK|LILAS|LILÁS|ROXO|AZUL|MARINHO|JEANS|VERDE|OLIVA|MILITAR|AMARELO|MOSTARDA|LARANJA|CORAL|TERRACOTA|PEROLA|PÉROLA|DOURADO|PRATA|CINZA|CHUMBO|GRAFITE|ONCA|ONÇA|ANIMAL|PRINT|ESTAMPADO|ESTAMPADA|FLORAL|LISTRADO|DIVERSOS|DIVERSAS|COLORIDO|MESCLA)$/i;
+
+  /** Tira sufixos de tamanho e cor para agrupar as variações num só modelo. */
+  const modeloDe = (nome: string): string => {
+    const tokens = nome.trim().split(/\s+/);
+    while (tokens.length > 2) {
+      const ultimo = tokens[tokens.length - 1];
+      if (TAMANHOS.test(ultimo) || CORES.test(ultimo) || ultimo.includes("/")) {
+        tokens.pop();
+        continue;
+      }
+      break;
+    }
+    return tokens.join(" ");
+  };
+
   const prodMap = new Map<string, { title: string; channel: string; qty: number; revenue: number }>();
   for (const o of current) {
     for (const it of o.items ?? []) {
-      const title = it.title.trim().slice(0, 80);
+      const title = modeloDe(it.title).slice(0, 80);
       const key = title.toLowerCase();
       const e = prodMap.get(key) ?? { title, channel: o.channel, qty: 0, revenue: 0 };
       e.qty += it.qty;
