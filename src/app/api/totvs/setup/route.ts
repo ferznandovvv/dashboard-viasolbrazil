@@ -57,29 +57,18 @@ export async function GET() {
   const branches = [6]; // Ribeirão Preto, como amostra de loja física
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
-  const probes: { label: string; path: string; body?: unknown; raw?: boolean }[] = [
+  const probes: { label: string; path: string; body?: unknown; raw?: boolean; nomes?: boolean }[] = [
     {
-      label: "Vendedores — sellers/search",
-      path: "/api/totvsmoda/seller/v2/sellers/search",
-      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 5 },
-      raw: true,
-    },
-    {
-      label: "Vendedores — representatives/search",
+      label: "Representantes — lista de nomes",
       path: "/api/totvsmoda/person/v2/representatives/search",
-      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 5 },
-      raw: true,
+      body: { filter: {}, page: 1, pageSize: 60 },
+      nomes: true,
     },
     {
-      label: "Nota com pessoas/vendedor expandido",
-      path: INV,
-      body: {
-        filter: { branchCodeList: branches, operationType: "Output" },
-        expand: "items,payments,person,seller,representative",
-        page: 1,
-        pageSize: 1,
-      },
-      raw: true,
+      label: "Usuários do sistema (operadores de PDV)",
+      path: "/api/totvsmoda/management/v2/users/search",
+      body: { filter: {}, page: 1, pageSize: 60 },
+      nomes: true,
     },
     {
       label: "Histórico disponível — change do ano todo",
@@ -146,7 +135,30 @@ export async function GET() {
       `POR STATUS:\n${conta("invoiceStatus")}\n\n` +
       `POR OPERAÇÃO:\n${conta("operatioName")}\n\n` +
       `POR TIPO DE DOCUMENTO:\n${conta("documentType")}\n\n` +
-      `POR USUÁRIO DO PDV (userCode):\n${conta("userCode")}`;
+      `POR USUÁRIO DO PDV (userCode):\n${conta("userCode")}\n\n` +
+      `POR dealerCode DOS ITENS (candidato a vendedora):\n${(() => {
+        const m = new Map<string, { n: number; soma: number }>();
+        for (const inv of amostra) {
+          const itens = (inv.items ?? []) as {
+            products?: { dealerCode?: number }[];
+            netValue?: number;
+          }[];
+          for (const it of itens) {
+            for (const pr of it.products ?? []) {
+              const k = String(pr.dealerCode ?? "—");
+              const e = m.get(k) ?? { n: 0, soma: 0 };
+              e.n += 1;
+              e.soma += Number(it.netValue ?? 0);
+              m.set(k, e);
+            }
+          }
+        }
+        return Array.from(m.entries())
+          .sort((a, b) => b[1].n - a[1].n)
+          .slice(0, 15)
+          .map(([k, v]) => `  ${v.n.toString().padStart(4)}×  R$ ${v.soma.toFixed(2).padStart(11)}  dealer ${k}`)
+          .join("\n");
+      })()}`;
 
   const blocks: string[] = [
     `<div class="row"><div class="ep">★ ANÁLISE DA AMOSTRA</div><pre>${resumoAmostra.replace(/</g, "&lt;")}</pre></div>`,
@@ -168,6 +180,11 @@ export async function GET() {
           idx >= 0
             ? txt.slice(idx, idx + 1800)
             : `swagger encontrado (${txt.length} bytes), sem modelo *InvoiceFilter*: ${txt.slice(0, 300)}`;
+      } else if (p.nomes) {
+        const itens = (j?.items as { code?: number; name?: string }[] | undefined) ?? [];
+        summary =
+          `count=${j?.count ?? "?"}\n` +
+          itens.map((x) => `  ${String(x.code ?? "?").padStart(6)}  ${x.name ?? ""}`).join("\n");
       } else if (p.raw) {
         summary = (r.json ? JSON.stringify(r.json.items ?? r.json) : r.text).slice(0, 2600);
       } else {
