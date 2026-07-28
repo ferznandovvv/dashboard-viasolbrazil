@@ -57,47 +57,63 @@ export async function GET() {
   const branches = [6]; // Ribeirão Preto, como amostra de loja física
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
-  const probes: { label: string; path: string; body?: unknown }[] = [
+  const dOnly = { startDate: monthAgo, endDate: today };
+  const probes: { label: string; path: string; body?: unknown; raw?: boolean }[] = [
     {
       label: "A) Base — filial 6, sem data",
       path: INV,
       body: { filter: { branchCodeList: branches }, page: 1, pageSize: 1 },
     },
     {
-      label: "B) Data em invoiceDate",
+      label: "B) invoiceDate só data (sem hora)",
       path: INV,
-      body: { filter: { branchCodeList: branches, invoiceDate: range }, page: 1, pageSize: 1 },
+      body: { filter: { branchCodeList: branches, invoiceDate: dOnly }, page: 1, pageSize: 1 },
     },
     {
-      label: "C) Data em change/inField",
+      label: "C) issueDate só data",
+      path: INV,
+      body: { filter: { branchCodeList: branches, issueDate: dOnly }, page: 1, pageSize: 1 },
+    },
+    {
+      label: "D) change inField=InvoiceDate (maiúsculo)",
       path: INV,
       body: {
-        filter: { branchCodeList: branches, change: { ...range, inField: "invoiceDate" } },
+        filter: { branchCodeList: branches, change: { ...range, inField: "InvoiceDate" } },
         page: 1,
         pageSize: 1,
       },
     },
     {
-      label: "D) Data na raiz do filter",
+      label: "E) invoiceDateStart/End",
       path: INV,
-      body: { filter: { branchCodeList: branches, ...range }, page: 1, pageSize: 1 },
+      body: {
+        filter: { branchCodeList: branches, invoiceDateStart: monthAgo, invoiceDateEnd: today },
+        page: 1,
+        pageSize: 1,
+      },
     },
     {
-      label: "E) Só saídas (operationType Output)",
+      label: "F) VENDA COMPLETA (1 nota de saída, JSON cru)",
       path: INV,
       body: {
         filter: { branchCodeList: branches, operationType: "Output" },
-        expand: "items,payments",
+        expand: "items,payments,person",
         page: 1,
         pageSize: 1,
       },
-    },
-    {
-      label: "F) Pedidos da filial 6 com orderDate",
-      path: "/api/totvsmoda/sales-order/v2/orders/search",
-      body: { filter: { branchCodeList: branches, orderDate: range }, page: 1, pageSize: 1 },
+      raw: true,
     },
   ];
+
+  // O swagger da própria API resolve o contrato do filtro sem chute
+  const swaggerPaths = [
+    "/api/totvsmoda/fiscal/v2/swagger.json",
+    "/swagger/fiscal-v2/swagger.json",
+    "/swagger/v1/swagger.json",
+  ];
+  for (const sp of swaggerPaths) {
+    probes.push({ label: `S) swagger ${sp}`, path: sp, body: undefined, raw: true });
+  }
   const blocks: string[] = [];
   for (const p of probes) {
     try {
@@ -107,7 +123,17 @@ export async function GET() {
         | null;
       let summary: string;
       if (r.status !== 200) {
-        summary = (r.json ? JSON.stringify(r.json) : r.text).slice(0, 400);
+        summary = (r.json ? JSON.stringify(r.json) : r.text).slice(0, 300);
+      } else if (p.raw && p.label.startsWith("S)")) {
+        // Swagger: extrai só o modelo de filtro das notas
+        const txt = r.text;
+        const idx = txt.search(/"[A-Za-z.]*Invoice[A-Za-z]*Filter"/);
+        summary =
+          idx >= 0
+            ? txt.slice(idx, idx + 1800)
+            : `swagger encontrado (${txt.length} bytes), sem modelo *InvoiceFilter*: ${txt.slice(0, 300)}`;
+      } else if (p.raw) {
+        summary = (r.json ? JSON.stringify(r.json.items ?? r.json) : r.text).slice(0, 2600);
       } else {
         const first = j?.items?.[0] ?? null;
         const pick = (k: string) => (first && k in first ? `${k}=${JSON.stringify(first[k])}` : "");
