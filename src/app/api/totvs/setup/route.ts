@@ -63,19 +63,13 @@ function descrever(doc: SwaggerDoc, s: Esquema | undefined, nivel = 0, vistos: S
     .join("\n");
 }
 
-/** Requisição e resposta de um caminho do Swagger, em texto. */
+/** Corpo aceito por um caminho do Swagger, em texto. */
 function contrato(doc: SwaggerDoc, caminho: string): string {
   const ops = doc.paths?.[caminho];
   if (!ops) return `${caminho}\n  (não existe neste swagger)`;
   const verbo = Object.keys(ops)[0];
-  const op = ops[verbo];
-  const req = op.requestBody?.content?.["application/json"]?.schema;
-  const resp = op.responses?.["200"]?.content?.["application/json"]?.schema;
-  return (
-    `${verbo.toUpperCase()} ${caminho}\n` +
-    `REQUISIÇÃO:\n${descrever(doc, req) || "  (sem corpo)"}\n` +
-    `RESPOSTA:\n${descrever(doc, resp) || "  (não descrita)"}`
-  );
+  const req = ops[verbo].requestBody?.content?.["application/json"]?.schema;
+  return `${verbo.toUpperCase()} ${caminho}\nFILTROS ACEITOS:\n${descrever(doc, req) || "  (sem corpo)"}`;
 }
 
 /**
@@ -150,83 +144,66 @@ export async function GET() {
     },
   ];
 
-  // Amostra grande de saídas para entender operações, status e vendedores
+  /**
+   * Pergunta decisiva: a venda das lojas grava a vendedora?
+   * Varre notas das 8 filiais e conta quantas trazem cada campo candidato
+   * preenchido — se todos vierem vazios, o dado não existe na origem.
+   */
   const amostra: Record<string, unknown>[] = [];
   let amostraErro = "";
   try {
-    const desde = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
-    for (let pagina = 1; pagina <= 3; pagina++) {
-      const r = await totvsFetch(INV, {
-        filter: {
-          branchCodeList: branches,
-          operationType: "Output",
-          change: { startDate: `${desde}T00:00:00`, endDate: `${today}T23:59:59` },
-        },
-        expand: "items",
-        page: pagina,
-        pageSize: 100,
-      });
-      const itens = (r.json?.items as Record<string, unknown>[] | undefined) ?? [];
-      amostra.push(...itens);
-      if (itens.length < 100) break;
+    const desde = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+    const paginas = await Promise.all(
+      [1, 2, 3, 4].map((pagina) =>
+        totvsFetch(INV, {
+          filter: {
+            branchCodeList: TODAS_FILIAIS,
+            operationType: "Output",
+            change: { startDate: `${desde}T00:00:00`, endDate: `${today}T23:59:59` },
+          },
+          page: pagina,
+          pageSize: 100,
+        })
+      )
+    );
+    for (const r of paginas) {
+      amostra.push(...((r.json?.items as Record<string, unknown>[] | undefined) ?? []));
     }
   } catch (e) {
     amostraErro = e instanceof Error ? e.message : "erro";
   }
 
-  const conta = (campo: string) => {
-    const m = new Map<string, { n: number; soma: number }>();
+  /** Quantas notas têm o campo preenchido, e com quantos valores distintos. */
+  const preenchimento = (campo: string) => {
+    const valores = new Map<string, number>();
+    let cheios = 0;
     for (const it of amostra) {
-      const k = String(it[campo] ?? "—");
-      const e = m.get(k) ?? { n: 0, soma: 0 };
-      e.n += 1;
-      e.soma += Number(it.totalValue ?? 0);
-      m.set(k, e);
+      const v = it[campo];
+      if (v === null || v === undefined || v === "") continue;
+      cheios += 1;
+      const k = String(v);
+      valores.set(k, (valores.get(k) ?? 0) + 1);
     }
-    return Array.from(m.entries())
-      .sort((a, b) => b[1].n - a[1].n)
-      .slice(0, 12)
-      .map(([k, v]) => `  ${v.n.toString().padStart(4)}×  R$ ${v.soma.toFixed(2).padStart(11)}  ${k}`)
-      .join("\n");
+    const amostraValores = Array.from(valores.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([k, n]) => `${k}(${n}×)`)
+      .join(" ");
+    return `  ${campo.padEnd(20)} ${String(cheios).padStart(4)}/${amostra.length} preenchidos, ${
+      valores.size
+    } valores distintos${amostraValores ? `: ${amostraValores}` : ""}`;
   };
-  const datas = amostra
-    .map((i) => String(i.invoiceDate ?? ""))
-    .filter(Boolean)
-    .sort();
+
   const resumoAmostra = amostraErro
     ? `erro: ${amostraErro}`
-    : `${amostra.length} notas de saída (filial 6, alteradas nos últimos 90 dias)\n` +
-      `datas de emissão: ${datas[0] ?? "?"} até ${datas[datas.length - 1] ?? "?"}\n\n` +
-      `POR STATUS:\n${conta("invoiceStatus")}\n\n` +
-      `POR OPERAÇÃO:\n${conta("operatioName")}\n\n` +
-      `POR TIPO DE DOCUMENTO:\n${conta("documentType")}\n\n` +
-      `POR USUÁRIO DO PDV (userCode):\n${conta("userCode")}\n\n` +
-      `POR dealerCode DOS ITENS (candidato a vendedora):\n${(() => {
-        const m = new Map<string, { n: number; soma: number }>();
-        for (const inv of amostra) {
-          const itens = (inv.items ?? []) as {
-            products?: { dealerCode?: number }[];
-            netValue?: number;
-          }[];
-          for (const it of itens) {
-            for (const pr of it.products ?? []) {
-              const k = String(pr.dealerCode ?? "—");
-              const e = m.get(k) ?? { n: 0, soma: 0 };
-              e.n += 1;
-              e.soma += Number(it.netValue ?? 0);
-              m.set(k, e);
-            }
-          }
-        }
-        return Array.from(m.entries())
-          .sort((a, b) => b[1].n - a[1].n)
-          .slice(0, 15)
-          .map(([k, v]) => `  ${v.n.toString().padStart(4)}×  R$ ${v.soma.toFixed(2).padStart(11)}  dealer ${k}`)
-          .join("\n");
-      })()}`;
+    : `${amostra.length} notas de saída, todas as 8 lojas, últimos 60 dias\n\n` +
+      ["sellerCpf", "userCode", "terminalCode", "personCode"].map(preenchimento).join("\n");
 
   const blocks: string[] = [
-    `<div class="row"><div class="ep">★ ANÁLISE DA AMOSTRA</div><pre>${resumoAmostra.replace(/</g, "&lt;")}</pre></div>`,
+    `<div class="row"><div class="ep">★ A VENDA GRAVA A VENDEDORA?</div><pre>${resumoAmostra.replace(
+      /</g,
+      "&lt;"
+    )}</pre></div>`,
   ];
   for (const p of probes) {
     try {
