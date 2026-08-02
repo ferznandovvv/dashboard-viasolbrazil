@@ -26,6 +26,10 @@ export interface NormalizedOrder {
   state?: string;
   /** Loja física de origem (canal lojas) */
   store?: string;
+  /** CPF da vendedora, como vem da nota fiscal */
+  sellerCpf?: string;
+  /** Nome da vendedora, já traduzido a partir do CPF */
+  seller?: string;
   items?: OrderItem[];
 }
 
@@ -116,6 +120,17 @@ export interface DashboardData {
   weather: { date: string; tmax: number; tmin: number; chuva: number; codigo: number }[];
   /** Faturamento por forma de pagamento */
   payments: { name: string; revenue: number; orders: number }[];
+  /** Ranking das vendedoras das lojas físicas no período */
+  sellers: {
+    name: string;
+    revenue: number;
+    orders: number;
+    pieces: number;
+    avgTicket: number;
+    avgPieces: number;
+    /** Lojas em que ela vendeu no período */
+    stores: string[];
+  }[];
   /** Vendas por dia da semana × hora */
   hours: { dow: number; hour: number; revenue: number; orders: number }[];
   goal: {

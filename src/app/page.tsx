@@ -723,6 +723,40 @@ export default function Dashboard() {
                   )}
                 </div>
 
+                {(data.sellers?.length ?? 0) > 0 && (
+                  <div className="card">
+                    <h2>Ranking de vendedoras</h2>
+                    <div className="rank">
+                      {data.sellers.map((v, i) => (
+                        <div key={v.name} className="rank-row" title={v.stores.join(", ")}>
+                          <div className="rank-info">
+                            <span className="rank-title">
+                              {i + 1}º {v.name}
+                            </span>
+                            <span className="rank-nums">
+                              {v.orders} vendas · <b>{brl.format(v.revenue)}</b>
+                            </span>
+                          </div>
+                          <div className="rank-bar">
+                            <div
+                              className="rank-fill"
+                              style={{
+                                width: `${(v.revenue / Math.max(...data.sellers.map((x) => x.revenue), 1)) * 100}%`,
+                                background:
+                                  v.stores.length === 1 ? corDaLoja(v.stores[0]) : "var(--brand)",
+                              }}
+                            />
+                          </div>
+                          <span className="rank-sub">
+                            ticket {brl.format(v.avgTicket)} · {v.avgPieces.toFixed(1)} peças/venda
+                            {v.stores.length > 1 ? ` · ${v.stores.length} lojas` : ""}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {data.payments.length > 1 && (
                   <div className="card">
                     <h2>Formas de pagamento</h2>

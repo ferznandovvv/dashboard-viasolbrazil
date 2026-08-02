@@ -114,6 +114,8 @@ interface TotvsInvoice {
   operatioName: string;
   totalValue: number;
   quantity?: number;
+  /** CPF da vendedora que fez a venda no PDV */
+  sellerCpf?: string | null;
   paymentConditionName?: string | null;
   exitTime: string | null;
   personName: string | null;
@@ -148,6 +150,53 @@ function janelas(from: string, to: string): { start: string; end: string }[] {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return out;
+}
+
+const PESSOAS = "/api/totvsmoda/person/v2/individuals/search";
+
+/** Nome curto e legível: primeiro nome + um sobrenome. */
+function nomeCurto(completo: string): string {
+  const partes = completo.trim().split(/\s+/).filter((p) => p.length > 2);
+  if (partes.length <= 2) return completo.trim();
+  return `${partes[0]} ${partes[1]}`;
+}
+
+/**
+ * Traduz o CPF gravado na nota para o nome da vendedora.
+ * O cadastro de vendedor (seller/v2) não traz CPF, então a ponte é o
+ * cadastro de pessoa física, consultado em lotes e guardado em cache.
+ */
+const nomePorCpf = new Map<string, string>();
+
+async function nomearVendedoras(orders: NormalizedOrder[]): Promise<void> {
+  const faltando = Array.from(
+    new Set(
+      orders
+        .map((o) => o.sellerCpf)
+        .filter((c): c is string => Boolean(c) && !nomePorCpf.has(c!))
+    )
+  );
+
+  for (let i = 0; i < faltando.length; i += 50) {
+    const lote = faltando.slice(i, i + 50);
+    try {
+      const r = await totvsFetch(PESSOAS, {
+        filter: { cpfList: lote },
+        page: 1,
+        pageSize: lote.length,
+      });
+      const itens = (r.json?.items as { cpf?: string; name?: string }[] | undefined) ?? [];
+      for (const p of itens) {
+        if (p.cpf && p.name) nomePorCpf.set(p.cpf, nomeCurto(p.name));
+      }
+    } catch {
+      /* sem nome a venda ainda conta no total, só não entra no ranking */
+    }
+  }
+
+  for (const o of orders) {
+    if (o.sellerCpf) o.seller = nomePorCpf.get(o.sellerCpf);
+  }
 }
 
 /**
@@ -201,6 +250,7 @@ async function buscarTotvs(from: string, to: string): Promise<ChannelResult> {
             0
           ),
           payment: inv.paymentConditionName ?? undefined,
+          sellerCpf: inv.sellerCpf ?? undefined,
           items: (inv.items ?? [])
             .filter((it) => it.name)
             .map((it) => ({
@@ -236,6 +286,7 @@ async function buscarTotvs(from: string, to: string): Promise<ChannelResult> {
       }
     }
 
+    await nomearVendedoras(orders);
     return { channel: "lojas", connected: true, orders };
   } catch (e) {
     return {

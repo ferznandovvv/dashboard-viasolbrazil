@@ -358,6 +358,33 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 8);
 
+  // Ranking de vendedoras (só as lojas físicas gravam a vendedora na nota)
+  const vendMap = new Map<
+    string,
+    { name: string; revenue: number; orders: number; pieces: number; stores: Set<string> }
+  >();
+  for (const o of current) {
+    if (!o.seller) continue;
+    const e =
+      vendMap.get(o.seller) ?? { name: o.seller, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
+    e.revenue += o.total;
+    e.orders += 1;
+    e.pieces += o.qty ?? 0;
+    if (o.store) e.stores.add(o.store);
+    vendMap.set(o.seller, e);
+  }
+  const sellers = Array.from(vendMap.values())
+    .map((v) => ({
+      name: v.name,
+      revenue: v.revenue,
+      orders: v.orders,
+      pieces: v.pieces,
+      avgTicket: v.orders ? v.revenue / v.orders : 0,
+      avgPieces: v.orders ? v.pieces / v.orders : 0,
+      stores: Array.from(v.stores).sort(),
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),
     from,
@@ -376,6 +403,7 @@ export async function GET(req: NextRequest) {
     weather,
     hours,
     payments,
+    sellers,
     ads,
     tiktokAds,
     goal,
