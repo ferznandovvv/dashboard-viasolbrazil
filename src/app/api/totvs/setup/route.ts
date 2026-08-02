@@ -111,6 +111,7 @@ export async function GET() {
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const branches = [6]; // Ribeirão Preto, como amostra de loja física
+  const TODAS_FILIAIS = [1, 2, 3, 5, 6, 7, 8, 9];
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
   const probes: {
@@ -119,51 +120,33 @@ export async function GET() {
     body?: unknown;
     raw?: boolean;
     nomes?: boolean;
-    /** Swagger a ler: mostra o contrato dos caminhos indicados */
-    schemaDe?: { swagger: string; caminhos: string[] };
+    /** Swagger a ler: mostra o contrato dos caminhos indicados e varre por vendedor */
+    schemaDe?: { caminhos: string[]; varrer?: boolean };
   }[] = [
     {
-      label: "Contrato — módulo seller",
-      path: "/api/totvsmoda/seller/v2/swagger/v1/swagger.json",
-      schemaDe: { swagger: "seller", caminhos: ["/api/totvsmoda/seller/v2/search"] },
-    },
-    {
-      label: "Contrato — PDV e itens da nota",
-      path: "/api/totvsmoda/sales-order/v2/swagger/v1/swagger.json",
-      schemaDe: { swagger: "sales-order", caminhos: ["/api/totvsmoda/sales-order/v2/pdv-transactions"] },
-    },
-    {
-      label: "Contrato — item-detail-search da nota",
+      label: "Contrato — filtro do invoices/search",
       path: "/api/totvsmoda/fiscal/v2/swagger/v1/swagger.json",
-      schemaDe: { swagger: "fiscal", caminhos: ["/api/totvsmoda/fiscal/v2/invoices/item-detail-search"] },
+      schemaDe: { caminhos: [INV], varrer: true },
     },
     {
-      label: "Vendedores — seller/v2/search (branchCodeList)",
+      label: "Varredura de vendedor — sales-order",
+      path: "/api/totvsmoda/sales-order/v2/swagger/v1/swagger.json",
+      schemaDe: { caminhos: [], varrer: true },
+    },
+    {
+      label: "Vendedoras cadastradas (todas as lojas)",
       path: "/api/totvsmoda/seller/v2/search",
-      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 30 },
+      body: { filter: { branchCodeList: TODAS_FILIAIS }, page: 1, pageSize: 100 },
       nomes: true,
     },
     {
-      label: "Vendedores — seller/v2/search (change)",
-      path: "/api/totvsmoda/seller/v2/search",
-      body: { filter: { change: range }, page: 1, pageSize: 30 },
-      nomes: true,
-    },
-    {
-      label: "Itens da nota — item-detail-search",
-      path: "/api/totvsmoda/fiscal/v2/invoices/item-detail-search",
+      label: "Campos que a nota realmente devolve",
+      path: INV,
       body: {
         filter: { branchCodeList: branches, operationType: "Output", change: range },
         page: 1,
         pageSize: 1,
       },
-      raw: true,
-    },
-    {
-      label: "Transações do PDV — pdv-transactions",
-      path: "/api/totvsmoda/sales-order/v2/pdv-transactions",
-      body: { filter: { branchCodeList: branches, change: range }, page: 1, pageSize: 1 },
-      raw: true,
     },
   ];
 
@@ -265,17 +248,46 @@ export async function GET() {
       } else if (p.schemaDe) {
         try {
           const doc = JSON.parse(r.text) as SwaggerDoc;
-          summary = p.schemaDe.caminhos
-            .map((c) => contrato(doc, c))
-            .join("\n\n");
+          const partes = p.schemaDe.caminhos.map((c) => contrato(doc, c));
+          if (p.schemaDe.varrer) {
+            // Todo nome de campo do swagger que cite vendedor/comissão
+            const achados = new Set<string>();
+            for (const m of r.text.matchAll(/"([A-Za-z]*(?:seller|Seller|comission|Comission|comiss|salesman|Salesman)[A-Za-z]*)"\s*:/g)) {
+              achados.add(m[1]);
+            }
+            partes.push(
+              achados.size
+                ? `CAMPOS COM VENDEDOR/COMISSÃO:\n  ${Array.from(achados).sort().join("\n  ")}`
+                : "CAMPOS COM VENDEDOR/COMISSÃO: nenhum"
+            );
+          }
+          summary = partes.join("\n\n");
         } catch {
           summary = `não é JSON (${r.text.length} bytes): ${r.text.slice(0, 200)}`;
         }
       } else if (p.nomes) {
-        const itens = (j?.items as { code?: number; name?: string }[] | undefined) ?? [];
+        const itens =
+          (j?.items as
+            | {
+                sellerCode?: number;
+                sellerName?: string;
+                personCode?: number;
+                personName?: string;
+                branchInformations?: { branchCode?: number; auxiliaryCode?: number; isInactive?: boolean }[];
+              }[]
+            | undefined) ?? [];
         summary =
-          `count=${j?.count ?? "?"}\n` +
-          itens.map((x) => `  ${String(x.code ?? "?").padStart(6)}  ${x.name ?? ""}`).join("\n");
+          `count=${j?.count ?? "?"}  totalItems=${j?.totalItems ?? "?"}\n` +
+          itens
+            .map((x) => {
+              const filiais = (x.branchInformations ?? [])
+                .map((b) => `f${b.branchCode}${b.auxiliaryCode ? `/aux${b.auxiliaryCode}` : ""}${b.isInactive ? " (inativo)" : ""}`)
+                .join(" ");
+              return `  cod ${String(x.sellerCode ?? "?").padStart(5)}  pessoa ${String(
+                x.personCode ?? "?"
+              ).padStart(10)}  ${(x.sellerName ?? x.personName ?? "").padEnd(28)} ${filiais}`;
+            })
+            .join("\n");
       } else if (p.raw) {
         summary = (r.json ? JSON.stringify(r.json.items ?? r.json) : r.text).slice(0, 2600);
       } else {
