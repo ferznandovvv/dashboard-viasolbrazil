@@ -358,7 +358,10 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 8);
 
-  // Ranking de vendedoras (só as lojas físicas gravam a vendedora na nota)
+  // Ranking de vendedoras (só as lojas físicas gravam a vendedora na nota).
+  // As vendas que saíram do caixa sem vendedora ficam separadas por loja, para
+  // mostrar onde o PDV está deixando de registrar.
+  const SEM_VEND = "Sem vendedora no caixa";
   const vendMap = new Map<
     string,
     { name: string; revenue: number; orders: number; pieces: number; stores: Set<string> }
@@ -367,7 +370,7 @@ export async function GET(req: NextRequest) {
     if (o.channel !== "lojas") continue;
     // Venda sem vendedora identificada entra como linha própria: some do
     // ranking seria esconder faturamento que existe.
-    const nome = o.seller ?? "PDV não informa vendedora";
+    const nome = o.seller ?? `${SEM_VEND} — ${o.store ?? "loja não informada"}`;
     const e =
       vendMap.get(nome) ?? { name: nome, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
     e.revenue += o.total;
@@ -389,7 +392,7 @@ export async function GET(req: NextRequest) {
     // A linha das vendas sem identificação fica sempre por último, para não
     // disputar posição com quem tem nome
     .sort((a, b) => {
-      const anon = (v: { name: string }) => (v.name === "PDV não informa vendedora" ? 1 : 0);
+      const anon = (v: { name: string }) => (v.name.startsWith(SEM_VEND) ? 1 : 0);
       return anon(a) - anon(b) || b.revenue - a.revenue;
     });
 

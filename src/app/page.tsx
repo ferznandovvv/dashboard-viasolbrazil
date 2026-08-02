@@ -300,10 +300,19 @@ export default function Dashboard() {
     if (todas.length === 0) return null;
     const lista = todas;
     const maior = Math.max(...todas.map((x) => x.revenue), 1);
-    const semNome = (v: { name: string }) => v.name === "PDV não informa vendedora";
+    const semNome = (v: { name: string }) => v.name.startsWith("Sem vendedora no caixa");
+    // Quanto do faturamento das lojas ficou sem dono
+    const semDono = todas.filter(semNome).reduce((s, v) => s + v.revenue, 0);
+    const totalLojas = todas.reduce((s, v) => s + v.revenue, 0);
     return (
       <div className="card">
         <h2>Ranking de vendedoras</h2>
+        {semDono > 0 && (
+          <div className="rank-aviso">
+            {((semDono / totalLojas) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+            do faturamento das lojas saiu do caixa sem vendedora registrada
+          </div>
+        )}
         <div className="rank">
           {lista.map((v, i) => (
             <div
@@ -313,7 +322,7 @@ export default function Dashboard() {
             >
               <div className="rank-info">
                 <span className="rank-title">
-                  {semNome(v) ? v.name : `${i + 1}º ${v.name}`}
+                  {semNome(v) ? "Sem vendedora" : `${i + 1}º ${v.name}`}
                 </span>
                 <span className="rank-nums">
                   {v.orders} vendas · <b>{brl.format(v.revenue)}</b>
