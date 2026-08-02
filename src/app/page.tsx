@@ -331,21 +331,22 @@ export default function Dashboard() {
         >
           Personalizado
         </button>
-        {customOpen && (
-          <span className="custom-range">
+      </div>
+
+      {customOpen && (
+        <div className="custom-range">
             <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
             <span className="muted">até</span>
             <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-            <button
-              className="apply"
-              disabled={!customFrom || !customTo || customFrom > customTo}
-              onClick={() => setPeriod({ key: "custom", from: customFrom, to: customTo })}
-            >
-              Aplicar
-            </button>
-          </span>
-        )}
-      </div>
+          <button
+            className="apply"
+            disabled={!customFrom || !customTo || customFrom > customTo}
+            onClick={() => setPeriod({ key: "custom", from: customFrom, to: customTo })}
+          >
+            Aplicar
+          </button>
+        </div>
+      )}
 
       {fetchError && <div className="card">{fetchError}</div>}
       {loading && !data && <div className="empty">Carregando…</div>}
@@ -924,6 +925,7 @@ export default function Dashboard() {
                 return (
                   <div className="card">
                     <h2>Horários de pico</h2>
+                    <div className="heat-wrap">
                     <div
                       className="heat"
                       style={{ gridTemplateColumns: `34px repeat(${faixa.length}, 1fr)` }}
@@ -962,6 +964,7 @@ export default function Dashboard() {
                           })}
                         </Fragment>
                       ))}
+                    </div>
                     </div>
                   </div>
                 );

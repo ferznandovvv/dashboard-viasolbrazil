@@ -85,7 +85,8 @@ body {
 }
 .updated { color: var(--text-muted); font-size: 12px; }
 
-.filters { display: flex; gap: 8px; margin-bottom: 20px; }
+.filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filters button { flex: 0 0 auto; white-space: nowrap; }
 .filters button {
   background: transparent; color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: 999px;
@@ -97,7 +98,7 @@ body {
   color: #fbf4e8; font-weight: 600;
 }
 
-.custom-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.custom-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -8px 0 20px; }
 .custom-range input[type="date"] {
   background: var(--surface-1); border: 1px solid var(--border); border-radius: 999px;
   padding: 6px 12px; font-family: inherit; font-size: 13px; color: var(--text-primary);
@@ -297,10 +298,6 @@ th.num { text-align: right; }
 }
 .login-error { color: var(--critical); font-size: 13px; }
 
-@media (max-width: 640px) {
-  .tile .value { font-size: 24px; }
-  .orders-table-wrap { overflow-x: auto; }
-}
 
 /* Destaques da home */
 .highlights { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -339,3 +336,62 @@ th.num { text-align: right; }
   font-size: 12px; color: var(--text-secondary); cursor: pointer;
 }
 .seg button.on { background: var(--brand); color: #fbf4e8; font-weight: 600; }
+
+/* ——— Celular (por último, para prevalecer sobre as regras acima) ——— */
+@media (max-width: 640px) {
+  .wrap { padding: 16px 12px 48px; }
+
+  /* Filtros numa linha só, rolável com o dedo */
+  .filters {
+    flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity;
+    margin: 0 -12px 16px; padding: 0 12px 4px; scrollbar-width: none;
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .filters button { scroll-snap-align: start; padding: 7px 14px; font-size: 13px; }
+  .custom-range input[type="date"] { flex: 1 1 130px; }
+  .custom-range .apply { flex: 1 1 100%; }
+
+  .topbar { margin-bottom: 14px; }
+  .brand-word { width: 170px; height: 24px; }
+  .updated { font-size: 11px; }
+
+  /* Dois por linha em vez de um card gigante */
+  .tiles { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { padding: 12px 14px; }
+  .tile .value { font-size: 19px; }
+  .tile .label { font-size: 10px; letter-spacing: 0.08em; }
+
+  .channels, .channels.stores { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .channel-card { padding: 12px 13px; }
+  .channel-card .name { font-size: 13px; }
+  .channel-card .rev, .channels.stores .rev { font-size: 16px; }
+  .channel-card .meta { font-size: 11px; }
+  .meta-mini span { font-size: 10px; }
+  .delta { font-size: 11px; margin-left: 4px; }
+
+  .card { padding: 14px; border-radius: 12px; }
+  .card h2 { font-size: 15px; }
+  .goal-head { gap: 6px; }
+  .goal-head > span { font-size: 12px; }
+
+  /* Seletor de agrupamento ocupa a linha toda */
+  .seg { width: 100%; display: flex; }
+  .seg button { flex: 1; padding: 7px 4px; font-size: 11px; }
+
+  .rank-info { font-size: 12px; }
+  .rank-title { max-width: 58%; }
+
+  .orders-table-wrap { overflow-x: auto; }
+  .orders-table-wrap table { min-width: 520px; }
+
+  /* Faixas largas: rolagem horizontal em vez de espremer */
+  .weather-row { flex-wrap: nowrap; overflow-x: auto; margin: 0 -14px 12px; padding: 0 14px 6px; }
+  .wday { min-width: 32px; flex: 0 0 auto; }
+  .heat-wrap { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+  .heat { min-width: 520px; }
+  .wcorr { gap: 14px; }
+  .wcorr .item { flex: 1 1 45%; }
+
+  .unit-head h1 { font-size: 20px; }
+  .invest-note { font-size: 11px; }
+}
