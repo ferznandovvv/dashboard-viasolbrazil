@@ -57,31 +57,62 @@ export async function GET() {
   const branches = [6]; // Ribeirão Preto, como amostra de loja física
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
-  const probes: { label: string; path: string; body?: unknown; raw?: boolean; nomes?: boolean }[] = [
+  const probes: { label: string; path: string; body?: unknown; raw?: boolean; nomes?: boolean; swagger?: boolean }[] = [
     {
-      label: "Representantes — lista de nomes",
-      path: "/api/totvsmoda/person/v2/representatives/search",
-      body: { filter: {}, page: 1, pageSize: 60 },
+      label: "Vendedores — seller/v2/search",
+      path: "/api/totvsmoda/seller/v2/search",
+      body: { filter: {}, page: 1, pageSize: 30 },
       nomes: true,
     },
     {
-      label: "Usuários do sistema (operadores de PDV)",
-      path: "/api/totvsmoda/management/v2/users/search",
-      body: { filter: {}, page: 1, pageSize: 60 },
+      label: "Vendedores — seller/v2/sellers",
+      path: "/api/totvsmoda/seller/v2/sellers",
+      body: { filter: {}, page: 1, pageSize: 30 },
       nomes: true,
     },
     {
-      label: "Histórico disponível — change do ano todo",
-      path: INV,
+      label: "Swagger do módulo fiscal",
+      path: "/api/totvsmoda/fiscal/v2/swagger/v1/swagger.json",
+      swagger: true,
+    },
+    {
+      label: "Swagger do módulo seller",
+      path: "/api/totvsmoda/seller/v2/swagger/v1/swagger.json",
+      swagger: true,
+    },
+    {
+      label: "Swagger do módulo sales-order",
+      path: "/api/totvsmoda/sales-order/v2/swagger/v1/swagger.json",
+      swagger: true,
+    },
+    {
+      label: "Swagger do módulo person",
+      path: "/api/totvsmoda/person/v2/swagger/v1/swagger.json",
+      swagger: true,
+    },
+    {
+      label: "Pedidos de venda — sales-order/v2/orders/search",
+      path: "/api/totvsmoda/sales-order/v2/orders/search",
       body: {
         filter: {
           branchCodeList: branches,
-          operationType: "Output",
-          change: { startDate: "2026-01-01T00:00:00", endDate: `${today}T23:59:59` },
+          change: range,
         },
+        page: 1,
+        pageSize: 2,
+      },
+      raw: true,
+    },
+    {
+      label: "Nota com expand sellers",
+      path: INV,
+      body: {
+        filter: { branchCodeList: branches, operationType: "Output" },
+        expand: "items,sellers,seller,salesman",
         page: 1,
         pageSize: 1,
       },
+      raw: true,
     },
   ];
 
@@ -180,6 +211,19 @@ export async function GET() {
           idx >= 0
             ? txt.slice(idx, idx + 1800)
             : `swagger encontrado (${txt.length} bytes), sem modelo *InvoiceFilter*: ${txt.slice(0, 300)}`;
+      } else if (p.swagger) {
+        const txt = r.text;
+        try {
+          const doc = JSON.parse(txt) as { paths?: Record<string, unknown> };
+          const caminhos = Object.keys(doc.paths ?? {});
+          const comVendedor = caminhos.filter((c) => /seller|vendedor|salesman/i.test(c));
+          summary =
+            `${caminhos.length} caminhos\n` +
+            (comVendedor.length ? `COM VENDEDOR:\n  ${comVendedor.join("\n  ")}\n\n` : "") +
+            `TODOS:\n  ${caminhos.slice(0, 40).join("\n  ")}`;
+        } catch {
+          summary = `não é JSON (${txt.length} bytes): ${txt.slice(0, 200)}`;
+        }
       } else if (p.nomes) {
         const itens = (j?.items as { code?: number; name?: string }[] | undefined) ?? [];
         summary =
