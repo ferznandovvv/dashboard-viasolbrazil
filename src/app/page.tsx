@@ -554,7 +554,7 @@ export default function Dashboard() {
             <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
           </div>
 
-          {sel.length === 0 && cardVendedoras(5)}
+          {sel.length === 0 && cardVendedoras()}
 
           {/* ——— Detalhe da seleção ——— */}
           {sel.length > 0 && (
