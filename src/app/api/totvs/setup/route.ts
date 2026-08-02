@@ -22,6 +22,62 @@ pre{background:#f0efec;border:1px solid #e1e0d9;border-radius:8px;padding:10px;f
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
+type Esquema = {
+  $ref?: string;
+  type?: string;
+  format?: string;
+  items?: Esquema;
+  properties?: Record<string, Esquema>;
+  required?: string[];
+};
+type Operacao = {
+  requestBody?: { content?: Record<string, { schema?: Esquema }> };
+  responses?: Record<string, { content?: Record<string, { schema?: Esquema }> }>;
+};
+type SwaggerDoc = {
+  paths?: Record<string, Record<string, Operacao>>;
+  components?: { schemas?: Record<string, Esquema> };
+  definitions?: Record<string, Esquema>;
+};
+
+/** Descreve um schema do Swagger em texto indentado, resolvendo os $ref. */
+function descrever(doc: SwaggerDoc, s: Esquema | undefined, nivel = 0, vistos: Set<string> = new Set()): string {
+  if (!s || nivel > 3) return "";
+  if (s.$ref) {
+    const nome = s.$ref.split("/").pop() ?? "";
+    if (vistos.has(nome)) return `${"  ".repeat(nivel)}(→ ${nome}, recursivo)`;
+    vistos.add(nome);
+    const alvo = doc.components?.schemas?.[nome] ?? doc.definitions?.[nome];
+    return descrever(doc, alvo, nivel, vistos);
+  }
+  if (s.type === "array") return descrever(doc, s.items, nivel, vistos);
+  if (!s.properties) return `${"  ".repeat(nivel)}(${s.type ?? "?"})`;
+  const obrigatorios = new Set(s.required ?? []);
+  return Object.entries(s.properties)
+    .map(([nome, prop]) => {
+      const tipo = prop.$ref ? "objeto" : prop.type === "array" ? "lista" : (prop.type ?? "?");
+      const linha = `${"  ".repeat(nivel + 1)}${nome}: ${tipo}${obrigatorios.has(nome) ? "  *obrigatório*" : ""}`;
+      const filhos = prop.$ref || prop.type === "array" ? descrever(doc, prop, nivel + 1, new Set(vistos)) : "";
+      return filhos ? `${linha}\n${filhos}` : linha;
+    })
+    .join("\n");
+}
+
+/** Requisição e resposta de um caminho do Swagger, em texto. */
+function contrato(doc: SwaggerDoc, caminho: string): string {
+  const ops = doc.paths?.[caminho];
+  if (!ops) return `${caminho}\n  (não existe neste swagger)`;
+  const verbo = Object.keys(ops)[0];
+  const op = ops[verbo];
+  const req = op.requestBody?.content?.["application/json"]?.schema;
+  const resp = op.responses?.["200"]?.content?.["application/json"]?.schema;
+  return (
+    `${verbo.toUpperCase()} ${caminho}\n` +
+    `REQUISIÇÃO:\n${descrever(doc, req) || "  (sem corpo)"}\n` +
+    `RESPOSTA:\n${descrever(doc, resp) || "  (não descrita)"}`
+  );
+}
+
 /**
  * Diagnóstico da integração TOTVS: autentica e sonda os endpoints candidatos
  * de filiais e de notas fiscais, mostrando o que cada um respondeu.
@@ -57,61 +113,56 @@ export async function GET() {
   const branches = [6]; // Ribeirão Preto, como amostra de loja física
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
-  const probes: { label: string; path: string; body?: unknown; raw?: boolean; nomes?: boolean; swagger?: boolean }[] = [
+  const probes: {
+    label: string;
+    path: string;
+    body?: unknown;
+    raw?: boolean;
+    nomes?: boolean;
+    /** Swagger a ler: mostra o contrato dos caminhos indicados */
+    schemaDe?: { swagger: string; caminhos: string[] };
+  }[] = [
     {
-      label: "Vendedores — seller/v2/search",
-      path: "/api/totvsmoda/seller/v2/search",
-      body: { filter: {}, page: 1, pageSize: 30 },
-      nomes: true,
-    },
-    {
-      label: "Vendedores — seller/v2/sellers",
-      path: "/api/totvsmoda/seller/v2/sellers",
-      body: { filter: {}, page: 1, pageSize: 30 },
-      nomes: true,
-    },
-    {
-      label: "Swagger do módulo fiscal",
-      path: "/api/totvsmoda/fiscal/v2/swagger/v1/swagger.json",
-      swagger: true,
-    },
-    {
-      label: "Swagger do módulo seller",
+      label: "Contrato — módulo seller",
       path: "/api/totvsmoda/seller/v2/swagger/v1/swagger.json",
-      swagger: true,
+      schemaDe: { swagger: "seller", caminhos: ["/api/totvsmoda/seller/v2/search"] },
     },
     {
-      label: "Swagger do módulo sales-order",
+      label: "Contrato — PDV e itens da nota",
       path: "/api/totvsmoda/sales-order/v2/swagger/v1/swagger.json",
-      swagger: true,
+      schemaDe: { swagger: "sales-order", caminhos: ["/api/totvsmoda/sales-order/v2/pdv-transactions"] },
     },
     {
-      label: "Swagger do módulo person",
-      path: "/api/totvsmoda/person/v2/swagger/v1/swagger.json",
-      swagger: true,
+      label: "Contrato — item-detail-search da nota",
+      path: "/api/totvsmoda/fiscal/v2/swagger/v1/swagger.json",
+      schemaDe: { swagger: "fiscal", caminhos: ["/api/totvsmoda/fiscal/v2/invoices/item-detail-search"] },
     },
     {
-      label: "Pedidos de venda — sales-order/v2/orders/search",
-      path: "/api/totvsmoda/sales-order/v2/orders/search",
+      label: "Vendedores — seller/v2/search (branchCodeList)",
+      path: "/api/totvsmoda/seller/v2/search",
+      body: { filter: { branchCodeList: branches }, page: 1, pageSize: 30 },
+      nomes: true,
+    },
+    {
+      label: "Vendedores — seller/v2/search (change)",
+      path: "/api/totvsmoda/seller/v2/search",
+      body: { filter: { change: range }, page: 1, pageSize: 30 },
+      nomes: true,
+    },
+    {
+      label: "Itens da nota — item-detail-search",
+      path: "/api/totvsmoda/fiscal/v2/invoices/item-detail-search",
       body: {
-        filter: {
-          branchCodeList: branches,
-          change: range,
-        },
+        filter: { branchCodeList: branches, operationType: "Output", change: range },
         page: 1,
-        pageSize: 2,
+        pageSize: 1,
       },
       raw: true,
     },
     {
-      label: "Nota com expand sellers",
-      path: INV,
-      body: {
-        filter: { branchCodeList: branches, operationType: "Output" },
-        expand: "items,sellers,seller,salesman",
-        page: 1,
-        pageSize: 1,
-      },
+      label: "Transações do PDV — pdv-transactions",
+      path: "/api/totvsmoda/sales-order/v2/pdv-transactions",
+      body: { filter: { branchCodeList: branches, change: range }, page: 1, pageSize: 1 },
       raw: true,
     },
   ];
@@ -211,18 +262,14 @@ export async function GET() {
           idx >= 0
             ? txt.slice(idx, idx + 1800)
             : `swagger encontrado (${txt.length} bytes), sem modelo *InvoiceFilter*: ${txt.slice(0, 300)}`;
-      } else if (p.swagger) {
-        const txt = r.text;
+      } else if (p.schemaDe) {
         try {
-          const doc = JSON.parse(txt) as { paths?: Record<string, unknown> };
-          const caminhos = Object.keys(doc.paths ?? {});
-          const comVendedor = caminhos.filter((c) => /seller|vendedor|salesman/i.test(c));
-          summary =
-            `${caminhos.length} caminhos\n` +
-            (comVendedor.length ? `COM VENDEDOR:\n  ${comVendedor.join("\n  ")}\n\n` : "") +
-            `TODOS:\n  ${caminhos.slice(0, 40).join("\n  ")}`;
+          const doc = JSON.parse(r.text) as SwaggerDoc;
+          summary = p.schemaDe.caminhos
+            .map((c) => contrato(doc, c))
+            .join("\n\n");
         } catch {
-          summary = `não é JSON (${txt.length} bytes): ${txt.slice(0, 200)}`;
+          summary = `não é JSON (${r.text.length} bytes): ${r.text.slice(0, 200)}`;
         }
       } else if (p.nomes) {
         const itens = (j?.items as { code?: number; name?: string }[] | undefined) ?? [];
