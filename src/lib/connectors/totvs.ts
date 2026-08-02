@@ -177,22 +177,33 @@ async function nomearVendedoras(orders: NormalizedOrder[]): Promise<void> {
     )
   );
 
-  for (let i = 0; i < faltando.length; i += 50) {
-    const lote = faltando.slice(i, i + 50);
-    try {
-      const r = await totvsFetch(PESSOAS, {
-        filter: { cpfList: lote },
-        page: 1,
-        pageSize: lote.length,
-      });
-      const itens = (r.json?.items as { cpf?: string; name?: string }[] | undefined) ?? [];
-      for (const p of itens) {
-        if (p.cpf && p.name) nomePorCpf.set(p.cpf, nomeCurto(p.name));
+  /** Consulta um lote de CPFs; devolve os que continuaram sem nome. */
+  const buscar = async (lista: string[], filtroExtra: Record<string, unknown>) => {
+    const restantes: string[] = [];
+    for (let i = 0; i < lista.length; i += 50) {
+      const lote = lista.slice(i, i + 50);
+      try {
+        const r = await totvsFetch(PESSOAS, {
+          filter: { cpfList: lote, ...filtroExtra },
+          page: 1,
+          pageSize: 100,
+        });
+        const itens = (r.json?.items as { cpf?: string; name?: string }[] | undefined) ?? [];
+        for (const p of itens) {
+          if (p.cpf && p.name) nomePorCpf.set(p.cpf, nomeCurto(p.name));
+        }
+      } catch {
+        /* lote sem resposta: os CPFs seguem para a próxima tentativa */
       }
-    } catch {
-      /* sem nome a venda ainda conta no total, só não entra no ranking */
+      restantes.push(...lote.filter((c) => !nomePorCpf.has(c)));
     }
-  }
+    return restantes;
+  };
+
+  // Vendedora que saiu da empresa fica inativa e some da busca padrão,
+  // então quem não resolver na primeira passada é procurado entre as inativas.
+  const semNome = await buscar(faltando, {});
+  if (semNome.length) await buscar(semNome, { personIsInactive: true });
 
   for (const o of orders) {
     if (o.sellerCpf) o.seller = nomePorCpf.get(o.sellerCpf);

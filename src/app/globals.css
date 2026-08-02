@@ -156,7 +156,7 @@ button.mini.ghost {
   border: 1px solid var(--border); overflow: hidden;
 }
 .rank-fill { height: 100%; border-radius: 999px; }
-.rank-mais { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.rank-row.anon .rank-title { color: var(--text-muted); font-style: italic; }
 .rank-sub {
   display: block; margin-top: 3px; font-size: 11.5px; color: var(--text-muted);
   font-variant-numeric: tabular-nums;

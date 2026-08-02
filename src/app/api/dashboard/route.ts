@@ -364,14 +364,17 @@ export async function GET(req: NextRequest) {
     { name: string; revenue: number; orders: number; pieces: number; stores: Set<string> }
   >();
   for (const o of current) {
-    if (!o.seller) continue;
+    if (o.channel !== "lojas") continue;
+    // Venda sem vendedora identificada entra como linha própria: some do
+    // ranking seria esconder faturamento que existe.
+    const nome = o.seller ?? "Sem identificação";
     const e =
-      vendMap.get(o.seller) ?? { name: o.seller, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
+      vendMap.get(nome) ?? { name: nome, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
     e.revenue += o.total;
     e.orders += 1;
     e.pieces += o.qty ?? 0;
     if (o.store) e.stores.add(o.store);
-    vendMap.set(o.seller, e);
+    vendMap.set(nome, e);
   }
   const sellers = Array.from(vendMap.values())
     .map((v) => ({
@@ -383,7 +386,12 @@ export async function GET(req: NextRequest) {
       avgPieces: v.orders ? v.pieces / v.orders : 0,
       stores: Array.from(v.stores).sort(),
     }))
-    .sort((a, b) => b.revenue - a.revenue);
+    // A linha das vendas sem identificação fica sempre por último, para não
+    // disputar posição com quem tem nome
+    .sort((a, b) => {
+      const anon = (v: { name: string }) => (v.name === "Sem identificação" ? 1 : 0);
+      return anon(a) - anon(b) || b.revenue - a.revenue;
+    });
 
   const data: DashboardData = {
     generatedAt: new Date().toISOString(),
