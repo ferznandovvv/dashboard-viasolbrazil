@@ -291,6 +291,54 @@ export default function Dashboard() {
   );
   const maxState = Math.max(...(data?.states.map((s) => s.revenue) ?? [0]), 1);
 
+  /**
+   * Ranking de vendedoras — mesmo card na home (todas as lojas) e no detalhe
+   * de uma loja. Na home mostra só o pódio, para não alongar a tela.
+   */
+  const cardVendedoras = (limite?: number) => {
+    const todas = data?.sellers ?? [];
+    if (todas.length === 0) return null;
+    const lista = limite ? todas.slice(0, limite) : todas;
+    const maior = Math.max(...todas.map((x) => x.revenue), 1);
+    return (
+      <div className="card">
+        <h2>Ranking de vendedoras</h2>
+        <div className="rank">
+          {lista.map((v, i) => (
+            <div key={v.name} className="rank-row" title={v.stores.join(", ")}>
+              <div className="rank-info">
+                <span className="rank-title">
+                  {i + 1}º {v.name}
+                </span>
+                <span className="rank-nums">
+                  {v.orders} vendas · <b>{brl.format(v.revenue)}</b>
+                </span>
+              </div>
+              <div className="rank-bar">
+                <div
+                  className="rank-fill"
+                  style={{
+                    width: `${(v.revenue / maior) * 100}%`,
+                    background: v.stores.length === 1 ? corDaLoja(v.stores[0]) : "var(--brand)",
+                  }}
+                />
+              </div>
+              <span className="rank-sub">
+                {v.stores.length === 1 ? `${v.stores[0]} · ` : `${v.stores.length} lojas · `}
+                ticket {brl.format(v.avgTicket)} · {v.avgPieces.toFixed(1)} peças/venda
+              </span>
+            </div>
+          ))}
+        </div>
+        {limite && todas.length > limite && (
+          <div className="rank-mais">
+            + {todas.length - limite} vendedoras — entre numa loja para ver o ranking dela
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <main className="wrap">
       <div className="topbar">
@@ -505,6 +553,8 @@ export default function Dashboard() {
             </div>
             <DailyChart daily={dailySeries} series={chartSeries} spend={spendSeries} />
           </div>
+
+          {sel.length === 0 && cardVendedoras(5)}
 
           {/* ——— Detalhe da seleção ——— */}
           {sel.length > 0 && (
@@ -723,39 +773,7 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {(data.sellers?.length ?? 0) > 0 && (
-                  <div className="card">
-                    <h2>Ranking de vendedoras</h2>
-                    <div className="rank">
-                      {data.sellers.map((v, i) => (
-                        <div key={v.name} className="rank-row" title={v.stores.join(", ")}>
-                          <div className="rank-info">
-                            <span className="rank-title">
-                              {i + 1}º {v.name}
-                            </span>
-                            <span className="rank-nums">
-                              {v.orders} vendas · <b>{brl.format(v.revenue)}</b>
-                            </span>
-                          </div>
-                          <div className="rank-bar">
-                            <div
-                              className="rank-fill"
-                              style={{
-                                width: `${(v.revenue / Math.max(...data.sellers.map((x) => x.revenue), 1)) * 100}%`,
-                                background:
-                                  v.stores.length === 1 ? corDaLoja(v.stores[0]) : "var(--brand)",
-                              }}
-                            />
-                          </div>
-                          <span className="rank-sub">
-                            ticket {brl.format(v.avgTicket)} · {v.avgPieces.toFixed(1)} peças/venda
-                            {v.stores.length > 1 ? ` · ${v.stores.length} lojas` : ""}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {cardVendedoras()}
 
                 {data.payments.length > 1 && (
                   <div className="card">
