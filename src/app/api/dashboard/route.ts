@@ -367,7 +367,7 @@ export async function GET(req: NextRequest) {
     if (o.channel !== "lojas") continue;
     // Venda sem vendedora identificada entra como linha própria: some do
     // ranking seria esconder faturamento que existe.
-    const nome = o.seller ?? "Sem identificação";
+    const nome = o.seller ?? "PDV não informa vendedora";
     const e =
       vendMap.get(nome) ?? { name: nome, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
     e.revenue += o.total;
@@ -389,7 +389,7 @@ export async function GET(req: NextRequest) {
     // A linha das vendas sem identificação fica sempre por último, para não
     // disputar posição com quem tem nome
     .sort((a, b) => {
-      const anon = (v: { name: string }) => (v.name === "Sem identificação" ? 1 : 0);
+      const anon = (v: { name: string }) => (v.name === "PDV não informa vendedora" ? 1 : 0);
       return anon(a) - anon(b) || b.revenue - a.revenue;
     });
 

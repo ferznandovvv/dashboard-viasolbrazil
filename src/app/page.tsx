@@ -300,7 +300,7 @@ export default function Dashboard() {
     if (todas.length === 0) return null;
     const lista = todas;
     const maior = Math.max(...todas.map((x) => x.revenue), 1);
-    const semNome = (v: { name: string }) => v.name === "Sem identificação";
+    const semNome = (v: { name: string }) => v.name === "PDV não informa vendedora";
     return (
       <div className="card">
         <h2>Ranking de vendedoras</h2>

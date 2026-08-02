@@ -205,9 +205,18 @@ async function nomearVendedoras(orders: NormalizedOrder[]): Promise<void> {
   const semNome = await buscar(faltando, {});
   if (semNome.length) await buscar(semNome, { personIsInactive: true });
 
+  // Sem nome no cadastro, a vendedora ainda é uma pessoa distinta: identificamos
+  // pelo CPF mascarado para não perder a separação no ranking.
   for (const o of orders) {
-    if (o.sellerCpf) o.seller = nomePorCpf.get(o.sellerCpf);
+    if (!o.sellerCpf) continue;
+    o.seller = nomePorCpf.get(o.sellerCpf) ?? `CPF ${mascaraCpf(o.sellerCpf)}`;
   }
+}
+
+/** Mostra só o miolo do CPF, o suficiente para identificar sem expor o número. */
+function mascaraCpf(cpf: string): string {
+  const d = cpf.replace(/\D/g, "").padStart(11, "0");
+  return `•••.${d.slice(3, 6)}.${d.slice(6, 9)}-••`;
 }
 
 /**
