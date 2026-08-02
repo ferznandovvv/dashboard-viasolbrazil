@@ -108,41 +108,6 @@ export async function GET() {
   const TODAS_FILIAIS = [1, 2, 3, 5, 6, 7, 8, 9];
   const INV = "/api/totvsmoda/fiscal/v2/invoices/search";
   const range = { startDate: `${monthAgo}T00:00:00`, endDate: `${today}T23:59:59` };
-  const probes: {
-    label: string;
-    path: string;
-    body?: unknown;
-    raw?: boolean;
-    nomes?: boolean;
-    /** Swagger a ler: mostra o contrato dos caminhos indicados e varre por vendedor */
-    schemaDe?: { caminhos: string[]; varrer?: boolean };
-  }[] = [
-    {
-      label: "Contrato — filtro do invoices/search",
-      path: "/api/totvsmoda/fiscal/v2/swagger/v1/swagger.json",
-      schemaDe: { caminhos: [INV], varrer: true },
-    },
-    {
-      label: "Varredura de vendedor — sales-order",
-      path: "/api/totvsmoda/sales-order/v2/swagger/v1/swagger.json",
-      schemaDe: { caminhos: [], varrer: true },
-    },
-    {
-      label: "Vendedoras cadastradas (todas as lojas)",
-      path: "/api/totvsmoda/seller/v2/search",
-      body: { filter: { branchCodeList: TODAS_FILIAIS }, page: 1, pageSize: 100 },
-      nomes: true,
-    },
-    {
-      label: "Campos que a nota realmente devolve",
-      path: INV,
-      body: {
-        filter: { branchCodeList: branches, operationType: "Output", change: range },
-        page: 1,
-        pageSize: 1,
-      },
-    },
-  ];
 
   /**
    * Pergunta decisiva: a venda das lojas grava a vendedora?
@@ -173,6 +138,32 @@ export async function GET() {
     amostraErro = e instanceof Error ? e.message : "erro";
   }
 
+  // Quantos CPFs de vendedora cada loja usa — 1 por loja indicaria caixa genérico
+  const porFilial = new Map<number, Map<string, { n: number; soma: number }>>();
+  for (const it of amostra) {
+    const cpf = String(it.sellerCpf ?? "—");
+    const f = Number(it.branchCode ?? 0);
+    const m = porFilial.get(f) ?? new Map();
+    const e = m.get(cpf) ?? { n: 0, soma: 0 };
+    e.n += 1;
+    e.soma += Number(it.totalValue ?? 0);
+    m.set(cpf, e);
+    porFilial.set(f, m);
+  }
+  const cpfsVendedoras = Array.from(
+    new Set(amostra.map((i) => String(i.sellerCpf ?? "")).filter((c) => c && c !== "null"))
+  );
+  const resumoFiliais = Array.from(porFilial.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([f, m]) => {
+      const lista = Array.from(m.entries())
+        .sort((a, b) => b[1].n - a[1].n)
+        .map(([cpf, v]) => `${cpf}(${v.n}×)`)
+        .join(" ");
+      return `  filial ${String(f).padStart(2)}: ${m.size} CPF(s)  ${lista}`;
+    })
+    .join("\n");
+
   /** Quantas notas têm o campo preenchido, e com quantos valores distintos. */
   const preenchimento = (campo: string) => {
     const valores = new Map<string, number>();
@@ -197,8 +188,43 @@ export async function GET() {
   const resumoAmostra = amostraErro
     ? `erro: ${amostraErro}`
     : `${amostra.length} notas de saída, todas as 8 lojas, últimos 60 dias\n\n` +
-      ["sellerCpf", "userCode", "terminalCode", "personCode"].map(preenchimento).join("\n");
+      ["sellerCpf", "userCode"].map(preenchimento).join("\n") +
+      `\n\nCPFs DE VENDEDORA POR LOJA:\n${resumoFiliais}`;
 
+  const probes: {
+    label: string;
+    path: string;
+    body?: unknown;
+    raw?: boolean;
+    nomes?: boolean;
+    pessoas?: boolean;
+    /** Swagger a ler: mostra o contrato dos caminhos indicados e varre por vendedor */
+    schemaDe?: { caminhos: string[]; varrer?: boolean };
+  }[] = [
+    {
+      label: "Contrato — filtro de pessoa física",
+      path: "/api/totvsmoda/person/v2/swagger/v1/swagger.json",
+      schemaDe: { caminhos: ["/api/totvsmoda/person/v2/individuals/search"] },
+    },
+    {
+      label: "CPF → nome (cpfList)",
+      path: "/api/totvsmoda/person/v2/individuals/search",
+      body: { filter: { cpfList: cpfsVendedoras }, page: 1, pageSize: 30 },
+      pessoas: true,
+    },
+    {
+      label: "CPF → nome (personCpfCnpjList)",
+      path: "/api/totvsmoda/person/v2/individuals/search",
+      body: { filter: { personCpfCnpjList: cpfsVendedoras }, page: 1, pageSize: 30 },
+      pessoas: true,
+    },
+    {
+      label: "Vendedoras cadastradas (todas as lojas)",
+      path: "/api/totvsmoda/seller/v2/search",
+      body: { filter: { branchCodeList: TODAS_FILIAIS }, page: 1, pageSize: 100 },
+      nomes: true,
+    },
+  ];
   const blocks: string[] = [
     `<div class="row"><div class="ep">★ A VENDA GRAVA A VENDEDORA?</div><pre>${resumoAmostra.replace(
       /</g,
@@ -242,6 +268,21 @@ export async function GET() {
         } catch {
           summary = `não é JSON (${r.text.length} bytes): ${r.text.slice(0, 200)}`;
         }
+      } else if (p.pessoas) {
+        const itens = (j?.items as Record<string, unknown>[] | undefined) ?? [];
+        summary =
+          `count=${j?.count ?? "?"}\n` +
+          (itens.length
+            ? `campos: ${Object.keys(itens[0]).join(", ")}\n` +
+              itens
+                .map(
+                  (x) =>
+                    `  ${String(x.cpf ?? x.document ?? x.personCpfCnpj ?? "?").padStart(14)}  ${String(
+                      x.name ?? x.personName ?? ""
+                    )}`
+                )
+                .join("\n")
+            : "(sem itens)");
       } else if (p.nomes) {
         const itens =
           (j?.items as
@@ -255,6 +296,7 @@ export async function GET() {
             | undefined) ?? [];
         summary =
           `count=${j?.count ?? "?"}  totalItems=${j?.totalItems ?? "?"}\n` +
+          `campos do cadastro: ${itens[0] ? Object.keys(itens[0]).join(", ") : "?"}\n` +
           itens
             .map((x) => {
               const filiais = (x.branchInformations ?? [])
