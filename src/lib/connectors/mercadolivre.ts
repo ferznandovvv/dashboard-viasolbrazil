@@ -56,7 +56,7 @@ interface MeliOrder {
 }
 
 export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`meli|${since.toISOString().slice(0,10)}`, () => buscar(since));
+  return comCache(`meli|${since.toISOString().slice(0,10)}`, () => buscar(since), 3 * 60000, true);
 }
 
 async function buscar(since: Date): Promise<ChannelResult> {

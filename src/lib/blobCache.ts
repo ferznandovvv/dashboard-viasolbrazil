@@ -61,7 +61,10 @@ export async function comCacheBlob<T>(
 export async function gravarBlob(prefixo: string, chave: string, dados: unknown): Promise<void> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return;
   try {
-    await put(`${prefixo}${chave}.json`, JSON.stringify(dados), {
+    const corpo = JSON.stringify(dados);
+    // Acima disso a gravação custa mais tempo do que o cache economiza
+    if (corpo.length > 2_000_000) return;
+    await put(`${prefixo}${chave}.json`, corpo, {
       access: "public",
       addRandomSuffix: false,
       allowOverwrite: true,

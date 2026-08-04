@@ -16,10 +16,16 @@ function nomeArquivo(chave: string): string {
   return chave.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+/**
+ * `compartilhado` guarda também no Blob, para valer entre instâncias. Só vale
+ * para respostas pequenas: payload grande gasta mais tempo gravando do que
+ * economiza, e foi o que derrubou a busca das lojas físicas.
+ */
 export async function comCache<T>(
   chave: string,
   fn: () => Promise<T>,
-  ttl = TTL_PADRAO
+  ttl = TTL_PADRAO,
+  compartilhado = false
 ): Promise<T> {
   const hit = store.get(chave);
   if (hit && Date.now() - hit.at < ttl) return hit.valor as T;
@@ -28,7 +34,7 @@ export async function comCache<T>(
   const voando = emVoo.get(chave);
   if (voando) return voando as Promise<T>;
 
-  const p = comCacheBlob(nomeArquivo(chave), ttl, fn)
+  const p = (compartilhado ? comCacheBlob(nomeArquivo(chave), ttl, fn) : fn())
     .then((valor) => {
       store.set(chave, { at: Date.now(), valor });
       return valor;

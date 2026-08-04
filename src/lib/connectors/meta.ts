@@ -13,7 +13,7 @@ const DEFAULT_ACCOUNT = "804350203009075";
 
 /** Gasto diário de anúncios da conta Meta (Marketing API insights). */
 export async function fetchMetaSpend(fromKey: string, toKey: string): Promise<AdsSpendResult> {
-  return comCache(`meta|${fromKey}|${toKey}`, () => buscarMeta(fromKey, toKey));
+  return comCache(`meta|${fromKey}|${toKey}`, () => buscarMeta(fromKey, toKey), 3 * 60000, true);
 }
 
 async function buscarMeta(fromKey: string, toKey: string): Promise<AdsSpendResult> {

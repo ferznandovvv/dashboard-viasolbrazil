@@ -195,7 +195,9 @@ export default function Dashboard() {
         if (id === pedidoAtual.current) setData(json);
       } catch {
         if (!salvo && id === pedidoAtual.current)
-          setFetchError("Não foi possível carregar os dados. Tente recarregar a página.");
+          setFetchError(
+            "As lojas físicas não responderam a tempo. O que está na tela pode estar incompleto — recarregue a página."
+          );
       } finally {
         if (id === pedidoAtual.current) setLoading(false);
       }
@@ -453,6 +455,9 @@ export default function Dashboard() {
 
       {fetchError && <div className="card">{fetchError}</div>}
       {loading && !data && <div className="empty">Carregando…</div>}
+      {data?.partial && (
+        <div className="parcial">Lojas físicas ainda carregando — os números abaixo são só do site.</div>
+      )}
 
       {data && (
         <div style={{ opacity: loading ? 0.6 : 1 }}>

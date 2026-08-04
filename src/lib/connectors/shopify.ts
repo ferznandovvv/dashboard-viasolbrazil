@@ -23,7 +23,7 @@ interface ShopifyOrderNode {
 }
 
 export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`shopify|${since.toISOString().slice(0,10)}`, () => buscar(since));
+  return comCache(`shopify|${since.toISOString().slice(0,10)}`, () => buscar(since), 3 * 60000, true);
 }
 
 async function buscar(since: Date): Promise<ChannelResult> {

@@ -68,7 +68,7 @@ interface TikTokOrder {
 }
 
 export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`tiktok|${since.toISOString().slice(0,10)}`, () => buscar(since));
+  return comCache(`tiktok|${since.toISOString().slice(0,10)}`, () => buscar(since), 3 * 60000, true);
 }
 
 async function buscar(since: Date): Promise<ChannelResult> {
