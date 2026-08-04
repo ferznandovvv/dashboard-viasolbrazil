@@ -72,11 +72,17 @@ export async function GET(req: NextRequest) {
   const fetchStartKey = [comparar ? prevFrom : from, monthStart, from].sort()[0];
   const fetchStart = spMidnight(fetchStartKey);
 
+  // ?sem=lojas devolve só os canais online, que respondem rápido, para a tela
+  // aparecer enquanto as lojas físicas (a busca mais pesada) ainda vêm a caminho
+  const semLojas = sp.get("sem") === "lojas";
+
   const [shopifyRes, tiktokRes, meliRes, lojasRes, adsRes, ttAdsRes] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
-    fetchTotvsSales(fetchStartKey, to),
+    semLojas
+      ? Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] })
+      : fetchTotvsSales(fetchStartKey, to),
     fetchMetaSpend(prevFrom, to),
     fetchTikTokAdsSpend(prevFrom, to),
   ]);
@@ -102,7 +108,14 @@ export async function GET(req: NextRequest) {
     return !channelFilter || o.channel === channelFilter;
   };
 
-  const all = results.flatMap((r) => r.orders).filter(naSelecao);
+  // Pedido de R$ 0,00 no TikTok é envio para afiliada, não venda: entra num
+  // controle próprio para não derrubar o ticket médio nem inflar o nº de pedidos
+  const ehEnvioAfiliada = (o: NormalizedOrder) => o.channel === "tiktok" && o.total === 0;
+
+  const all = results
+    .flatMap((r) => r.orders)
+    .filter((o) => !ehEnvioAfiliada(o))
+    .filter(naSelecao);
   const allChannels = results.flatMap((r) => r.orders);
   const inWindow = (o: NormalizedOrder, a: string, b: string) => {
     const k = spDateKey(o.createdAt);
@@ -398,7 +411,39 @@ export async function GET(req: NextRequest) {
       return anon(a) - anon(b) || b.revenue - a.revenue;
     });
 
+  // Envios para afiliadas no período: quantos, quantas peças e o que saiu
+  const enviosPeriodo = results
+    .flatMap((r) => r.orders)
+    .filter(ehEnvioAfiliada)
+    .filter((o) => inWindow(o, from, to));
+  const enviosProdutos = new Map<string, { title: string; qty: number }>();
+  for (const o of enviosPeriodo) {
+    for (const it of o.items ?? []) {
+      const nome = modeloDe(it.title).slice(0, 80);
+      const e = enviosProdutos.get(nome) ?? { title: nome, qty: 0 };
+      e.qty += it.qty;
+      enviosProdutos.set(nome, e);
+    }
+  }
+  const affiliates = {
+    shipments: enviosPeriodo.length,
+    pieces: enviosPeriodo.reduce(
+      (s, o) => s + (o.qty ?? (o.items ?? []).reduce((t, it) => t + it.qty, 0)),
+      0
+    ),
+    prevShipments: comparar
+      ? results
+          .flatMap((r) => r.orders)
+          .filter(ehEnvioAfiliada)
+          .filter((o) => inWindow(o, prevFrom, prevTo)).length
+      : 0,
+    products: Array.from(enviosProdutos.values())
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 8),
+  };
+
   const data: DashboardData = {
+    partial: semLojas,
     generatedAt: new Date().toISOString(),
     from,
     to,
@@ -417,6 +462,7 @@ export async function GET(req: NextRequest) {
     hours,
     payments,
     sellers,
+    affiliates,
     ads,
     tiktokAds,
     goal,

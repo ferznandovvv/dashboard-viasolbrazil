@@ -64,6 +64,8 @@ export interface Totals {
 }
 
 export interface DashboardData {
+  /** Resposta rápida, ainda sem as lojas físicas */
+  partial?: boolean;
   generatedAt: string;
   /** Período atual (datas SP, inclusivas) */
   from: string;
@@ -120,6 +122,13 @@ export interface DashboardData {
   weather: { date: string; tmax: number; tmin: number; chuva: number; codigo: number }[];
   /** Faturamento por forma de pagamento */
   payments: { name: string; revenue: number; orders: number }[];
+  /** Envios sem cobrança do TikTok (amostras para afiliadas) */
+  affiliates: {
+    shipments: number;
+    pieces: number;
+    prevShipments: number;
+    products: { title: string; qty: number }[];
+  };
   /** Ranking das vendedoras das lojas físicas no período */
   sellers: {
     name: string;

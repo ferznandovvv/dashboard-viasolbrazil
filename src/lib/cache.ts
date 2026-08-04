@@ -1,11 +1,20 @@
+import { comCacheBlob } from "./blobCache";
+
 /**
- * Cache em memória por chave, compartilhado entre requisições da mesma
- * instância. Evita refazer as consultas dos canais a cada troca de filtro.
+ * Cache em duas camadas: memória da instância e, atrás dela, o Vercel Blob.
+ * A camada compartilhada é o que faz diferença aqui — cada requisição pode
+ * cair numa instância nova, que nasce com a memória vazia, então sem ela o
+ * cache quase nunca acertava.
  */
 const store = new Map<string, { at: number; valor: unknown }>();
 const emVoo = new Map<string, Promise<unknown>>();
 
 const TTL_PADRAO = 3 * 60 * 1000;
+
+/** Nome de arquivo seguro para a chave do cache compartilhado. */
+function nomeArquivo(chave: string): string {
+  return chave.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
 
 export async function comCache<T>(
   chave: string,
@@ -19,7 +28,7 @@ export async function comCache<T>(
   const voando = emVoo.get(chave);
   if (voando) return voando as Promise<T>;
 
-  const p = fn()
+  const p = comCacheBlob(nomeArquivo(chave), ttl, fn)
     .then((valor) => {
       store.set(chave, { at: Date.now(), valor });
       return valor;

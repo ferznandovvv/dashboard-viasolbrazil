@@ -173,6 +173,20 @@ export default function Dashboard() {
       if (salvo) setData(salvo);
       setLoading(true);
       setFetchError("");
+
+      // Etapa rápida: canais online primeiro, para a tela sair do "carregando"
+      // enquanto as lojas físicas ainda estão sendo buscadas
+      if (!salvo) {
+        fetch(`/api/dashboard?${qs}&sem=lojas`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((parcial: DashboardData | null) => {
+            if (parcial && id === pedidoAtual.current && !cache.has(qs)) setData(parcial);
+          })
+          .catch(() => {
+            /* a busca completa logo abaixo é quem manda */
+          });
+      }
+
       try {
         const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`Erro ${res.status}`);
@@ -193,6 +207,34 @@ export default function Dashboard() {
   useEffect(() => {
     load(period, selKey ? selKey.split(",") : [], canal);
   }, [period, selKey, canal, load]);
+
+  // Aquece os períodos que costumam ser os próximos cliques, sem travar a tela
+  useEffect(() => {
+    if (loading) return;
+    const alvos = presets.filter((p) => p.key !== period.key).slice(0, 5);
+    let cancelado = false;
+    const timer = setTimeout(async () => {
+      // Um de cada vez: em paralelo o pré-carregamento competiria com a tela
+      for (const p of alvos) {
+        if (cancelado) return;
+        const qs =
+          `from=${p.from}&to=${p.to}` +
+          (selKey ? `&units=${encodeURIComponent(selKey)}` : "") +
+          (canal ? `&channel=${canal}` : "");
+        if (cache.has(qs)) continue;
+        try {
+          const r = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
+          if (r.ok) cache.set(qs, (await r.json()) as DashboardData);
+        } catch {
+          /* pré-carregamento é oportunista: falhou, o clique busca de novo */
+        }
+      }
+    }, 1500);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [loading, period, selKey, canal, presets, cache]);
 
   // Redirect das autorizações OAuth (TikTok Shop, TikTok Ads e Mercado Livre)
   useEffect(() => {
@@ -787,6 +829,56 @@ export default function Dashboard() {
                 </div>
 
                 {cardVendedoras()}
+
+                {querSite && data.affiliates?.shipments > 0 && (
+                  <div className="card">
+                    <h2>Envios para afiliadas (TikTok)</h2>
+                    <div className="tiles tiles-2">
+                      <div className="tile">
+                        <div className="label">Envios</div>
+                        <div className="value">
+                          {data.affiliates.shipments.toLocaleString("pt-BR")}
+                        </div>
+                        <Delta
+                          now={data.affiliates.shipments}
+                          before={data.affiliates.prevShipments}
+                        />
+                      </div>
+                      <div className="tile">
+                        <div className="label">Peças enviadas</div>
+                        <div className="value">
+                          {data.affiliates.pieces.toLocaleString("pt-BR")}
+                        </div>
+                      </div>
+                    </div>
+                    {data.affiliates.products.length > 0 && (
+                      <div className="rank" style={{ marginTop: 12 }}>
+                        {data.affiliates.products.map((p) => (
+                          <div key={p.title} className="rank-row" title={p.title}>
+                            <div className="rank-info">
+                              <span className="rank-title">{p.title}</span>
+                              <span className="rank-nums">
+                                <b>{p.qty}</b> peças
+                              </span>
+                            </div>
+                            <div className="rank-bar">
+                              <div
+                                className="rank-fill"
+                                style={{
+                                  width: `${(p.qty / Math.max(...data.affiliates.products.map((x) => x.qty), 1)) * 100}%`,
+                                  background: "var(--c-tiktok)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
+                      Pedidos de R$ 0,00 não entram no faturamento nem no ticket médio.
+                    </div>
+                  </div>
+                )}
 
                 {data.payments.length > 1 && (
                   <div className="card">
