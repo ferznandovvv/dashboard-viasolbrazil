@@ -223,11 +223,28 @@ function mascaraCpf(cpf: string): string {
 /**
  * Vendas das lojas físicas no período (datas YYYY-MM-DD no fuso de SP).
  */
-export async function fetchTotvsSales(from: string, to: string): Promise<ChannelResult> {
+export interface OpcoesTotvs {
+  /** Traz os itens de cada nota (produtos e descontos). Pesa muito. */
+  itens?: boolean;
+  /** Restringe às filiais indicadas. */
+  filiais?: number[];
+}
+
+export async function fetchTotvsSales(
+  from: string,
+  to: string,
+  opts: OpcoesTotvs = {}
+): Promise<ChannelResult> {
   if (!totvsConfigured()) {
     return { channel: "lojas", connected: false, orders: [] };
   }
-  return comCache(`totvs|${from}|${to}`, () => porMeses(from, to), 5 * 60000);
+  return comCache(`totvs|${from}|${to}|${variante(opts)}`, () => porMeses(from, to, opts), 5 * 60000);
+}
+
+/** Identifica a variação da busca, para cache e nome de arquivo. */
+function variante(opts: OpcoesTotvs): string {
+  const filiais = opts.filiais?.length ? opts.filiais.slice().sort().join("_") : "todas";
+  return `${opts.itens ? "itens" : "leve"}-${filiais}`;
 }
 
 const PREFIXO = "totvs/mes-";
@@ -261,9 +278,10 @@ function fimDoMes(mes: string): string {
  * mais, então o período longo passa a ser leitura de cache em vez de centenas
  * de páginas de API.
  */
-async function porMeses(from: string, to: string): Promise<ChannelResult> {
+async function porMeses(from: string, to: string, opts: OpcoesTotvs): Promise<ChannelResult> {
   const hoje = new Date().toISOString().slice(0, 10);
   const meses = mesesDo(from, to);
+  const marca = variante(opts);
   // Um mês só é considerado estável 20 dias depois de encerrado, tempo de
   // sobra para ajustes e cancelamentos entrarem no ERP
   const estavel = (mes: string) => {
@@ -271,15 +289,16 @@ async function porMeses(from: string, to: string): Promise<ChannelResult> {
     return fim < hoje && new Date(hoje).getTime() - new Date(fim).getTime() > 20 * 86400000;
   };
 
+  const arquivo = (mes: string) => `${marca}-${mes}`;
   const guardados = await lerBlobs<NormalizedOrder[]>(
     PREFIXO,
-    meses.filter(estavel)
+    meses.filter(estavel).map(arquivo)
   );
 
   const erros: string[] = [];
   const partes = await Promise.all(
     meses.map(async (mes) => {
-      const salvo = guardados.get(mes);
+      const salvo = guardados.get(arquivo(mes));
       if (salvo) return salvo;
       const inicio = `${mes}-01`;
       const fim = fimDoMes(mes);
@@ -287,9 +306,9 @@ async function porMeses(from: string, to: string): Promise<ChannelResult> {
       const margem = new Date(new Date(limite).getTime() + 25 * 86400000)
         .toISOString()
         .slice(0, 10);
-      const r = await buscarTotvs(inicio, limite, margem);
+      const r = await buscarTotvs(inicio, limite, margem, opts);
       if (r.error) erros.push(r.error);
-      else if (estavel(mes)) await gravarBlob(PREFIXO, mes, r.orders);
+      else if (estavel(mes)) await gravarBlob(PREFIXO, arquivo(mes), r.orders);
       return r.orders;
     })
   );
@@ -311,21 +330,28 @@ async function porMeses(from: string, to: string): Promise<ChannelResult> {
  * alteração, porque a API só filtra por alteração e uma nota do fim do mês
  * costuma ser alterada no mês seguinte.
  */
-async function buscarTotvs(from: string, to: string, changeAte = to): Promise<ChannelResult> {
+async function buscarTotvs(
+  from: string,
+  to: string,
+  changeAte = to,
+  opts: OpcoesTotvs = {}
+): Promise<ChannelResult> {
   const orders: NormalizedOrder[] = [];
   try {
     const hoje = new Date().toISOString().slice(0, 10);
     const PAGE = 100; // limite da API
     const corpo = (j: { start: string; end: string }, pagina: number) => ({
       filter: {
-        branchCodeList: Object.keys(LOJAS).map(Number),
+        branchCodeList: opts.filiais?.length ? opts.filiais : Object.keys(LOJAS).map(Number),
         operationType: "Output",
         change: {
           startDate: `${j.start}T00:00:00`,
           endDate: `${(j.end >= hoje ? hoje : j.end)}T23:59:59`,
         },
       },
-      expand: "items",
+      // Os itens multiplicam o tamanho da resposta; só vêm quando há um card
+      // que precisa deles (produtos e descontos, na visão de uma unidade)
+      ...(opts.itens ? { expand: "items" } : {}),
       page: pagina,
       pageSize: PAGE,
     });

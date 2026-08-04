@@ -17,7 +17,7 @@ import {
 import { readConfig } from "@/lib/config";
 import { fetchMetaSpend } from "@/lib/connectors/meta";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
-import { fetchTotvsSales } from "@/lib/connectors/totvs";
+import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { fetchClima } from "@/lib/connectors/weather";
 
 export const dynamic = "force-dynamic";
@@ -76,17 +76,34 @@ export async function GET(req: NextRequest) {
   // aparecer enquanto as lojas físicas (a busca mais pesada) ainda vêm a caminho
   const semLojas = sp.get("sem") === "lojas";
 
-  const [shopifyRes, tiktokRes, meliRes, lojasRes, adsRes, ttAdsRes] = await Promise.all([
+  // A home não mostra produtos nem descontos, então dispensa os itens das
+  // notas — que são a maior parte do peso da resposta da TOTVS.
+  const unitsPre = (sp.get("units") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
+  const filiaisSel = Object.entries(LOJAS)
+    .filter(([, nome]) => unitsPre.includes(nome))
+    .map(([codigo]) => Number(codigo));
+
+  const [shopifyRes, tiktokRes, meliRes, lojasRes, lojasItens, adsRes, ttAdsRes] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
     semLojas
       ? Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] })
       : fetchTotvsSales(fetchStartKey, to),
+    // Itens só das lojas em foco, e só quando alguma está selecionada
+    !semLojas && filiaisSel.length > 0
+      ? fetchTotvsSales(fetchStartKey, to, { itens: true, filiais: filiaisSel })
+      : Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] }),
     fetchMetaSpend(prevFrom, to),
     fetchTikTokAdsSpend(prevFrom, to),
   ]);
-  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes, lojasRes];
+  // Onde houver a versão com itens, ela substitui a leve da mesma nota
+  const comItens = new Map(lojasItens.orders.map((o) => [o.id, o]));
+  const lojasFinal: ChannelResult = comItens.size
+    ? { ...lojasRes, orders: lojasRes.orders.map((o) => comItens.get(o.id) ?? o) }
+    : lojasRes;
+
+  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes, lojasFinal];
 
   // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
   // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
