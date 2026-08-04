@@ -10,6 +10,7 @@
 
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
+import { gravarBlob, lerBlobs } from "../blobCache";
 
 const DEFAULT_URL = "https://apitotvsmoda.bhan.com.br";
 const INVOICES = "/api/totvsmoda/fiscal/v2/invoices/search";
@@ -226,10 +227,91 @@ export async function fetchTotvsSales(from: string, to: string): Promise<Channel
   if (!totvsConfigured()) {
     return { channel: "lojas", connected: false, orders: [] };
   }
-  return comCache(`totvs|${from}|${to}`, () => buscarTotvs(from, to), 5 * 60000);
+  return comCache(`totvs|${from}|${to}`, () => porMeses(from, to), 5 * 60000);
 }
 
-async function buscarTotvs(from: string, to: string): Promise<ChannelResult> {
+const PREFIXO = "totvs/mes-";
+
+/** Lista de meses (YYYY-MM) tocados pelo período. */
+function mesesDo(from: string, to: string): string[] {
+  const out: string[] = [];
+  let [ano, mes] = from.slice(0, 7).split("-").map(Number);
+  const limite = to.slice(0, 7);
+  for (;;) {
+    const chave = `${ano}-${String(mes).padStart(2, "0")}`;
+    out.push(chave);
+    if (chave >= limite) break;
+    mes += 1;
+    if (mes > 12) {
+      mes = 1;
+      ano += 1;
+    }
+  }
+  return out;
+}
+
+/** Último dia do mês YYYY-MM. */
+function fimDoMes(mes: string): string {
+  const [ano, m] = mes.split("-").map(Number);
+  return new Date(Date.UTC(ano, m, 0)).toISOString().slice(0, 10);
+}
+
+/**
+ * Busca mês a mês, guardando no Blob os meses já encerrados — eles não mudam
+ * mais, então o período longo passa a ser leitura de cache em vez de centenas
+ * de páginas de API.
+ */
+async function porMeses(from: string, to: string): Promise<ChannelResult> {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const meses = mesesDo(from, to);
+  // Um mês só é considerado estável 20 dias depois de encerrado, tempo de
+  // sobra para ajustes e cancelamentos entrarem no ERP
+  const estavel = (mes: string) => {
+    const fim = fimDoMes(mes);
+    return fim < hoje && new Date(hoje).getTime() - new Date(fim).getTime() > 20 * 86400000;
+  };
+
+  const guardados = await lerBlobs<NormalizedOrder[]>(
+    PREFIXO,
+    meses.filter(estavel)
+  );
+
+  const erros: string[] = [];
+  const partes = await Promise.all(
+    meses.map(async (mes) => {
+      const salvo = guardados.get(mes);
+      if (salvo) return salvo;
+      const inicio = `${mes}-01`;
+      const fim = fimDoMes(mes);
+      const limite = fim > hoje ? hoje : fim;
+      const margem = new Date(new Date(limite).getTime() + 25 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+      const r = await buscarTotvs(inicio, limite, margem);
+      if (r.error) erros.push(r.error);
+      else if (estavel(mes)) await gravarBlob(PREFIXO, mes, r.orders);
+      return r.orders;
+    })
+  );
+
+  const orders = partes.flat().filter((o) => {
+    const dia = o.createdAt.slice(0, 10);
+    return dia >= from && dia <= to;
+  });
+  return {
+    channel: "lojas",
+    connected: true,
+    error: erros[0],
+    orders: orders.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  };
+}
+
+/**
+ * `from`/`to` recortam a data de emissão; `changeAte` estende a janela de
+ * alteração, porque a API só filtra por alteração e uma nota do fim do mês
+ * costuma ser alterada no mês seguinte.
+ */
+async function buscarTotvs(from: string, to: string, changeAte = to): Promise<ChannelResult> {
   const orders: NormalizedOrder[] = [];
   try {
     const hoje = new Date().toISOString().slice(0, 10);
@@ -282,7 +364,7 @@ async function buscarTotvs(from: string, to: string): Promise<ChannelResult> {
       }
     };
 
-    for (const j of janelas(from, to)) {
+    for (const j of janelas(from, changeAte > hoje ? hoje : changeAte)) {
       const primeira = await totvsFetch(INVOICES, corpo(j, 1));
       if (primeira.status !== 200) {
         const msg = primeira.json

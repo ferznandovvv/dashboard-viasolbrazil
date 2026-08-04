@@ -59,7 +59,9 @@ export async function GET(req: NextRequest) {
   );
   from = addDays(to, -(windowDays - 1));
 
-  // Janela anterior de mesmo tamanho, para o comparativo
+  // Janela anterior de mesmo tamanho, para o comparativo. Acima de 3 meses ela
+  // dobraria o volume buscado por um ganho pequeno, então é dispensada.
+  const comparar = windowDays <= 92;
   const prevTo = addDays(from, -1);
   const prevFrom = addDays(from, -windowDays);
 
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
   const monthStart = `${today.slice(0, 7)}-01`;
 
   // Uma busca só, cobrindo tudo que precisamos
-  const fetchStartKey = [prevFrom, monthStart, from].sort()[0];
+  const fetchStartKey = [comparar ? prevFrom : from, monthStart, from].sort()[0];
   const fetchStart = spMidnight(fetchStartKey);
 
   const [shopifyRes, tiktokRes, meliRes, lojasRes, adsRes, ttAdsRes] = await Promise.all([
@@ -110,7 +112,7 @@ export async function GET(req: NextRequest) {
   const current = all
     .filter((o) => inWindow(o, from, to))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const previous = all.filter((o) => inWindow(o, prevFrom, prevTo));
+  const previous = comparar ? all.filter((o) => inWindow(o, prevFrom, prevTo)) : [];
 
   // Série diária
   const dayMap = new Map<string, DailyPoint>();
@@ -128,7 +130,7 @@ export async function GET(req: NextRequest) {
   const channels = results.map((r) => {
     const escopo = r.orders.filter((o) => o.channel !== "lojas" || naSelecao(o));
     const cur = escopo.filter((o) => inWindow(o, from, to));
-    const prev = escopo.filter((o) => inWindow(o, prevFrom, prevTo));
+    const prev = comparar ? escopo.filter((o) => inWindow(o, prevFrom, prevTo)) : [];
     return {
       channel: r.channel,
       connected: r.connected,
@@ -245,7 +247,7 @@ export async function GET(req: NextRequest) {
     if (inWindow(o, from, to)) {
       e.revenue += o.total;
       e.orders += 1;
-    } else if (inWindow(o, prevFrom, prevTo)) {
+    } else if (comparar && inWindow(o, prevFrom, prevTo)) {
       e.prevRevenue += o.total;
     }
     lojaMap.set(o.store, e);
