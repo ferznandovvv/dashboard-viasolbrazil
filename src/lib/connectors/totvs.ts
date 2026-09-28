@@ -8,7 +8,7 @@
  * limitada a 6 meses por consulta) — então filtramos a emissão no código.
  */
 
-import { ChannelResult, NormalizedOrder } from "../types";
+import { ChannelResult, NormalizedOrder, addDays } from "../types";
 import { comCache } from "../cache";
 import { gravarBlob, lerBlobs } from "../blobCache";
 
@@ -260,6 +260,7 @@ function variante(opts: OpcoesTotvs): string {
 }
 
 const PREFIXO = "totvs/mes-";
+const PREFIXO_DIA = "totvsdia/";
 
 /** Lista de meses (YYYY-MM) tocados pelo período. */
 function mesesDo(from: string, to: string): string[] {
@@ -283,6 +284,73 @@ function mesesDo(from: string, to: string): string[] {
 function fimDoMes(mes: string): string {
   const [ano, m] = mes.split("-").map(Number);
   return new Date(Date.UTC(ano, m, 0)).toISOString().slice(0, 10);
+}
+
+/** Dias (YYYY-MM-DD) de um intervalo, inclusive. */
+function diasDo(de: string, ate: string): string[] {
+  const out: string[] = [];
+  for (let d = de; d <= ate; d = addDays(d, 1)) out.push(d);
+  return out;
+}
+
+/** Nota deste dia? A emissão é o que vale, não a alteração. */
+const diaDaNota = (o: NormalizedOrder) => o.createdAt.slice(0, 10);
+
+/**
+ * Mês ainda em aberto: cada dia fechado é guardado no Blob separadamente e os
+ * últimos 3 dias são sempre buscados de novo, porque ainda recebem ajuste.
+ * Só vale para a busca leve de todas as filiais, que é o caminho quente.
+ */
+async function mesEmAberto(
+  inicio: string,
+  fim: string,
+  hoje: string,
+  opts: OpcoesTotvs
+): Promise<ChannelResult> {
+  if (opts.itens || opts.filiais?.length) {
+    return buscarTotvs(inicio, fim, addDays(fim, 25), opts);
+  }
+
+  const corte = addDays(hoje, -3); // dias até aqui já não mudam mais
+  const dias = diasDo(inicio, fim);
+  const cacheaveis = dias.filter((d) => d <= corte);
+  const recentes = dias.filter((d) => d > corte);
+
+  const guardados = await lerBlobs<NormalizedOrder[]>(PREFIXO_DIA, cacheaveis);
+  const faltando = cacheaveis.filter((d) => !guardados.has(d));
+
+  const orders: NormalizedOrder[] = [];
+  for (const d of cacheaveis) {
+    const salvo = guardados.get(d);
+    if (salvo) orders.push(...salvo);
+  }
+
+  let erro: string | undefined;
+
+  // Os dias que faltam vêm numa busca só, do primeiro ao último, e depois
+  // são gravados separadamente
+  if (faltando.length) {
+    const de = faltando[0];
+    const ate = faltando[faltando.length - 1];
+    const r = await buscarTotvs(de, ate, addDays(ate, 3) > hoje ? hoje : addDays(ate, 3), opts);
+    if (r.error) erro = r.error;
+    else {
+      const porDia = new Map<string, NormalizedOrder[]>(faltando.map((d) => [d, []]));
+      for (const o of r.orders) porDia.get(diaDaNota(o))?.push(o);
+      await Promise.all(
+        Array.from(porDia.entries()).map(([d, lista]) => gravarBlob(PREFIXO_DIA, d, lista))
+      );
+      orders.push(...r.orders.filter((o) => porDia.has(diaDaNota(o))));
+    }
+  }
+
+  if (recentes.length) {
+    const r = await buscarTotvs(recentes[0], fim, hoje, opts);
+    if (r.error) erro = erro ?? r.error;
+    else orders.push(...r.orders);
+  }
+
+  return { channel: "lojas", connected: true, error: erro, orders };
 }
 
 /**
@@ -324,10 +392,14 @@ async function porMeses(from: string, to: string, opts: OpcoesTotvs): Promise<Ch
       const margem = new Date(new Date(limite).getTime() + 25 * 86400000)
         .toISOString()
         .slice(0, 10);
-      const r = await buscarTotvs(inicio, limite, margem, opts);
+      // Mês ainda aberto: dia fechado vem do cache diário, só os últimos
+      // dias são buscados de novo — antes o mês inteiro era refeito a cada vez
+      const r = estavel(mes)
+        ? await buscarTotvs(inicio, limite, margem, opts)
+        : await mesEmAberto(inicio, limite, hoje, opts);
       if (r.error) erros.push(r.error);
       else if (estavel(mes)) await gravarBlob(PREFIXO, arquivo(mes), r.orders);
-      return r.orders;
+      return r.orders.map(renomear);
     })
   );
 
