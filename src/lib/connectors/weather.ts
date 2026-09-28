@@ -15,7 +15,7 @@ export interface DiaClima {
 /** Coordenadas de cada unidade (lojas físicas + site, ancorado em SP). */
 export const COORDENADAS: Record<string, { lat: number; lon: number }> = {
   Centro: { lat: -20.5386, lon: -47.4006 }, // Franca/SP
-  "Franca Shopping": { lat: -20.5386, lon: -47.4006 },
+  Fiusa: { lat: -20.5386, lon: -47.4006 },
   "Loja de Fábrica": { lat: -20.5386, lon: -47.4006 },
   "Rio de Janeiro": { lat: -22.9068, lon: -43.1729 },
   "Ribeirão Preto": { lat: -21.1775, lon: -47.8103 },

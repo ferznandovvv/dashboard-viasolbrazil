@@ -18,7 +18,7 @@ const INVOICES = "/api/totvsmoda/fiscal/v2/invoices/search";
 /** Filiais das lojas físicas (a 4 é o site, que já vem pela Shopify). */
 export const LOJAS: Record<number, string> = {
   1: "Centro",
-  2: "Franca Shopping",
+  2: "Fiusa",
   3: "Loja de Fábrica",
   5: "Rio de Janeiro",
   6: "Ribeirão Preto",
@@ -26,6 +26,18 @@ export const LOJAS: Record<number, string> = {
   8: "Belo Horizonte",
   9: "Praia Grande",
 };
+
+/**
+ * Lojas que mudaram de nome. Os meses guardados em cache e as metas salvas
+ * ainda trazem o nome antigo, então ele é traduzido na leitura.
+ */
+export const RENOMEADAS: Record<string, string> = {
+  "Franca Shopping": "Fiusa",
+};
+
+export function nomeAtualDaLoja(nome: string): string {
+  return RENOMEADAS[nome] ?? nome;
+}
 
 export function totvsBaseUrl(): string {
   return (process.env.TOTVS_API_URL ?? DEFAULT_URL).replace(/\/$/, "");
@@ -295,11 +307,17 @@ async function porMeses(from: string, to: string, opts: OpcoesTotvs): Promise<Ch
     meses.filter(estavel).map(arquivo)
   );
 
+  /** Corrige o nome da loja em notas gravadas antes de uma renomeação. */
+  const renomear = (o: NormalizedOrder): NormalizedOrder => {
+    const atual = o.store ? nomeAtualDaLoja(o.store) : o.store;
+    return atual === o.store ? o : { ...o, store: atual, status: atual ?? o.status };
+  };
+
   const erros: string[] = [];
   const partes = await Promise.all(
     meses.map(async (mes) => {
       const salvo = guardados.get(arquivo(mes));
-      if (salvo) return salvo;
+      if (salvo) return salvo.map(renomear);
       const inicio = `${mes}-01`;
       const fim = fimDoMes(mes);
       const limite = fim > hoje ? hoje : fim;

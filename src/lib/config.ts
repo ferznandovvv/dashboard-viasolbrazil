@@ -1,4 +1,5 @@
 import { list, put } from "@vercel/blob";
+import { nomeAtualDaLoja } from "./connectors/totvs";
 
 export interface AppConfig {
   metaMensal?: number;
@@ -20,7 +21,14 @@ export async function readConfig(): Promise<AppConfig> {
     const { blobs } = await list({ prefix: PATH, limit: 1 });
     if (blobs.length === 0) return {};
     const res = await fetch(blobs[0].url, { cache: "no-store" });
-    const value = (await res.json()) as AppConfig;
+    const bruto = (await res.json()) as AppConfig;
+    // Meta salva antes de uma loja ser renomeada continua valendo
+    const value: AppConfig = {
+      ...bruto,
+      metas: Object.fromEntries(
+        Object.entries(bruto.metas ?? {}).map(([unidade, meta]) => [nomeAtualDaLoja(unidade), meta])
+      ),
+    };
     cache = { value, at: Date.now() };
     return value;
   } catch {

@@ -35,7 +35,7 @@ export const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli", "lojas"]
 /** Cor fixa de cada loja física (ordem validada para daltonismo). */
 export const LOJA_CORES: Record<string, string> = {
   Centro: "var(--l1)",
-  "Franca Shopping": "var(--l2)",
+  Fiusa: "var(--l2)",
   "Loja de Fábrica": "var(--l3)",
   "Rio de Janeiro": "var(--l4)",
   "Ribeirão Preto": "var(--l5)",
