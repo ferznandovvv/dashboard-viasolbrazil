@@ -87,7 +87,9 @@ function MetaMini({ feito, meta }: { feito: number; meta: number }) {
 
 export default function Dashboard() {
   const [presets] = useState(buildPresets);
-  const [period, setPeriod] = useState<Period>(presets[3]); // padrão: Mês atual
+  // Abre no dia de hoje, que é a busca mais leve; o mês vem depois, sozinho,
+  // no pré-carregamento — quando você clicar nele já está pronto
+  const [period, setPeriod] = useState<Period>(presets[0]);
   const [customOpen, setCustomOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -176,8 +178,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (loading) return;
     // Só os períodos curtos: aquecer "Ano atual" custaria mais do que o clique
-    const curtos = ["Hoje", "Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
-    const alvos = presets.filter((p) => p.key !== period.key && curtos.includes(p.key));
+    // O mês atual primeiro: é para onde se vai depois de olhar o dia
+    const ordem = ["Mês atual", "Ontem", "Últimos 7 dias", "Mês passado"];
+    const alvos = ordem
+      .map((k) => presets.find((p) => p.key === k))
+      .filter((p): p is Period => Boolean(p) && p!.key !== period.key);
     let cancelado = false;
     const timer = setTimeout(async () => {
       // Um de cada vez: em paralelo o pré-carregamento competiria com a tela

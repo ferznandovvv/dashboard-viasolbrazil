@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { brl } from "./viz";
+import { LOJA_CORES, brl } from "./viz";
 
 interface Linha {
   produto: string;
@@ -69,6 +69,15 @@ export function Produtos({
 }) {
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
   const [categoria, setCategoria] = useState("");
+  // Filtros escolhidos × filtros já consultados: a busca é cara demais para
+  // disparar a cada clique, então ela espera o botão
+  const [consulta, setConsulta] = useState<{
+    cat: string;
+    from: string;
+    to: string;
+    units: string[];
+    agrup: string;
+  } | null>(null);
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [falha, setFalha] = useState("");
@@ -85,14 +94,15 @@ export function Produtos({
   }, []);
 
   useEffect(() => {
-    if (!categoria) {
+    if (!consulta) {
       setDados(null);
       return;
     }
     const id = ++pedido.current;
     const qs =
-      `cat=${encodeURIComponent(categoria)}&from=${from}&to=${to}&agrup=${agrup}` +
-      (units.length ? `&units=${encodeURIComponent(units.join(","))}` : "");
+      `cat=${encodeURIComponent(consulta.cat)}&from=${consulta.from}&to=${consulta.to}` +
+      `&agrup=${consulta.agrup}` +
+      (consulta.units.length ? `&units=${encodeURIComponent(consulta.units.join(","))}` : "");
     const salvo = guardado.current.get(qs);
     if (salvo) {
       setDados(salvo);
@@ -113,9 +123,18 @@ export function Produtos({
       .finally(() => {
         if (id === pedido.current) setCarregando(false);
       });
-  }, [categoria, from, to, units, agrup]);
+  }, [consulta]);
 
-  const lojas = dados?.lojasDisponiveis ?? [];
+  const lojas = Object.keys(LOJA_CORES);
+  const pendente =
+    Boolean(categoria) &&
+    (!consulta ||
+      consulta.cat !== categoria ||
+      consulta.from !== from ||
+      consulta.to !== to ||
+      consulta.agrup !== agrup ||
+      consulta.units.join(",") !== units.join(","));
+  const buscar = () => setConsulta({ cat: categoria, from, to, units, agrup });
   const comSaldo = lojas.filter((l) => dados?.itens.some((i) => (i.porLoja[l] ?? 0) !== 0));
   const lista = (dados?.itens ?? []).filter((l) => filtro === "todos" || l.situacao === filtro);
 
@@ -151,7 +170,8 @@ export function Produtos({
 
       {!categoria && (
         <div className="empty">
-          Nenhum produto carregado ainda — escolha uma categoria acima para ver estoque e venda.
+          Nenhum produto carregado ainda — escolha uma categoria acima, depois as lojas, e toque em
+          buscar.
         </div>
       )}
 
@@ -178,22 +198,30 @@ export function Produtos({
               </button>
             ))}
           </div>
+
+          <button className="buscar" onClick={buscar} disabled={carregando || !pendente}>
+            {carregando
+              ? "Buscando…"
+              : pendente
+                ? `Ver ${categoria === "TOP20" ? "os mais vendidos" : categoria}`
+                : "Resultado abaixo"}
+          </button>
         </>
       )}
 
-      {categoria && carregando && !dados && (
+      {consulta && carregando && !dados && (
         <div className="empty">
           Buscando {categoria === "TOP20" ? "os mais vendidos" : categoria}…
         </div>
       )}
-      {categoria && falha && (
+      {consulta && falha && (
         <div className="card">
           Não foi possível carregar ({falha}). A primeira busca de cada categoria é a mais pesada;
           tente de novo em instantes.
         </div>
       )}
 
-      {categoria && dados && (
+      {consulta && dados && (
         <div style={{ opacity: carregando ? 0.6 : 1 }}>
           {dados.erro && <div className="card err-msg">{dados.erro}</div>}
           {dados.incompleto && (
@@ -237,7 +265,7 @@ export function Produtos({
               <table className="prod-tbl">
                 <thead>
                   <tr>
-                    <th>{categoria === "TOP20" ? "20 mais vendidos" : categoria}</th>
+                    <th>{consulta.cat === "TOP20" ? "20 mais vendidos" : consulta.cat}</th>
                     <th className="n">Vendeu</th>
                     <th className="n">R$</th>
                     <th className="n">Estoque</th>
