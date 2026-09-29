@@ -262,6 +262,14 @@ function variante(opts: OpcoesTotvs): string {
 const PREFIXO = "totvs/mes-";
 const PREFIXO_DIA = "totvsdia/";
 
+/** Contadores para a tela de medição de desempenho. */
+export const medidas = { paginas: 0, diasDoCache: 0, mesesDoCache: 0 };
+export function zerarMedidas() {
+  medidas.paginas = 0;
+  medidas.diasDoCache = 0;
+  medidas.mesesDoCache = 0;
+}
+
 /** Lista de meses (YYYY-MM) tocados pelo período. */
 function mesesDo(from: string, to: string): string[] {
   const out: string[] = [];
@@ -322,7 +330,10 @@ async function mesEmAberto(
   const orders: NormalizedOrder[] = [];
   for (const d of cacheaveis) {
     const salvo = guardados.get(d);
-    if (salvo) orders.push(...salvo);
+    if (salvo) {
+      medidas.diasDoCache += 1;
+      orders.push(...salvo);
+    }
   }
 
   let erro: string | undefined;
@@ -385,7 +396,10 @@ async function porMeses(from: string, to: string, opts: OpcoesTotvs): Promise<Ch
   const partes = await Promise.all(
     meses.map(async (mes) => {
       const salvo = guardados.get(arquivo(mes));
-      if (salvo) return salvo.map(renomear);
+      if (salvo) {
+        medidas.mesesDoCache += 1;
+        return salvo.map(renomear);
+      }
       const inicio = `${mes}-01`;
       const fim = fimDoMes(mes);
       const limite = fim > hoje ? hoje : fim;
@@ -481,6 +495,7 @@ async function buscarTotvs(
     };
 
     for (const j of janelas(from, changeAte > hoje ? hoje : changeAte)) {
+      medidas.paginas += 1;
       const primeira = await totvsFetch(INVOICES, corpo(j, 1));
       if (primeira.status !== 200) {
         const msg = primeira.json
@@ -496,6 +511,7 @@ async function buscarTotvs(
       for (let inicio = 2; inicio <= paginas; inicio += 6) {
         const lote = [];
         for (let p = inicio; p < inicio + 6 && p <= paginas; p++) {
+          medidas.paginas += 1;
           lote.push(totvsFetch(INVOICES, corpo(j, p)));
         }
         for (const r of await Promise.all(lote)) {

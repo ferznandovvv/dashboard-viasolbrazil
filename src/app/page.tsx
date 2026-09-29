@@ -213,7 +213,9 @@ export default function Dashboard() {
   // Aquece os períodos que costumam ser os próximos cliques, sem travar a tela
   useEffect(() => {
     if (loading) return;
-    const alvos = presets.filter((p) => p.key !== period.key).slice(0, 5);
+    // Só os períodos curtos: aquecer "Ano atual" custaria mais do que o clique
+    const curtos = ["Hoje", "Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
+    const alvos = presets.filter((p) => p.key !== period.key && curtos.includes(p.key));
     let cancelado = false;
     const timer = setTimeout(async () => {
       // Um de cada vez: em paralelo o pré-carregamento competiria com a tela
