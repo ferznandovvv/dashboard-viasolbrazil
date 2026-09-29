@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ a.btn{display:inline-block;background:#0b0b0b;color:#f9f9f7;border-radius:8px;pa
  *  - com ?auth_code= : troca por access token e lista os advertiser IDs
  */
 export async function GET(req: NextRequest) {
+  // Só mostra os segredos a quem pede: a senha do dashboard é compartilhada
+  const revelar = req.nextUrl.searchParams.get("revelar") === "1";
   const appId = process.env.TIKTOK_ADS_APP_ID;
   const secret = process.env.TIKTOK_ADS_APP_SECRET;
   const authCode = req.nextUrl.searchParams.get("auth_code");
@@ -100,10 +103,10 @@ export async function GET(req: NextRequest) {
        <p>Adicione estas variáveis na Vercel (<b>Settings → Environment Variables</b>)
        e faça redeploy:</p>
        <table>
-         <tr><td>TIKTOK_ADS_ACCESS_TOKEN</td><td><code>${accessToken}</code></td></tr>
+         <tr><td>TIKTOK_ADS_ACCESS_TOKEN</td><td><code>${mascarar(accessToken, revelar)}</code></td></tr>
          <tr><td>TIKTOK_ADS_ADVERTISER_ID</td><td>escolha o ID da conta certa abaixo</td></tr>
          ${advRows.join("")}
-       </table>
+       </table>${revelar ? "" : AVISO_REVELAR}
        <p>O token do TikTok Ads é de longa duração — não precisa renovar.</p>`,
       true
     );

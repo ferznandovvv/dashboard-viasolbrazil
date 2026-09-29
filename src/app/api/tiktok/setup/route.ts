@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
 import { tiktokSign } from "@/lib/connectors/tiktok";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ ol{font-size:14px;color:#52514e;line-height:1.7}
  * Mostra os valores para copiar nas variáveis de ambiente da Vercel.
  */
 export async function GET(req: NextRequest) {
+  // Só mostra os segredos a quem pede: a senha do dashboard é compartilhada
+  const revelar = req.nextUrl.searchParams.get("revelar") === "1";
   const code = req.nextUrl.searchParams.get("code");
   const appKey = process.env.TIKTOK_APP_KEY;
   const appSecret = process.env.TIKTOK_APP_SECRET;
@@ -133,7 +136,7 @@ export async function GET(req: NextRequest) {
     const worked = orderTest.startsWith("OK");
 
     const cipherRow = cipher
-      ? `<tr><td>TIKTOK_SHOP_CIPHER</td><td><code>${cipher}</code><br><small>${shops[0].name ?? ""} (${shops[0].region ?? ""})</small></td></tr>`
+      ? `<tr><td>TIKTOK_SHOP_CIPHER</td><td><code>${mascarar(cipher, revelar)}</code><br><small>${shops[0].name ?? ""} (${shops[0].region ?? ""})</small></td></tr>`
       : "";
 
     return page(
@@ -148,9 +151,9 @@ export async function GET(req: NextRequest) {
        <p>Adicione ${cipher ? "estas variáveis" : "esta variável"} na Vercel
        (<b>Settings → Environment Variables</b>) e faça redeploy:</p>
        <table>
-         <tr><td>TIKTOK_REFRESH_TOKEN</td><td><code>${refresh_token}</code></td></tr>
+         <tr><td>TIKTOK_REFRESH_TOKEN</td><td><code>${mascarar(refresh_token, revelar)}</code></td></tr>
          ${cipherRow}
-       </table>
+       </table>${revelar ? "" : AVISO_REVELAR}
        <p>O dashboard renova o access token sozinho a partir do refresh token.
        ${
          worked

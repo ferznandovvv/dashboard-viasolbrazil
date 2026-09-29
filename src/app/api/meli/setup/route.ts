@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ a.btn{display:inline-block;background:#0b0b0b;color:#f9f9f7;border-radius:8px;pa
  *  - com ?code= : troca por refresh token, testa a API e exibe as variáveis
  */
 export async function GET(req: NextRequest) {
+  // Só mostra os segredos a quem pede: a senha do dashboard é compartilhada
+  const revelar = req.nextUrl.searchParams.get("revelar") === "1";
   const clientId = process.env.ML_CLIENT_ID;
   const clientSecret = process.env.ML_CLIENT_SECRET;
   const code = req.nextUrl.searchParams.get("code");
@@ -105,8 +108,8 @@ export async function GET(req: NextRequest) {
        <p>Adicione esta variável na Vercel (<b>Settings → Environment Variables</b>)
        e faça redeploy:</p>
        <table>
-         <tr><td>ML_REFRESH_TOKEN</td><td><code>${refresh_token}</code></td></tr>
-       </table>
+         <tr><td>ML_REFRESH_TOKEN</td><td><code>${mascarar(refresh_token, revelar)}</code></td></tr>
+       </table>${revelar ? "" : AVISO_REVELAR}
        <p>O dashboard renova o access token sozinho. Atenção: no Mercado Livre o
        refresh token é rotativo — se um dia o canal cair com erro de token, é só
        abrir <code>/api/meli/setup</code> de novo e repetir esta autorização.</p>`,

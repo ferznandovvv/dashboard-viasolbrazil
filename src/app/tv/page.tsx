@@ -25,7 +25,11 @@ export default function TvPage() {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/tv", { cache: "no-store" });
+        // Repassa o código da URL: a API do modo TV exige o mesmo código
+        const k = new URLSearchParams(window.location.search).get("k") ?? "";
+        const res = await fetch(`/api/tv${k ? `?k=${encodeURIComponent(k)}` : ""}`, {
+          cache: "no-store",
+        });
         if (res.ok && alive) setData(await res.json());
       } catch {
         /* mantém o último dado na tela */

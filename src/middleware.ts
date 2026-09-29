@@ -9,11 +9,17 @@ export function middleware(req: NextRequest) {
   if (!password) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  // Rotas públicas: login, modo TV (só agregados, sem dados de cliente)
-  // e o snapshot do cron (protegido por CRON_SECRET quando definido).
-  const publicPaths = ["/login", "/api/login", "/tv", "/api/tv", "/api/snapshot"];
-  if (publicPaths.includes(pathname)) {
-    return NextResponse.next();
+  if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
+
+  // O cron da Vercel chega sem cookie: ele se identifica pelo CRON_SECRET,
+  // conferido dentro da própria rota.
+  if (pathname === "/api/aquecer") return NextResponse.next();
+
+  // Modo TV: roda sem login na tela da loja, mas com um código na URL —
+  // senão o faturamento por loja fica aberto para quem tiver o link.
+  if (pathname === "/tv" || pathname === "/api/tv") {
+    const codigo = process.env.TV_CODE;
+    if (codigo && req.nextUrl.searchParams.get("k") === codigo) return NextResponse.next();
   }
 
   const cookie = req.cookies.get("vs_auth")?.value;
