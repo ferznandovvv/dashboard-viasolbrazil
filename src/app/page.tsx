@@ -2,52 +2,13 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
+import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
-import { Produtos } from "@/components/produtos";
-
-type Period = { key: string; from: string; to: string };
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli";
 
 const ONLINE: ("shopify" | "tiktok" | "meli")[] = ["shopify", "tiktok", "meli"];
-
-/** Data de hoje no fuso de São Paulo (YYYY-MM-DD), calculada no navegador. */
-function spToday(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
-function shiftDays(dateKey: string, n: number): string {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
-}
-
-function buildPresets(): Period[] {
-  const today = spToday();
-  const [y, m] = today.split("-").map(Number);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const prevM = m === 1 ? 12 : m - 1;
-  const prevY = m === 1 ? y - 1 : y;
-  const lastDayPrev = new Date(y, m - 1, 0).getDate();
-  return [
-    { key: "Hoje", from: today, to: today },
-    { key: "Ontem", from: shiftDays(today, -1), to: shiftDays(today, -1) },
-    { key: "Últimos 7 dias", from: shiftDays(today, -6), to: today },
-    { key: "Mês atual", from: `${y}-${pad(m)}-01`, to: today },
-    {
-      key: "Mês passado",
-      from: `${prevY}-${pad(prevM)}-01`,
-      to: `${prevY}-${pad(prevM)}-${pad(lastDayPrev)}`,
-    },
-    { key: "Últimos 3 meses", from: shiftDays(today, -89), to: today },
-    { key: "Ano atual", from: `${y}-01-01`, to: today },
-  ];
-}
 
 function Delta({ now, before }: { now: number; before: number }) {
   if (before <= 0) return null;
@@ -140,7 +101,6 @@ export default function Dashboard() {
   const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
   const [porLoja, setPorLoja] = useState(true);
   const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
-  const [aba, setAba] = useState<"vendas" | "produtos">("vendas");
   const [cache] = useState<Map<string, DashboardData>>(() => new Map());
   // Identifica a última busca pedida: respostas atrasadas de filtros antigos
   // não podem sobrescrever o filtro atual
@@ -209,15 +169,12 @@ export default function Dashboard() {
 
   const selKey = sel.join(",");
   useEffect(() => {
-    if (aba !== "vendas" && data) return; // na aba de produtos, não refaz a de vendas
     load(period, selKey ? selKey.split(",") : [], canal);
-    // `data` fora das dependências de propósito: ele só decide a primeira carga
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, selKey, canal, load, aba]);
+  }, [period, selKey, canal, load]);
 
   // Aquece os períodos que costumam ser os próximos cliques, sem travar a tela
   useEffect(() => {
-    if (loading || aba !== "vendas") return;
+    if (loading) return;
     // Só os períodos curtos: aquecer "Ano atual" custaria mais do que o clique
     const curtos = ["Hoje", "Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
     const alvos = presets.filter((p) => p.key !== period.key && curtos.includes(p.key));
@@ -243,7 +200,7 @@ export default function Dashboard() {
       cancelado = true;
       clearTimeout(timer);
     };
-  }, [loading, period, selKey, canal, presets, cache, aba]);
+  }, [loading, period, selKey, canal, presets, cache]);
 
   // Redirect das autorizações OAuth (TikTok Shop, TikTok Ads e Mercado Livre)
   useEffect(() => {
@@ -424,15 +381,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="abas" role="group" aria-label="Seção">
-        <button className={aba === "vendas" ? "on" : ""} onClick={() => setAba("vendas")}>
-          Vendas
-        </button>
-        <button className={aba === "produtos" ? "on" : ""} onClick={() => setAba("produtos")}>
-          Produtos
-        </button>
-      </div>
-
       <div className="filters" role="group" aria-label="Período">
         {presets.map((p) => (
           <button
@@ -469,25 +417,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      {aba === "produtos" && (
-        <Produtos
-          from={period.from}
-          to={period.to}
-          units={sel}
-          agrup={agrup}
-          lojas={(data?.stores ?? []).map((l) => l.name)}
-          aoAlternarLoja={alternar}
-          aoTrocarAgrup={setAgrup}
-        />
-      )}
-
-      {aba === "vendas" && fetchError && <div className="card">{fetchError}</div>}
-      {aba === "vendas" && loading && !data && <div className="empty">Carregando…</div>}
-      {aba === "vendas" && data?.partial && (
+      {fetchError && <div className="card">{fetchError}</div>}
+      {loading && !data && <div className="empty">Carregando…</div>}
+      {data?.partial && (
         <div className="parcial">Lojas físicas ainda carregando — os números abaixo são só do site.</div>
       )}
 
-      {aba === "vendas" && data && (
+      {data && (
         <div style={{ opacity: loading ? 0.6 : 1 }}>
           {sel.length > 0 && (
             <div className="unit-head">
@@ -1213,6 +1149,9 @@ export default function Dashboard() {
           )}
         </div>
       )}
+      <div className="rodape">
+        <a href="/produtos">produtos e estoque</a>
+      </div>
     </main>
   );
 }
