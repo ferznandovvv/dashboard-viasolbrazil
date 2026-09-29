@@ -66,16 +66,18 @@ const COMPOSTAS = [
 ];
 
 /**
- * Só acentuação: o cadastro escreve sem acento e a tela mostra com.
- * Juntar categorias diferentes (CALC com CALCINHA, por exemplo) seria palpite
- * meu sobre o catálogo e mudaria número — isso só com confirmação.
+ * Como o cadastro escreve × como a tela mostra. As junções foram confirmadas
+ * pelo Fernando: CALC é calcinha, CALCA é calça (categorias diferentes).
  */
 const SINONIMOS: Record<string, string> = {
+  CALC: "CALCINHA",
+  CALCA: "CALÇA",
+  CONJ: "CONJUNTO",
+  SAIDA: "SAIDA DE PRAIA",
   MAIO: "MAIÔ",
   MACACAO: "MACACÃO",
   CHAPEU: "CHAPÉU",
   BONE: "BONÉ",
-  SAIA: "SAIA",
 };
 
 /** Não são peças de venda: não fazem sentido como categoria. */
