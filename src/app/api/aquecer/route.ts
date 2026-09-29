@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { calcularCategorias, gravarCategorias } from "@/lib/categorias";
 import { fetchEstoque } from "@/lib/connectors/estoque";
 import { fetchTotvsSales, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { todaySpKey } from "@/lib/types";
@@ -26,10 +27,15 @@ export async function GET(req: NextRequest) {
     fetchEstoque(),
   ]);
 
+  // A lista de categorias sai do mesmo estoque, e fica pronta para a tela
+  const categorias = calcularCategorias(estoque.itens);
+  if (!estoque.incompleto) await gravarCategorias(categorias);
+
   return NextResponse.json({
     periodo: { de: inicioMes, ate: hoje },
     vendas: { notas: vendasMes.orders.length, erro: vendasMes.error },
     produtos: { linhas: produtos.itens.length, incompleto: produtos.incompleto, erro: produtos.erro },
     estoque: { itens: estoque.itens.length, incompleto: estoque.incompleto, erro: estoque.erro },
+    categorias: categorias.length,
   });
 }

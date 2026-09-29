@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
-import { fetchEstoque } from "@/lib/connectors/estoque";
+import { fetchEstoque, fetchEstoqueCategoria } from "@/lib/connectors/estoque";
 import { Agrupamento, categoriaDe, rotulo } from "@/lib/produtos";
 import { spMidnight, todaySpKey } from "@/lib/types";
 
@@ -67,7 +67,11 @@ export async function GET(req: NextRequest) {
     .filter(([, nome]) => lojasSel.includes(nome))
     .map(([codigo]) => Number(codigo));
 
-  const [vendas, estoque] = await Promise.all([fetchVendasPorProduto(from, to), fetchEstoque()]);
+  const [vendas, estoque] = await Promise.all([
+    fetchVendasPorProduto(from, to),
+    // Nos 20 mais vendidos os produtos podem ser de qualquer categoria
+    maisVendidos ? fetchEstoque() : fetchEstoqueCategoria(categoria),
+  ]);
 
   const linhas = new Map<string, LinhaProduto>();
   const nova = (produto: string): LinhaProduto => ({

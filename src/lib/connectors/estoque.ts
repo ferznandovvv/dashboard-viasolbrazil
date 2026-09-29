@@ -43,12 +43,36 @@ export async function fetchEstoque(): Promise<Estoque> {
   return comCache("estoque|fisico", buscarEstoque, 60 * 60000);
 }
 
-async function buscarEstoque(): Promise<Estoque> {
+/**
+ * Saldo de uma categoria só. A API filtra por nome de produto, e como a
+ * categoria é o começo do nome ("TOP ..."), isso evita varrer o catálogo
+ * inteiro para montar uma tela de uma categoria.
+ *
+ * Se o filtro por nome não devolver nada — comportamento que pode variar no
+ * ERP —, cai para a varredura completa, que é lenta mas sempre funciona.
+ */
+export async function fetchEstoqueCategoria(categoria: string): Promise<Estoque> {
+  if (!totvsConfigured()) return { conectado: false, itens: [] };
+  const alvo = categoria.trim();
+  if (!alvo) return fetchEstoque();
+
+  const porNome = await comCache(
+    `estoque|cat|${alvo}`,
+    () => buscarEstoque({ productName: alvo }),
+    60 * 60000
+  );
+  if (porNome.itens.length > 0 || porNome.erro) return porNome;
+
+  const completo = await fetchEstoque();
+  return { ...completo, itens: completo.itens };
+}
+
+async function buscarEstoque(filtroExtra: Record<string, unknown> = {}): Promise<Estoque> {
   const inicio = Date.now();
   const ORCAMENTO = 30000; // além disso a rota estoura o tempo da Vercel
   const filiais = Object.keys(LOJAS).map(Number);
   const corpo = (pagina: number) => ({
-    filter: { startProductCode: 1, endProductCode: 99999999 },
+    filter: { startProductCode: 1, endProductCode: 99999999, ...filtroExtra },
     option: {
       balances: filiais.map((f) => ({ branchCode: f, stockCodeList: [DEPOSITO_FISICO] })),
     },
