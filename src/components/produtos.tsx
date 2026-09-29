@@ -10,7 +10,7 @@ interface Linha {
   estoque: number;
   porLoja: Record<string, number>;
   cobertura: number | null;
-  situacao: "ruptura" | "acabando" | "ok" | "parado";
+  situacao: "ruptura" | "acabando" | "ok" | "parado" | "negativo";
   abc: "A" | "B" | "C";
 }
 
@@ -44,9 +44,27 @@ const SITUACAO: Record<Linha["situacao"], { rotulo: string; cor: string }> = {
   acabando: { rotulo: "Acabando", cor: "var(--brand)" },
   ok: { rotulo: "OK", cor: "var(--text-muted)" },
   parado: { rotulo: "Parado", cor: "var(--c-tiktok)" },
+  negativo: { rotulo: "Negativo", cor: "var(--c-meli)" },
 };
 
-type Filtro = "todos" | "ruptura" | "acabando" | "parado";
+type Filtro = "todos" | "ruptura" | "acabando" | "parado" | "negativo";
+type Coluna = "produto" | "pecas" | "faturamento" | "estoque" | "cobertura";
+
+/** Gera o CSV da lista como ela está na tela. */
+function paraCSV(linhas: Linha[], lojas: string[]): string {
+  const cab = ["Produto", "Vendidos", "Faturamento", "Estoque", ...lojas, "Cobertura", "Situação"];
+  const corpo = linhas.map((l) => [
+    `"${l.produto.replace(/"/g, "\"\"")}"`,
+    l.pecas,
+    l.faturamento.toFixed(2).replace(".", ","),
+    l.estoque,
+    ...lojas.map((loja) => l.porLoja[loja] ?? 0),
+    l.cobertura ?? "",
+    SITUACAO[l.situacao].rotulo,
+  ]);
+  // Ponto e vírgula: é o que o Excel em português espera
+  return [cab, ...corpo].map((linha) => linha.join(";")).join("\n");
+}
 
 /**
  * Produtos em dois passos: escolher a categoria e só então buscar. A consulta
@@ -72,6 +90,7 @@ export function Produtos({
   // Filtros escolhidos × filtros já consultados: a busca é cara demais para
   // disparar a cada clique, então ela espera o botão
   const [consulta, setConsulta] = useState<{
+    q: string;
     cat: string;
     from: string;
     to: string;
@@ -82,6 +101,11 @@ export function Produtos({
   const [carregando, setCarregando] = useState(false);
   const [falha, setFalha] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [busca, setBusca] = useState("");
+  const [ordem, setOrdem] = useState<{ col: Coluna; desc: boolean }>({
+    col: "faturamento",
+    desc: true,
+  });
   const pedido = useRef(0);
   const guardado = useRef<Map<string, Resposta>>(new Map());
 
@@ -100,7 +124,8 @@ export function Produtos({
     }
     const id = ++pedido.current;
     const qs =
-      `cat=${encodeURIComponent(consulta.cat)}&from=${consulta.from}&to=${consulta.to}` +
+      `cat=${encodeURIComponent(consulta.cat)}&q=${encodeURIComponent(consulta.q)}` +
+      `&from=${consulta.from}&to=${consulta.to}` +
       `&agrup=${consulta.agrup}` +
       (consulta.units.length ? `&units=${encodeURIComponent(consulta.units.join(","))}` : "");
     const salvo = guardado.current.get(qs);
@@ -127,16 +152,42 @@ export function Produtos({
 
   const lojas = Object.keys(LOJA_CORES);
   const pendente =
-    Boolean(categoria) &&
+    Boolean(categoria || busca.trim()) &&
     (!consulta ||
+      consulta.q !== busca.trim() ||
       consulta.cat !== categoria ||
       consulta.from !== from ||
       consulta.to !== to ||
       consulta.agrup !== agrup ||
       consulta.units.join(",") !== units.join(","));
-  const buscar = () => setConsulta({ cat: categoria, from, to, units, agrup });
+  const buscar = () => setConsulta({ q: busca.trim(), cat: categoria, from, to, units, agrup });
+
+  const ordenar = (col: Coluna) =>
+    setOrdem((o) => ({ col, desc: o.col === col ? !o.desc : true }));
+
+  const baixarCSV = () => {
+    const csv = paraCSV(lista, comSaldo);
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `produtos-${consulta?.cat || consulta?.q || "lista"}-${from}-a-${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const comSaldo = lojas.filter((l) => dados?.itens.some((i) => (i.porLoja[l] ?? 0) !== 0));
-  const lista = (dados?.itens ?? []).filter((l) => filtro === "todos" || l.situacao === filtro);
+  const lista = (dados?.itens ?? [])
+    .filter((l) => filtro === "todos" || l.situacao === filtro)
+    .sort((a, b) => {
+      const dir = ordem.desc ? -1 : 1;
+      if (ordem.col === "produto") return a.produto.localeCompare(b.produto, "pt-BR") * dir;
+      if (ordem.col === "cobertura") {
+        // Sem venda não tem cobertura: fica sempre no fim
+        const va = a.cobertura ?? Number.MAX_SAFE_INTEGER;
+        const vb = b.cobertura ?? Number.MAX_SAFE_INTEGER;
+        return (va - vb) * dir;
+      }
+      return (a[ordem.col] - b[ordem.col]) * dir;
+    });
 
   return (
     <div>
@@ -168,14 +219,25 @@ export function Produtos({
         </div>
       )}
 
-      {!categoria && (
+      <input
+        className="busca"
+        type="search"
+        placeholder="…ou busque pelo nome do produto (ex.: cortininha)"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && pendente) buscar();
+        }}
+      />
+
+      {!categoria && !busca.trim() && (
         <div className="empty">
           Nenhum produto carregado ainda — escolha uma categoria acima, depois as lojas, e toque em
           buscar.
         </div>
       )}
 
-      {categoria && (
+      {(categoria || busca.trim()) && (
         <>
           <div className="passo">
             <span className="passo-num">2</span> Filtre se quiser
@@ -203,7 +265,7 @@ export function Produtos({
             {carregando
               ? "Buscando…"
               : pendente
-                ? `Ver ${categoria === "TOP20" ? "os mais vendidos" : categoria}`
+                ? `Ver ${busca.trim() || (categoria === "TOP20" ? "os mais vendidos" : categoria)}`
                 : "Resultado abaixo"}
           </button>
         </>
@@ -253,7 +315,7 @@ export function Produtos({
           )}
 
           <div className="seg" role="group" aria-label="Situação">
-            {(["todos", "ruptura", "acabando", "parado"] as Filtro[]).map((f) => (
+            {(["todos", "ruptura", "acabando", "parado", "negativo"] as Filtro[]).map((f) => (
               <button key={f} className={filtro === f ? "on" : ""} onClick={() => setFiltro(f)}>
                 {f === "todos" ? "Todos" : SITUACAO[f].rotulo}
               </button>
@@ -265,16 +327,27 @@ export function Produtos({
               <table className="prod-tbl">
                 <thead>
                   <tr>
-                    <th>{consulta.cat === "TOP20" ? "20 mais vendidos" : consulta.cat}</th>
-                    <th className="n">Vendeu</th>
-                    <th className="n">R$</th>
-                    <th className="n">Estoque</th>
+                    <th className="ord" onClick={() => ordenar("produto")}>
+                      {consulta.cat === "TOP20" ? "20 mais vendidos" : dados.categoria}
+                      {ordem.col === "produto" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                    </th>
+                    <th className="n ord" onClick={() => ordenar("pecas")}>
+                      Vendeu{ordem.col === "pecas" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                    </th>
+                    <th className="n ord" onClick={() => ordenar("faturamento")}>
+                      R${ordem.col === "faturamento" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                    </th>
+                    <th className="n ord" onClick={() => ordenar("estoque")}>
+                      Estoque{ordem.col === "estoque" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                    </th>
                     {comSaldo.map((l) => (
                       <th key={l} className="n">
                         {l}
                       </th>
                     ))}
-                    <th className="n">Cobertura</th>
+                    <th className="n ord" onClick={() => ordenar("cobertura")}>
+                      Cobertura{ordem.col === "cobertura" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                    </th>
                     <th>Situação</th>
                   </tr>
                 </thead>
@@ -285,7 +358,9 @@ export function Produtos({
                       <td className="n">{l.pecas.toLocaleString("pt-BR")}</td>
                       <td className="n">{brl.format(l.faturamento)}</td>
                       <td className="n">
-                        <b>{l.estoque.toLocaleString("pt-BR")}</b>
+                        <b style={l.estoque < 0 ? { color: "var(--c-meli)" } : undefined}>
+                          {l.estoque.toLocaleString("pt-BR")}
+                        </b>
                       </td>
                       {comSaldo.map((loja) => (
                         <td key={loja} className="n loja-col">
@@ -304,6 +379,11 @@ export function Produtos({
               </table>
             </div>
             {lista.length === 0 && <div className="empty">Nenhum produto nessa situação.</div>}
+            {lista.length > 0 && (
+              <button className="exportar" onClick={baixarCSV}>
+                Baixar em planilha ({lista.length} linhas)
+              </button>
+            )}
             <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
               Estoque é o saldo de agora; venda é do período escolhido. Cobertura = quantos dias o
               saldo dura no ritmo dos últimos {dados.dias} dias.

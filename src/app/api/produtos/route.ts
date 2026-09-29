@@ -16,7 +16,7 @@ export interface LinhaProduto {
   porLoja: Record<string, number>;
   /** Dias que o estoque dura no ritmo do período; null quando não vende */
   cobertura: number | null;
-  situacao: "ruptura" | "acabando" | "ok" | "parado";
+  situacao: "ruptura" | "acabando" | "ok" | "parado" | "negativo";
   /** Curva ABC por faturamento acumulado: A até 80%, B até 95%, C o resto */
   abc: "A" | "B" | "C";
   /** Peças vendidas por loja, base das sugestões de transferência */
@@ -58,7 +58,9 @@ export async function GET(req: NextRequest) {
   // TOP20 é o atalho que atravessa todas as categorias.
   const categoria = (sp.get("cat") ?? "").trim().toUpperCase();
   const maisVendidos = categoria === "TOP20";
-  if (!categoria) {
+  // Busca por nome atravessa as categorias; a API do saldo filtra por nome
+  const busca = (sp.get("q") ?? "").trim().toUpperCase();
+  if (!categoria && !busca) {
     return NextResponse.json({ erro: "Escolha uma categoria", itens: [], transferencias: [] }, { status: 400 });
   }
   const units = (sp.get("units") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
@@ -70,8 +72,11 @@ export async function GET(req: NextRequest) {
   const [vendas, estoque] = await Promise.all([
     fetchVendasPorProduto(from, to),
     // Nos 20 mais vendidos os produtos podem ser de qualquer categoria
-    maisVendidos ? fetchEstoque() : fetchEstoqueCategoria(categoria),
+    busca ? fetchEstoqueCategoria(busca) : maisVendidos ? fetchEstoque() : fetchEstoqueCategoria(categoria),
   ]);
+
+  const combina = (nome: string) =>
+    busca ? nome.toUpperCase().includes(busca) : maisVendidos || categoriaDe(nome) === categoria;
 
   const linhas = new Map<string, LinhaProduto>();
   const nova = (produto: string): LinhaProduto => ({
@@ -88,7 +93,7 @@ export async function GET(req: NextRequest) {
 
   // Vendas do período, já agregadas por dia/produto/loja
   for (const v of vendas.itens) {
-    if (!maisVendidos && categoriaDe(v.nome) !== categoria) continue;
+    if (!combina(v.nome)) continue;
     if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
     const chave = rotulo(v.nome, agrup);
     if (!chave) continue;
@@ -112,7 +117,7 @@ export async function GET(req: NextRequest) {
 
   // Saldo atual, restrito à categoria e às lojas filtradas
   for (const s of estoque.itens) {
-    if (!maisVendidos && categoriaDe(s.nome) !== categoria) continue;
+    if (!combina(s.nome)) continue;
     const chave = rotulo(s.nome, agrup);
     if (!chave) continue;
     // No atalho, só interessa o saldo de quem já está na lista
@@ -130,7 +135,8 @@ export async function GET(req: NextRequest) {
     const porDia = l.pecas / dias;
     const cobertura = porDia > 0 ? Math.round(l.estoque / porDia) : null;
     let situacao: LinhaProduto["situacao"] = "ok";
-    if (l.pecas > 0 && l.estoque <= 0) situacao = "ruptura";
+    if (l.estoque < 0) situacao = "negativo"; // divergência de inventário
+    else if (l.pecas > 0 && l.estoque <= 0) situacao = "ruptura";
     else if (cobertura !== null && cobertura < 15) situacao = "acabando";
     else if (l.pecas === 0 && l.estoque > 0) situacao = "parado";
     return { ...l, cobertura, situacao };
@@ -182,7 +188,7 @@ export async function GET(req: NextRequest) {
     agrup,
     lojas: lojasSel,
     estoqueConectado: estoque.conectado,
-    categoria,
+    categoria: busca ? `Busca: ${busca}` : categoria,
     incompleto: vendas.incompleto || Boolean(estoque.incompleto),
     lojasDisponiveis: Object.values(LOJAS),
     erro: estoque.erro ?? vendas.erro,
@@ -193,6 +199,7 @@ export async function GET(req: NextRequest) {
       rupturas: itens.filter((i) => i.situacao === "ruptura").length,
       acabando: itens.filter((i) => i.situacao === "acabando").length,
       parados: itens.filter((i) => i.situacao === "parado").length,
+      negativos: itens.filter((i) => i.situacao === "negativo").length,
       pecasEstoque: itens.reduce((s, i) => s + i.estoque, 0),
     },
   });
