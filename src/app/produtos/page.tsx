@@ -36,7 +36,7 @@ export default function PaginaProdutos() {
         {presets.map((p) => (
           <button
             key={p.key}
-            className={period.key === p.key ? "on" : ""}
+            className={period.key === p.key ? "active" : ""}
             onClick={() => setPeriod(p)}
           >
             {p.key}
@@ -49,7 +49,6 @@ export default function PaginaProdutos() {
         to={period.to}
         units={sel}
         agrup={agrup}
-        lojas={[]}
         aoAlternarLoja={alternar}
         aoTrocarAgrup={setAgrup}
       />

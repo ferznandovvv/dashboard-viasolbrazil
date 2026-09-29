@@ -51,3 +51,27 @@ export function rotulo(nome: string, agrup: Agrupamento): string {
   if (agrup === "tamanho") return [p.modelo, p.tamanho].filter(Boolean).join(" ");
   return p.modelo;
 }
+
+/**
+ * Categoria do produto a partir do nome, que é como o cadastro identifica a
+ * peça ("CALC ZOE OFF WHITE P" → CALC). Alguns nomes começam com duas ou três
+ * palavras que só fazem sentido juntas.
+ */
+const COMPOSTAS = [
+  "SAIDA DE PRAIA",
+  "SAÍDA DE PRAIA",
+  "BODY TULE",
+  "CANGA DE PRAIA",
+  "KIT PRAIA",
+];
+
+export function categoriaDe(nome: string): string {
+  const limpo = nome.trim().toUpperCase().replace(/\s+/g, " ");
+  for (const c of COMPOSTAS) {
+    if (limpo.startsWith(`${c} `) || limpo === c) return c;
+  }
+  const tokens = limpo.split(" ");
+  // Sigla curta sozinha não diz nada: junta com a palavra seguinte
+  if (tokens[0] && tokens[0].length <= 2 && tokens[1]) return `${tokens[0]} ${tokens[1]}`;
+  return tokens[0] ?? "";
+}

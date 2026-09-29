@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { brl, corDaLoja } from "./viz";
+import { brl } from "./viz";
 
 interface Linha {
   produto: string;
@@ -25,12 +25,18 @@ interface Transferencia {
 
 interface Resposta {
   dias: number;
+  categoria: string;
   erro?: string;
   incompleto?: boolean;
   lojasDisponiveis?: string[];
   itens: Linha[];
   transferencias: Transferencia[];
-  totais: { produtos: number; rupturas: number; acabando: number; parados: number; pecasEstoque: number };
+}
+
+interface Categoria {
+  nome: string;
+  produtos: number;
+  pecas: number;
 }
 
 const SITUACAO: Record<Linha["situacao"], { rotulo: string; cor: string }> = {
@@ -40,15 +46,17 @@ const SITUACAO: Record<Linha["situacao"], { rotulo: string; cor: string }> = {
   parado: { rotulo: "Parado", cor: "var(--c-tiktok)" },
 };
 
-type Filtro = "todos" | "ruptura" | "acabando" | "parado" | "A";
+type Filtro = "todos" | "ruptura" | "acabando" | "parado";
 
-/** Aba de produtos: o que vendeu no período contra o saldo de hoje. */
+/**
+ * Produtos em dois passos: escolher a categoria e só então buscar. A consulta
+ * completa é cara demais para rodar sem alguém pedir.
+ */
 export function Produtos({
   from,
   to,
   units,
   agrup,
-  lojas,
   aoAlternarLoja,
   aoTrocarAgrup,
 }: {
@@ -56,23 +64,34 @@ export function Produtos({
   to: string;
   units: string[];
   agrup: string;
-  lojas: string[];
   aoAlternarLoja: (nome: string) => void;
   aoTrocarAgrup: (a: "modelo" | "cor" | "tamanho" | "completo") => void;
 }) {
+  const [categorias, setCategorias] = useState<Categoria[] | null>(null);
+  const [categoria, setCategoria] = useState("");
   const [dados, setDados] = useState<Resposta | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(false);
   const [falha, setFalha] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
-  const [aberto, setAberto] = useState<string | null>(null);
   const pedido = useRef(0);
-  // Guarda o que já foi visto: voltar para uma combinação anterior é imediato
   const guardado = useRef<Map<string, Resposta>>(new Map());
 
+  // A lista de categorias é leve e vem do estoque já em cache
   useEffect(() => {
+    fetch("/api/produtos/categorias", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { categorias?: Categoria[] } | null) => setCategorias(j?.categorias ?? []))
+      .catch(() => setCategorias([]));
+  }, []);
+
+  useEffect(() => {
+    if (!categoria) {
+      setDados(null);
+      return;
+    }
     const id = ++pedido.current;
     const qs =
-      `from=${from}&to=${to}&agrup=${agrup}` +
+      `cat=${encodeURIComponent(categoria)}&from=${from}&to=${to}&agrup=${agrup}` +
       (units.length ? `&units=${encodeURIComponent(units.join(","))}` : "");
     const salvo = guardado.current.get(qs);
     if (salvo) {
@@ -84,8 +103,7 @@ export function Produtos({
     setFalha("");
     fetch(`/api/produtos?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Erro ${r.status}`))))
-      .then((json: Resposta | null) => {
-        if (!json) return;
+      .then((json: Resposta) => {
         guardado.current.set(qs, json);
         if (id === pedido.current) setDados(json);
       })
@@ -95,189 +113,164 @@ export function Produtos({
       .finally(() => {
         if (id === pedido.current) setCarregando(false);
       });
-  }, [from, to, units, agrup]);
+  }, [categoria, from, to, units, agrup]);
 
-  const filtrosTopo = (
-    <>
-      <div className="filters" role="group" aria-label="Lojas">
-        {(dados?.lojasDisponiveis?.length ? dados.lojasDisponiveis : lojas).map((loja) => {
-          const ativa = units.includes(loja);
-          return (
-            <button
-              key={loja}
-              className={ativa ? "on" : ""}
-              onClick={() => aoAlternarLoja(loja)}
-              style={ativa ? { background: corDaLoja(loja), borderColor: corDaLoja(loja) } : undefined}
-            >
-              {loja}
-            </button>
-          );
-        })}
-      </div>
-      <div className="seg" role="group" aria-label="Agrupar produtos">
-        {(["modelo", "cor", "tamanho", "completo"] as const).map((a) => (
-          <button key={a} className={agrup === a ? "on" : ""} onClick={() => aoTrocarAgrup(a)}>
-            {a === "completo" ? "Completo" : a[0].toUpperCase() + a.slice(1)}
-          </button>
-        ))}
-      </div>
-    </>
-  );
-
-  if (carregando && !dados)
-    return (
-      <>
-        {filtrosTopo}
-        <div className="empty">Carregando produtos…</div>
-      </>
-    );
-  if (!dados)
-    return (
-      <>
-        {filtrosTopo}
-        <div className="card">
-          Não foi possível carregar os produtos{falha ? ` (${falha})` : ""}. A primeira carga é
-          pesada; tente de novo em alguns minutos.
-        </div>
-      </>
-    );
-
-  const lista = dados.itens.filter((l) =>
-    filtro === "todos" ? true : filtro === "A" ? l.abc === "A" : l.situacao === filtro
-  );
-  const transf = dados.transferencias ?? [];
-  const t = dados.totais;
+  const lojas = dados?.lojasDisponiveis ?? [];
+  const comSaldo = lojas.filter((l) => dados?.itens.some((i) => (i.porLoja[l] ?? 0) !== 0));
+  const lista = (dados?.itens ?? []).filter((l) => filtro === "todos" || l.situacao === filtro);
 
   return (
     <div>
-      {filtrosTopo}
-      <div style={{ opacity: carregando ? 0.6 : 1 }}>
-      {dados.erro && <div className="card err-msg">{dados.erro}</div>}
-      {dados.incompleto && (
-        <div className="parcial">
-          Ainda faltam dias e produtos nesta primeira carga — recarregue em alguns minutos para ver
-          tudo. Do segundo acesso em diante vem do cache.
+      {/* Passo 1 — categoria */}
+      <div className="passo">
+        <span className="passo-num">1</span> Escolha a categoria
+      </div>
+      {categorias === null ? (
+        <div className="empty">Carregando categorias…</div>
+      ) : (
+        <div className="filters" role="group" aria-label="Categorias">
+          {categorias.map((c) => (
+            <button
+              key={c.nome}
+              className={categoria === c.nome ? "active" : ""}
+              onClick={() => setCategoria(categoria === c.nome ? "" : c.nome)}
+              title={`${c.produtos} produtos · ${c.pecas} peças em estoque`}
+            >
+              {c.nome}
+            </button>
+          ))}
         </div>
       )}
 
-      <div className="tiles">
-        <div className="tile">
-          <div className="label">Peças em estoque</div>
-          <div className="value">{t.pecasEstoque.toLocaleString("pt-BR")}</div>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {t.produtos.toLocaleString("pt-BR")} produtos
-          </span>
+      {!categoria && (
+        <div className="empty">
+          Nenhum produto carregado ainda — escolha uma categoria acima para ver estoque e venda.
         </div>
-        <div className="tile">
-          <div className="label">Em ruptura</div>
-          <div className="value">{t.rupturas.toLocaleString("pt-BR")}</div>
-          <span className="muted" style={{ fontSize: 12 }}>
-            vendendo e sem saldo
-          </span>
-        </div>
-        <div className="tile">
-          <div className="label">Acabando</div>
-          <div className="value">{t.acabando.toLocaleString("pt-BR")}</div>
-          <span className="muted" style={{ fontSize: 12 }}>
-            menos de 15 dias
-          </span>
-        </div>
-        <div className="tile">
-          <div className="label">Parados</div>
-          <div className="value">{t.parados.toLocaleString("pt-BR")}</div>
-          <span className="muted" style={{ fontSize: 12 }}>
-            com saldo, sem venda
-          </span>
-        </div>
-      </div>
+      )}
 
-      <div className="seg" role="group" aria-label="Situação">
-        {(["todos", "A", "ruptura", "acabando", "parado"] as Filtro[]).map((f) => (
-          <button key={f} className={filtro === f ? "on" : ""} onClick={() => setFiltro(f)}>
-            {f === "todos" ? "Todos" : f === "A" ? "Curva A" : SITUACAO[f].rotulo}
-          </button>
-        ))}
-      </div>
-
-      {transf.length > 0 && (
-        <div className="card">
-          <h2>Sugestões de transferência</h2>
-          <div className="rank-aviso" style={{ margin: "0 0 10px" }}>
-            Produto parado numa loja que outra está vendendo e não tem em estoque.
+      {categoria && (
+        <>
+          <div className="passo">
+            <span className="passo-num">2</span> Filtre se quiser
           </div>
-          <div className="transf">
-            {transf.map((t) => (
-              <div key={`${t.produto}-${t.de}-${t.para}`} className="transf-linha">
-                <span className="transf-prod">{t.produto}</span>
-                <span className="transf-mov">
-                  <b>{t.de}</b> ({t.sobra} parad{t.sobra === 1 ? "a" : "as"}) →{" "}
-                  <b>{t.para}</b> (vendeu {t.vendeu}, sem saldo)
-                </span>
-                <span className="transf-qtd">enviar ~{t.sugestao}</span>
-              </div>
+          <div className="filters" role="group" aria-label="Lojas">
+            {lojas.map((loja) => (
+              <button
+                key={loja}
+                className={units.includes(loja) ? "active" : ""}
+                onClick={() => aoAlternarLoja(loja)}
+              >
+                {loja}
+              </button>
             ))}
           </div>
+          <div className="seg" role="group" aria-label="Agrupar">
+            {(["modelo", "cor", "tamanho", "completo"] as const).map((a) => (
+              <button key={a} className={agrup === a ? "on" : ""} onClick={() => aoTrocarAgrup(a)}>
+                {a === "completo" ? "Completo" : a[0].toUpperCase() + a.slice(1)}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {categoria && carregando && !dados && <div className="empty">Buscando {categoria}…</div>}
+      {categoria && falha && (
+        <div className="card">
+          Não foi possível carregar ({falha}). A primeira busca de cada categoria é a mais pesada;
+          tente de novo em instantes.
         </div>
       )}
 
-      <div className="card">
-        <div className="tbl-wrap">
-          <table className="prod-tbl">
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th className="n">Vendidos</th>
-                <th className="n">Faturamento</th>
-                <th className="n">Estoque</th>
-                <th className="n">Cobertura</th>
-                <th>ABC</th>
-                <th>Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.map((l) => (
-                <tr
-                  key={l.produto}
-                  onClick={() => setAberto(aberto === l.produto ? null : l.produto)}
-                  className="clicavel"
-                >
-                  <td>
-                    {l.produto}
-                    {aberto === l.produto && (
-                      <div className="por-loja">
-                        {Object.entries(l.porLoja).length === 0
-                          ? "sem saldo em nenhuma loja"
-                          : Object.entries(l.porLoja)
-                              .sort((a, b) => b[1] - a[1])
-                              .map(([loja, qtd]) => `${loja}: ${qtd}`)
-                              .join(" · ")}
-                      </div>
-                    )}
-                  </td>
-                  <td className="n">{l.pecas.toLocaleString("pt-BR")}</td>
-                  <td className="n">{brl.format(l.faturamento)}</td>
-                  <td className="n">{l.estoque.toLocaleString("pt-BR")}</td>
-                  <td className="n">{l.cobertura === null ? "—" : `${l.cobertura} d`}</td>
-                  <td>
-                    <span className={`abc abc-${l.abc}`}>{l.abc}</span>
-                  </td>
-                  <td>
-                    <span className="sit" style={{ color: SITUACAO[l.situacao].cor }}>
-                      {SITUACAO[l.situacao].rotulo}
+      {categoria && dados && (
+        <div style={{ opacity: carregando ? 0.6 : 1 }}>
+          {dados.erro && <div className="card err-msg">{dados.erro}</div>}
+          {dados.incompleto && (
+            <div className="parcial">
+              Primeira carga ainda incompleta — recarregue em alguns minutos para ver tudo.
+            </div>
+          )}
+
+          {dados.transferencias.length > 0 && (
+            <div className="card">
+              <h2>Sugestões de transferência</h2>
+              <div className="rank-aviso" style={{ margin: "0 0 10px" }}>
+                Parado numa loja, vendendo e sem saldo em outra.
+              </div>
+              <div className="transf">
+                {dados.transferencias.map((t) => (
+                  <div key={`${t.produto}-${t.de}-${t.para}`} className="transf-linha">
+                    <span className="transf-prod">{t.produto}</span>
+                    <span className="transf-mov">
+                      <b>{t.de}</b> ({t.sobra} parad{t.sobra === 1 ? "a" : "as"}) → <b>{t.para}</b>{" "}
+                      (vendeu {t.vendeu}, sem saldo)
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span className="transf-qtd">enviar ~{t.sugestao}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="seg" role="group" aria-label="Situação">
+            {(["todos", "ruptura", "acabando", "parado"] as Filtro[]).map((f) => (
+              <button key={f} className={filtro === f ? "on" : ""} onClick={() => setFiltro(f)}>
+                {f === "todos" ? "Todos" : SITUACAO[f].rotulo}
+              </button>
+            ))}
+          </div>
+
+          <div className="card">
+            <div className="tbl-wrap">
+              <table className="prod-tbl">
+                <thead>
+                  <tr>
+                    <th>{categoria}</th>
+                    <th className="n">Vendeu</th>
+                    <th className="n">R$</th>
+                    <th className="n">Estoque</th>
+                    {comSaldo.map((l) => (
+                      <th key={l} className="n">
+                        {l}
+                      </th>
+                    ))}
+                    <th className="n">Cobertura</th>
+                    <th>Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.map((l) => (
+                    <tr key={l.produto}>
+                      <td>{l.produto}</td>
+                      <td className="n">{l.pecas.toLocaleString("pt-BR")}</td>
+                      <td className="n">{brl.format(l.faturamento)}</td>
+                      <td className="n">
+                        <b>{l.estoque.toLocaleString("pt-BR")}</b>
+                      </td>
+                      {comSaldo.map((loja) => (
+                        <td key={loja} className="n loja-col">
+                          {l.porLoja[loja] ?? 0}
+                        </td>
+                      ))}
+                      <td className="n">{l.cobertura === null ? "—" : `${l.cobertura} d`}</td>
+                      <td>
+                        <span className="sit" style={{ color: SITUACAO[l.situacao].cor }}>
+                          {SITUACAO[l.situacao].rotulo}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {lista.length === 0 && <div className="empty">Nenhum produto nessa situação.</div>}
+            <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
+              Estoque é o saldo de agora; venda é do período escolhido. Cobertura = quantos dias o
+              saldo dura no ritmo dos últimos {dados.dias} dias.
+            </div>
+          </div>
         </div>
-        {lista.length === 0 && <div className="empty">Nenhum produto nessa situação.</div>}
-        <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
-          Cobertura é o estoque de hoje dividido pela média de venda dos últimos {dados.dias} dias.
-          Toque num produto para ver o saldo loja a loja.
-        </div>
-      </div>
-      </div>
+      )}
     </div>
   );
 }

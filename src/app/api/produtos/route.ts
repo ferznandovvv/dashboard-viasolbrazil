@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { fetchEstoque } from "@/lib/connectors/estoque";
-import { Agrupamento, rotulo } from "@/lib/produtos";
+import { Agrupamento, categoriaDe, rotulo } from "@/lib/produtos";
 import { spMidnight, todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +54,11 @@ export async function GET(req: NextRequest) {
   );
 
   const agrup = (sp.get("agrup") ?? "modelo") as Agrupamento;
+  // Sem categoria não há consulta: a tela pede para escolher uma primeiro
+  const categoria = (sp.get("cat") ?? "").trim().toUpperCase();
+  if (!categoria) {
+    return NextResponse.json({ erro: "Escolha uma categoria", itens: [], transferencias: [] }, { status: 400 });
+  }
   const units = (sp.get("units") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
   const lojasSel = units.filter((u) => u !== "Site");
   const filiaisSel = Object.entries(LOJAS)
@@ -77,6 +82,7 @@ export async function GET(req: NextRequest) {
 
   // Vendas do período, já agregadas por dia/produto/loja
   for (const v of vendas.itens) {
+    if (categoriaDe(v.nome) !== categoria) continue;
     if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
     const chave = rotulo(v.nome, agrup);
     if (!chave) continue;
@@ -87,8 +93,9 @@ export async function GET(req: NextRequest) {
     linhas.set(chave, e);
   }
 
-  // Saldo atual, restrito às lojas filtradas
+  // Saldo atual, restrito à categoria e às lojas filtradas
   for (const s of estoque.itens) {
+    if (categoriaDe(s.nome) !== categoria) continue;
     const chave = rotulo(s.nome, agrup);
     if (!chave) continue;
     const e = linhas.get(chave) ?? nova(chave);
@@ -154,6 +161,7 @@ export async function GET(req: NextRequest) {
     agrup,
     lojas: lojasSel,
     estoqueConectado: estoque.conectado,
+    categoria,
     incompleto: vendas.incompleto || Boolean(estoque.incompleto),
     lojasDisponiveis: Object.values(LOJAS),
     erro: estoque.erro ?? vendas.erro,
