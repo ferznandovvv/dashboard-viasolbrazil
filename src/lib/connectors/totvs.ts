@@ -240,6 +240,8 @@ export interface OpcoesTotvs {
   itens?: boolean;
   /** Restringe às filiais indicadas. */
   filiais?: number[];
+  /** Pula o cache de memória, para medir o cache compartilhado. */
+  ignorarMemoria?: boolean;
 }
 
 export async function fetchTotvsSales(
@@ -250,11 +252,13 @@ export async function fetchTotvsSales(
   if (!totvsConfigured()) {
     return { channel: "lojas", connected: false, orders: [] };
   }
+  if (opts.ignorarMemoria) return porMeses(from, to, opts);
   return comCache(`totvs|${from}|${to}|${variante(opts)}`, () => porMeses(from, to, opts), 5 * 60000);
 }
 
 /** Identifica a variação da busca, para cache e nome de arquivo. */
 function variante(opts: OpcoesTotvs): string {
+  // ignorarMemoria não entra aqui: é só instrumentação, não muda os dados
   const filiais = opts.filiais?.length ? opts.filiais.slice().sort().join("_") : "todas";
   return `${opts.itens ? "itens" : "leve"}-${filiais}`;
 }
@@ -508,9 +512,9 @@ async function buscarTotvs(
       const paginas = Math.min(Math.ceil(total / PAGE), 200);
 
       // Demais páginas em lotes paralelos, para não estourar o tempo da rota
-      for (let inicio = 2; inicio <= paginas; inicio += 6) {
+      for (let inicio = 2; inicio <= paginas; inicio += 10) {
         const lote = [];
-        for (let p = inicio; p < inicio + 6 && p <= paginas; p++) {
+        for (let p = inicio; p < inicio + 10 && p <= paginas; p++) {
           medidas.paginas += 1;
           lote.push(totvsFetch(INVOICES, corpo(j, p)));
         }

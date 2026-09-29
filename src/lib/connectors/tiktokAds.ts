@@ -1,15 +1,42 @@
 import type { AdsSpendResult } from "./meta";
 
 import { comCache } from "../cache";
+import { addDays } from "../types";
 
 const API = "https://business-api.tiktok.com/open_api/v1.3";
 
 /** Gasto diário de anúncios do TikTok Ads (Marketing API, relatório por dia). */
-export async function fetchTikTokAdsSpend(fromKey: string, toKey: string): Promise<AdsSpendResult> {
-  return comCache(`ttads|${fromKey}|${toKey}`, () => buscarTikTokAds(fromKey, toKey), 10 * 60000, true);
+export async function fetchTikTokAdsSpend(
+  fromKey: string,
+  toKey: string,
+): Promise<AdsSpendResult> {
+  return comCache(
+    `ttads|${fromKey}|${toKey}`,
+    () => buscarTikTokAds(fromKey, toKey),
+    10 * 60000,
+    true,
+  );
 }
 
-async function buscarTikTokAds(fromKey: string, toKey: string): Promise<AdsSpendResult> {
+/** O relatório diário do TikTok aceita no máximo 30 dias por consulta. */
+function janelas30(
+  fromKey: string,
+  toKey: string,
+): { de: string; ate: string }[] {
+  const out: { de: string; ate: string }[] = [];
+  let de = fromKey;
+  while (de <= toKey) {
+    const ate = addDays(de, 29);
+    out.push({ de, ate: ate > toKey ? toKey : ate });
+    de = addDays(ate, 1);
+  }
+  return out;
+}
+
+async function buscarTikTokAds(
+  fromKey: string,
+  toKey: string,
+): Promise<AdsSpendResult> {
   const token = process.env.TIKTOK_ADS_ACCESS_TOKEN;
   const advertiserId = process.env.TIKTOK_ADS_ADVERTISER_ID;
   if (!token || !advertiserId) {
@@ -18,34 +45,38 @@ async function buscarTikTokAds(fromKey: string, toKey: string): Promise<AdsSpend
 
   try {
     const daily: { date: string; spend: number }[] = [];
-    for (let page = 1; page <= 5; page++) {
-      const url = new URL(`${API}/report/integrated/get/`);
-      url.searchParams.set("advertiser_id", advertiserId);
-      url.searchParams.set("report_type", "BASIC");
-      url.searchParams.set("data_level", "AUCTION_ADVERTISER");
-      url.searchParams.set("dimensions", JSON.stringify(["stat_time_day"]));
-      url.searchParams.set("metrics", JSON.stringify(["spend"]));
-      url.searchParams.set("start_date", fromKey);
-      url.searchParams.set("end_date", toKey);
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("page_size", "200");
+    for (const janela of janelas30(fromKey, toKey)) {
+      for (let page = 1; page <= 5; page++) {
+        const url = new URL(`${API}/report/integrated/get/`);
+        url.searchParams.set("advertiser_id", advertiserId);
+        url.searchParams.set("report_type", "BASIC");
+        url.searchParams.set("data_level", "AUCTION_ADVERTISER");
+        url.searchParams.set("dimensions", JSON.stringify(["stat_time_day"]));
+        url.searchParams.set("metrics", JSON.stringify(["spend"]));
+        url.searchParams.set("start_date", janela.de);
+        url.searchParams.set("end_date", janela.ate);
+        url.searchParams.set("page", String(page));
+        url.searchParams.set("page_size", "200");
 
-      const res = await fetch(url, {
-        headers: { "Access-Token": token },
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (json.code !== 0) {
-        throw new Error(`TikTok Ads: ${json.message ?? res.status} (code ${json.code})`);
-      }
-      for (const row of json.data?.list ?? []) {
-        daily.push({
-          date: String(row.dimensions?.stat_time_day ?? "").slice(0, 10),
-          spend: parseFloat(row.metrics?.spend ?? "0"),
+        const res = await fetch(url, {
+          headers: { "Access-Token": token },
+          cache: "no-store",
         });
+        const json = await res.json();
+        if (json.code !== 0) {
+          throw new Error(
+            `TikTok Ads: ${json.message ?? res.status} (code ${json.code})`,
+          );
+        }
+        for (const row of json.data?.list ?? []) {
+          daily.push({
+            date: String(row.dimensions?.stat_time_day ?? "").slice(0, 10),
+            spend: parseFloat(row.metrics?.spend ?? "0"),
+          });
+        }
+        const totalPages = json.data?.page_info?.total_page ?? 1;
+        if (page >= totalPages) break;
       }
-      const totalPages = json.data?.page_info?.total_page ?? 1;
-      if (page >= totalPages) break;
     }
     return { connected: true, daily };
   } catch (e) {

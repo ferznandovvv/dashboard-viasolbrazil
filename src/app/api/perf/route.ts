@@ -40,9 +40,10 @@ export async function GET() {
   const frio = { ...medidas };
 
   zerarMedidas();
-  const lojasQuente = await medir("TOTVS lojas (repetida)", () =>
-    fetchTotvsSales(inicioBusca, hoje)
+  const lojasQuente = await medir("TOTVS lojas (2ª, via cache)", () =>
+    fetchTotvsSales(inicioBusca, hoje, { ignorarMemoria: true })
   );
+  const quente = { ...medidas };
 
   const outros = await Promise.all([
     medir("Shopify", () => fetchShopifyOrders(new Date(`${inicioBusca}T00:00:00-03:00`))),
@@ -61,10 +62,9 @@ export async function GET() {
     `Período medido: ${inicioBusca} a ${hoje}\n` +
     `Armazenamento (Blob): ${blobAvailable() ? "CONFIGURADO" : "AUSENTE — nenhum cache funciona"}\n\n` +
     `${linhas}\n\n` +
-    `Na 1ª busca das lojas:\n` +
-    `  páginas pedidas à TOTVS: ${frio.paginas}\n` +
-    `  dias vindos do cache:    ${frio.diasDoCache}\n` +
-    `  meses vindos do cache:   ${frio.mesesDoCache}\n\n` +
+    `1ª busca:  ${frio.paginas} páginas na TOTVS · ${frio.diasDoCache} dias e ${frio.mesesDoCache} meses do cache\n` +
+    `2ª busca:  ${quente.paginas} páginas na TOTVS · ${quente.diasDoCache} dias e ${quente.mesesDoCache} meses do cache\n` +
+    `           (a 2ª ignora a memória de propósito, para testar o cache compartilhado)\n\n` +
     `Total da medição: ${Date.now() - t0} ms`;
 
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
