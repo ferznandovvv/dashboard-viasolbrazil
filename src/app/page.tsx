@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
+import { Produtos } from "@/components/produtos";
 
 type Period = { key: string; from: string; to: string };
 
@@ -139,6 +140,7 @@ export default function Dashboard() {
   const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
   const [porLoja, setPorLoja] = useState(true);
   const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
+  const [aba, setAba] = useState<"vendas" | "produtos">("vendas");
   const [cache] = useState<Map<string, DashboardData>>(() => new Map());
   // Identifica a última busca pedida: respostas atrasadas de filtros antigos
   // não podem sobrescrever o filtro atual
@@ -419,6 +421,15 @@ export default function Dashboard() {
         )}
       </div>
 
+      <div className="abas" role="group" aria-label="Seção">
+        <button className={aba === "vendas" ? "on" : ""} onClick={() => setAba("vendas")}>
+          Vendas
+        </button>
+        <button className={aba === "produtos" ? "on" : ""} onClick={() => setAba("produtos")}>
+          Produtos
+        </button>
+      </div>
+
       <div className="filters" role="group" aria-label="Período">
         {presets.map((p) => (
           <button
@@ -455,13 +466,25 @@ export default function Dashboard() {
         </div>
       )}
 
-      {fetchError && <div className="card">{fetchError}</div>}
-      {loading && !data && <div className="empty">Carregando…</div>}
-      {data?.partial && (
+      {aba === "produtos" && (
+        <Produtos
+          from={period.from}
+          to={period.to}
+          units={sel}
+          agrup={agrup}
+          lojas={(data?.stores ?? []).map((l) => l.name)}
+          aoAlternarLoja={alternar}
+          aoTrocarAgrup={setAgrup}
+        />
+      )}
+
+      {aba === "vendas" && fetchError && <div className="card">{fetchError}</div>}
+      {aba === "vendas" && loading && !data && <div className="empty">Carregando…</div>}
+      {aba === "vendas" && data?.partial && (
         <div className="parcial">Lojas físicas ainda carregando — os números abaixo são só do site.</div>
       )}
 
-      {data && (
+      {aba === "vendas" && data && (
         <div style={{ opacity: loading ? 0.6 : 1 }}>
           {sel.length > 0 && (
             <div className="unit-head">
