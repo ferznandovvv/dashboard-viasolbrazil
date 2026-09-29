@@ -24,7 +24,7 @@ export async function GET() {
 
   const categorias = Array.from(m.values())
     .filter((c) => c.produtos >= 3) // nomes soltos não viram categoria
-    .sort((a, b) => b.pecas - a.pecas);
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   return NextResponse.json({
     categorias,

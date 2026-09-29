@@ -65,13 +65,35 @@ const COMPOSTAS = [
   "KIT PRAIA",
 ];
 
+/**
+ * Só acentuação: o cadastro escreve sem acento e a tela mostra com.
+ * Juntar categorias diferentes (CALC com CALCINHA, por exemplo) seria palpite
+ * meu sobre o catálogo e mudaria número — isso só com confirmação.
+ */
+const SINONIMOS: Record<string, string> = {
+  MAIO: "MAIÔ",
+  MACACAO: "MACACÃO",
+  CHAPEU: "CHAPÉU",
+  BONE: "BONÉ",
+  SAIA: "SAIA",
+};
+
+/** Não são peças de venda: não fazem sentido como categoria. */
+const IGNORAR = new Set(["ETIQUETA", "LF ETIQUETA", "LF", "TESTE", "DIVERSOS"]);
+
 export function categoriaDe(nome: string): string {
-  const limpo = nome.trim().toUpperCase().replace(/\s+/g, " ");
+  const limpo = nome
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:]+/g, ""); // "UTOPIA." e "UTOPIA" são a mesma categoria
   for (const c of COMPOSTAS) {
     if (limpo.startsWith(`${c} `) || limpo === c) return c;
   }
   const tokens = limpo.split(" ");
   // Sigla curta sozinha não diz nada: junta com a palavra seguinte
-  if (tokens[0] && tokens[0].length <= 2 && tokens[1]) return `${tokens[0]} ${tokens[1]}`;
-  return tokens[0] ?? "";
+  const bruta =
+    tokens[0] && tokens[0].length <= 2 && tokens[1] ? `${tokens[0]} ${tokens[1]}` : tokens[0] ?? "";
+  if (IGNORAR.has(bruta)) return "";
+  return SINONIMOS[bruta] ?? bruta;
 }

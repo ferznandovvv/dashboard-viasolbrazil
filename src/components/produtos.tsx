@@ -198,7 +198,8 @@ export function Produtos({
           {dados.erro && <div className="card err-msg">{dados.erro}</div>}
           {dados.incompleto && (
             <div className="parcial">
-              Primeira carga ainda incompleta — recarregue em alguns minutos para ver tudo.
+              Os números abaixo já valem, mas ainda falta parte do estoque entrar — recarregue em
+              alguns minutos e eles podem aumentar.
             </div>
           )}
 
