@@ -209,12 +209,15 @@ export default function Dashboard() {
 
   const selKey = sel.join(",");
   useEffect(() => {
+    if (aba !== "vendas" && data) return; // na aba de produtos, não refaz a de vendas
     load(period, selKey ? selKey.split(",") : [], canal);
-  }, [period, selKey, canal, load]);
+    // `data` fora das dependências de propósito: ele só decide a primeira carga
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, selKey, canal, load, aba]);
 
   // Aquece os períodos que costumam ser os próximos cliques, sem travar a tela
   useEffect(() => {
-    if (loading) return;
+    if (loading || aba !== "vendas") return;
     // Só os períodos curtos: aquecer "Ano atual" custaria mais do que o clique
     const curtos = ["Hoje", "Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
     const alvos = presets.filter((p) => p.key !== period.key && curtos.includes(p.key));
@@ -240,7 +243,7 @@ export default function Dashboard() {
       cancelado = true;
       clearTimeout(timer);
     };
-  }, [loading, period, selKey, canal, presets, cache]);
+  }, [loading, period, selKey, canal, presets, cache, aba]);
 
   // Redirect das autorizações OAuth (TikTok Shop, TikTok Ads e Mercado Livre)
   useEffect(() => {

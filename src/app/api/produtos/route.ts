@@ -17,6 +17,19 @@ export interface LinhaProduto {
   /** Dias que o estoque dura no ritmo do período; null quando não vende */
   cobertura: number | null;
   situacao: "ruptura" | "acabando" | "ok" | "parado";
+  /** Curva ABC por faturamento acumulado: A até 80%, B até 95%, C o resto */
+  abc: "A" | "B" | "C";
+  /** Peças vendidas por loja, base das sugestões de transferência */
+  vendasPorLoja: Record<string, number>;
+}
+
+export interface Transferencia {
+  produto: string;
+  de: string;
+  sobra: number;
+  para: string;
+  vendeu: number;
+  sugestao: number;
 }
 
 /**
@@ -61,6 +74,8 @@ export async function GET(req: NextRequest) {
     porLoja: {},
     cobertura: null,
     situacao: "ok",
+    abc: "C",
+    vendasPorLoja: {},
   });
 
   // Vendas do período
@@ -74,6 +89,7 @@ export async function GET(req: NextRequest) {
       const e = linhas.get(chave) ?? nova(chave);
       e.pecas += it.qty;
       e.faturamento += it.revenue;
+      if (o.store) e.vendasPorLoja[o.store] = (e.vendasPorLoja[o.store] ?? 0) + it.qty;
       linhas.set(chave, e);
     }
   }
@@ -103,6 +119,41 @@ export async function GET(req: NextRequest) {
 
   itens.sort((a, b) => b.faturamento - a.faturamento || b.estoque - a.estoque);
 
+  // Curva ABC: A são os produtos que somam os primeiros 80% do faturamento
+  const totalFat = itens.reduce((s, i) => s + i.faturamento, 0);
+  let acumulado = 0;
+  for (const i of itens) {
+    acumulado += i.faturamento;
+    const parte = totalFat > 0 ? acumulado / totalFat : 1;
+    i.abc = parte <= 0.8 ? "A" : parte <= 0.95 ? "B" : "C";
+  }
+
+  // Transferência: uma loja tem saldo parado do que outra vende e não tem.
+  // Só sugere quando a origem não vendeu a peça no período — senão seria
+  // tirar de quem também está girando.
+  const transferencias: Transferencia[] = [];
+  for (const l of itens) {
+    const faltam = Object.entries(l.vendasPorLoja)
+      .filter(([loja, qtd]) => qtd > 0 && (l.porLoja[loja] ?? 0) <= 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (faltam.length === 0) continue;
+    const sobram = Object.entries(l.porLoja)
+      .filter(([loja, qtd]) => qtd > 0 && (l.vendasPorLoja[loja] ?? 0) === 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (sobram.length === 0) continue;
+    const [para, vendeu] = faltam[0];
+    const [de, sobra] = sobram[0];
+    transferencias.push({
+      produto: l.produto,
+      de,
+      sobra,
+      para,
+      vendeu,
+      sugestao: Math.max(1, Math.min(sobra, vendeu)),
+    });
+  }
+  transferencias.sort((a, b) => b.sugestao - a.sugestao);
+
   return NextResponse.json({
     from,
     to,
@@ -112,6 +163,7 @@ export async function GET(req: NextRequest) {
     estoqueConectado: estoque.conectado,
     erro: estoque.erro ?? vendas.error,
     itens: itens.slice(0, 400),
+    transferencias: transferencias.slice(0, 30),
     totais: {
       produtos: itens.length,
       rupturas: itens.filter((i) => i.situacao === "ruptura").length,

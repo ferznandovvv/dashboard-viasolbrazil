@@ -11,12 +11,23 @@ interface Linha {
   porLoja: Record<string, number>;
   cobertura: number | null;
   situacao: "ruptura" | "acabando" | "ok" | "parado";
+  abc: "A" | "B" | "C";
+}
+
+interface Transferencia {
+  produto: string;
+  de: string;
+  sobra: number;
+  para: string;
+  vendeu: number;
+  sugestao: number;
 }
 
 interface Resposta {
   dias: number;
   erro?: string;
   itens: Linha[];
+  transferencias: Transferencia[];
   totais: { produtos: number; rupturas: number; acabando: number; parados: number; pecasEstoque: number };
 }
 
@@ -27,7 +38,7 @@ const SITUACAO: Record<Linha["situacao"], { rotulo: string; cor: string }> = {
   parado: { rotulo: "Parado", cor: "var(--c-tiktok)" },
 };
 
-type Filtro = "todos" | "ruptura" | "acabando" | "parado";
+type Filtro = "todos" | "ruptura" | "acabando" | "parado" | "A";
 
 /** Aba de produtos: o que vendeu no período contra o saldo de hoje. */
 export function Produtos({
@@ -52,17 +63,27 @@ export function Produtos({
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [aberto, setAberto] = useState<string | null>(null);
   const pedido = useRef(0);
+  // Guarda o que já foi visto: voltar para uma combinação anterior é imediato
+  const guardado = useRef<Map<string, Resposta>>(new Map());
 
   useEffect(() => {
     const id = ++pedido.current;
-    setCarregando(true);
     const qs =
       `from=${from}&to=${to}&agrup=${agrup}` +
       (units.length ? `&units=${encodeURIComponent(units.join(","))}` : "");
+    const salvo = guardado.current.get(qs);
+    if (salvo) {
+      setDados(salvo);
+      setCarregando(false);
+      return;
+    }
+    setCarregando(true);
     fetch(`/api/produtos?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((json: Resposta | null) => {
-        if (id === pedido.current && json) setDados(json);
+        if (!json) return;
+        guardado.current.set(qs, json);
+        if (id === pedido.current) setDados(json);
       })
       .catch(() => {
         /* a mensagem de erro aparece quando não há dados */
@@ -108,7 +129,10 @@ export function Produtos({
     );
   if (!dados) return <div className="card">Não foi possível carregar os produtos.</div>;
 
-  const lista = dados.itens.filter((l) => filtro === "todos" || l.situacao === filtro);
+  const lista = dados.itens.filter((l) =>
+    filtro === "todos" ? true : filtro === "A" ? l.abc === "A" : l.situacao === filtro
+  );
+  const transf = dados.transferencias ?? [];
   const t = dados.totais;
 
   return (
@@ -149,12 +173,33 @@ export function Produtos({
       </div>
 
       <div className="seg" role="group" aria-label="Situação">
-        {(["todos", "ruptura", "acabando", "parado"] as Filtro[]).map((f) => (
+        {(["todos", "A", "ruptura", "acabando", "parado"] as Filtro[]).map((f) => (
           <button key={f} className={filtro === f ? "on" : ""} onClick={() => setFiltro(f)}>
-            {f === "todos" ? "Todos" : SITUACAO[f].rotulo}
+            {f === "todos" ? "Todos" : f === "A" ? "Curva A" : SITUACAO[f].rotulo}
           </button>
         ))}
       </div>
+
+      {transf.length > 0 && (
+        <div className="card">
+          <h2>Sugestões de transferência</h2>
+          <div className="rank-aviso" style={{ margin: "0 0 10px" }}>
+            Produto parado numa loja que outra está vendendo e não tem em estoque.
+          </div>
+          <div className="transf">
+            {transf.map((t) => (
+              <div key={`${t.produto}-${t.de}-${t.para}`} className="transf-linha">
+                <span className="transf-prod">{t.produto}</span>
+                <span className="transf-mov">
+                  <b>{t.de}</b> ({t.sobra} parad{t.sobra === 1 ? "a" : "as"}) →{" "}
+                  <b>{t.para}</b> (vendeu {t.vendeu}, sem saldo)
+                </span>
+                <span className="transf-qtd">enviar ~{t.sugestao}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="tbl-wrap">
@@ -166,6 +211,7 @@ export function Produtos({
                 <th className="n">Faturamento</th>
                 <th className="n">Estoque</th>
                 <th className="n">Cobertura</th>
+                <th>ABC</th>
                 <th>Situação</th>
               </tr>
             </thead>
@@ -193,6 +239,9 @@ export function Produtos({
                   <td className="n">{brl.format(l.faturamento)}</td>
                   <td className="n">{l.estoque.toLocaleString("pt-BR")}</td>
                   <td className="n">{l.cobertura === null ? "—" : `${l.cobertura} d`}</td>
+                  <td>
+                    <span className={`abc abc-${l.abc}`}>{l.abc}</span>
+                  </td>
                   <td>
                     <span className="sit" style={{ color: SITUACAO[l.situacao].cor }}>
                       {SITUACAO[l.situacao].rotulo}

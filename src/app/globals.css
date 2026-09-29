@@ -432,3 +432,23 @@ th.num { text-align: right; }
 .sit { font-size: 12px; font-weight: 600; white-space: nowrap; }
 .por-loja { margin-top: 4px; font-size: 11.5px; color: var(--text-muted); }
 @media (max-width: 640px) { .prod-tbl { min-width: 560px; } }
+
+/* ——— Curva ABC e transferências ——— */
+.abc { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
+.abc-A { background: var(--brand); color: #fff; }
+.abc-B { background: var(--page); color: var(--text-muted); border: 1px solid var(--border); }
+.abc-C { color: var(--text-muted); }
+.transf { display: flex; flex-direction: column; gap: 10px; }
+.transf-linha {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline;
+  padding-bottom: 9px; border-bottom: 1px solid var(--border);
+}
+.transf-linha:last-child { border-bottom: none; padding-bottom: 0; }
+.transf-prod { font-size: 13px; }
+.transf-mov { grid-row: 2; }
+.transf-mov { grid-column: 1; font-size: 12px; color: var(--text-muted); }
+.transf-prod { grid-column: 1; grid-row: 1; }
+.transf-qtd {
+  grid-column: 2; grid-row: 1 / span 2; align-self: center;
+  font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--brand);
+}
