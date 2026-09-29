@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
+import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { fetchEstoque } from "@/lib/connectors/estoque";
 import { Agrupamento, rotulo } from "@/lib/produtos";
-import { spDateKey, spMidnight, todaySpKey } from "@/lib/types";
+import { spMidnight, todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -60,10 +60,7 @@ export async function GET(req: NextRequest) {
     .filter(([, nome]) => lojasSel.includes(nome))
     .map(([codigo]) => Number(codigo));
 
-  const [vendas, estoque] = await Promise.all([
-    fetchTotvsSales(from, to, { itens: true, ...(filiaisSel.length ? { filiais: filiaisSel } : {}) }),
-    fetchEstoque(),
-  ]);
+  const [vendas, estoque] = await Promise.all([fetchVendasPorProduto(from, to), fetchEstoque()]);
 
   const linhas = new Map<string, LinhaProduto>();
   const nova = (produto: string): LinhaProduto => ({
@@ -78,20 +75,16 @@ export async function GET(req: NextRequest) {
     vendasPorLoja: {},
   });
 
-  // Vendas do período
-  for (const o of vendas.orders) {
-    if (lojasSel.length && !lojasSel.includes(o.store ?? "")) continue;
-    const dia = spDateKey(o.createdAt);
-    if (dia < from || dia > to) continue;
-    for (const it of o.items ?? []) {
-      const chave = rotulo(it.title, agrup);
-      if (!chave) continue;
-      const e = linhas.get(chave) ?? nova(chave);
-      e.pecas += it.qty;
-      e.faturamento += it.revenue;
-      if (o.store) e.vendasPorLoja[o.store] = (e.vendasPorLoja[o.store] ?? 0) + it.qty;
-      linhas.set(chave, e);
-    }
+  // Vendas do período, já agregadas por dia/produto/loja
+  for (const v of vendas.itens) {
+    if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
+    const chave = rotulo(v.nome, agrup);
+    if (!chave) continue;
+    const e = linhas.get(chave) ?? nova(chave);
+    e.pecas += v.qtd;
+    e.faturamento += v.receita;
+    if (v.loja) e.vendasPorLoja[v.loja] = (e.vendasPorLoja[v.loja] ?? 0) + v.qtd;
+    linhas.set(chave, e);
   }
 
   // Saldo atual, restrito às lojas filtradas
@@ -161,7 +154,9 @@ export async function GET(req: NextRequest) {
     agrup,
     lojas: lojasSel,
     estoqueConectado: estoque.conectado,
-    erro: estoque.erro ?? vendas.error,
+    incompleto: vendas.incompleto || Boolean(estoque.incompleto),
+    lojasDisponiveis: Object.values(LOJAS),
+    erro: estoque.erro ?? vendas.erro,
     itens: itens.slice(0, 400),
     transferencias: transferencias.slice(0, 30),
     totais: {

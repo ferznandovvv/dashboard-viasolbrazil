@@ -265,6 +265,7 @@ function variante(opts: OpcoesTotvs): string {
 
 const PREFIXO = "totvs/mes-";
 const PREFIXO_DIA = "totvsdia/";
+const PREFIXO_PROD = "totvsprod/";
 
 /** Contadores para a tela de medição de desempenho. */
 export const medidas = { paginas: 0, diasDoCache: 0, mesesDoCache: 0 };
@@ -534,4 +535,85 @@ async function buscarTotvs(
       orders,
     };
   }
+}
+
+
+export interface VendaProduto {
+  /** Nome como vem na nota */
+  nome: string;
+  loja: string;
+  qtd: number;
+  receita: number;
+}
+
+/** Agrega os itens das notas de um dia por produto e loja. */
+function agregarProdutos(orders: NormalizedOrder[]): VendaProduto[] {
+  const m = new Map<string, VendaProduto>();
+  for (const o of orders) {
+    const loja = o.store ?? "";
+    for (const it of o.items ?? []) {
+      const chave = `${loja}|${it.title}`;
+      const e = m.get(chave) ?? { nome: it.title, loja, qtd: 0, receita: 0 };
+      e.qtd += it.qty;
+      e.receita += it.revenue;
+      m.set(chave, e);
+    }
+  }
+  return Array.from(m.values());
+}
+
+/**
+ * Venda por produto no período, agregada por dia e guardada no Blob.
+ *
+ * Buscar nota com itens é a consulta mais cara da TOTVS; agregando por dia,
+ * cada dia é pago uma vez só. `orcamentoMs` limita o trabalho de uma
+ * requisição: o que não couber volta marcado como incompleto, em vez de
+ * estourar o tempo da rota e não devolver nada.
+ */
+export async function fetchVendasPorProduto(
+  from: string,
+  to: string,
+  orcamentoMs = 35000
+): Promise<{ itens: VendaProduto[]; incompleto: boolean; erro?: string }> {
+  if (!totvsConfigured()) return { itens: [], incompleto: false };
+
+  const inicio = Date.now();
+  const hoje = new Date().toISOString().slice(0, 10);
+  const limite = to > hoje ? hoje : to;
+  const dias = diasDo(from, limite);
+  const corte = addDays(hoje, -3); // dias mais novos ainda mudam
+
+  const guardados = await lerBlobs<VendaProduto[]>(
+    PREFIXO_PROD,
+    dias.filter((d) => d <= corte)
+  );
+
+  const itens: VendaProduto[] = [];
+  for (const d of dias) {
+    const salvo = guardados.get(d);
+    if (salvo) itens.push(...salvo.map((v) => ({ ...v, loja: nomeAtualDaLoja(v.loja) })));
+  }
+
+  const faltando = dias.filter((d) => !guardados.has(d));
+  let incompleto = false;
+  let erro: string | undefined;
+
+  // Um dia por vez, para caber no orçamento e guardar o que der
+  for (const d of faltando) {
+    if (Date.now() - inicio > orcamentoMs) {
+      incompleto = true;
+      break;
+    }
+    const r = await buscarTotvs(d, d, addDays(d, 3) > hoje ? hoje : addDays(d, 3), { itens: true });
+    if (r.error) {
+      erro = r.error;
+      incompleto = true;
+      break;
+    }
+    const doDia = agregarProdutos(r.orders);
+    itens.push(...doDia);
+    if (d <= corte) await gravarBlob(PREFIXO_PROD, d, doDia);
+  }
+
+  return { itens, incompleto, erro };
 }

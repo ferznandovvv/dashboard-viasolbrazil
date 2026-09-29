@@ -28,14 +28,24 @@ interface LinhaSaldo {
   balances?: { branchCode?: number; stockCode?: number; stock?: number }[];
 }
 
-export async function fetchEstoque(): Promise<{ conectado: boolean; itens: SaldoProduto[]; erro?: string }> {
+export interface Estoque {
+  conectado: boolean;
+  itens: SaldoProduto[];
+  /** Não deu tempo de varrer tudo nesta requisição */
+  incompleto?: boolean;
+  erro?: string;
+}
+
+export async function fetchEstoque(): Promise<Estoque> {
   if (!totvsConfigured()) return { conectado: false, itens: [] };
   // Saldo muda o dia todo, mas de hora em hora é resolução de sobra para
   // decidir reposição — e a consulta inteira custa quase 200 páginas
   return comCache("estoque|fisico", buscarEstoque, 60 * 60000);
 }
 
-async function buscarEstoque(): Promise<{ conectado: boolean; itens: SaldoProduto[]; erro?: string }> {
+async function buscarEstoque(): Promise<Estoque> {
+  const inicio = Date.now();
+  const ORCAMENTO = 30000; // além disso a rota estoura o tempo da Vercel
   const filiais = Object.keys(LOJAS).map(Number);
   const corpo = (pagina: number) => ({
     filter: { startProductCode: 1, endProductCode: 99999999 },
@@ -74,14 +84,19 @@ async function buscarEstoque(): Promise<{ conectado: boolean; itens: SaldoProdut
     coletar((primeira.json?.items as LinhaSaldo[] | undefined) ?? []);
 
     const paginas = Math.min(Math.ceil(Number(primeira.json?.count ?? 0) / PAGE), 250);
-    for (let inicio = 2; inicio <= paginas; inicio += 10) {
+    let incompleto = false;
+    for (let pagina = 2; pagina <= paginas; pagina += 15) {
+      if (Date.now() - inicio > ORCAMENTO) {
+        incompleto = true;
+        break;
+      }
       const lote = [];
-      for (let p = inicio; p < inicio + 10 && p <= paginas; p++) lote.push(totvsFetch(BALANCES, corpo(p)));
+      for (let p = pagina; p < pagina + 15 && p <= paginas; p++) lote.push(totvsFetch(BALANCES, corpo(p)));
       for (const r of await Promise.all(lote)) {
         if (r.status === 200) coletar((r.json?.items as LinhaSaldo[] | undefined) ?? []);
       }
     }
-    return { conectado: true, itens };
+    return { conectado: true, itens, incompleto };
   } catch (e) {
     return { conectado: true, itens, erro: e instanceof Error ? e.message : "Erro desconhecido" };
   }

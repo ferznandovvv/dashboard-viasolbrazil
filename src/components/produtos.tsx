@@ -26,6 +26,8 @@ interface Transferencia {
 interface Resposta {
   dias: number;
   erro?: string;
+  incompleto?: boolean;
+  lojasDisponiveis?: string[];
   itens: Linha[];
   transferencias: Transferencia[];
   totais: { produtos: number; rupturas: number; acabando: number; parados: number; pecasEstoque: number };
@@ -60,6 +62,7 @@ export function Produtos({
 }) {
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [falha, setFalha] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [aberto, setAberto] = useState<string | null>(null);
   const pedido = useRef(0);
@@ -78,15 +81,16 @@ export function Produtos({
       return;
     }
     setCarregando(true);
+    setFalha("");
     fetch(`/api/produtos?${qs}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Erro ${r.status}`))))
       .then((json: Resposta | null) => {
         if (!json) return;
         guardado.current.set(qs, json);
         if (id === pedido.current) setDados(json);
       })
-      .catch(() => {
-        /* a mensagem de erro aparece quando não há dados */
+      .catch((e: Error) => {
+        if (id === pedido.current) setFalha(e.message);
       })
       .finally(() => {
         if (id === pedido.current) setCarregando(false);
@@ -96,7 +100,7 @@ export function Produtos({
   const filtrosTopo = (
     <>
       <div className="filters" role="group" aria-label="Lojas">
-        {lojas.map((loja) => {
+        {(dados?.lojasDisponiveis?.length ? dados.lojasDisponiveis : lojas).map((loja) => {
           const ativa = units.includes(loja);
           return (
             <button
@@ -127,7 +131,16 @@ export function Produtos({
         <div className="empty">Carregando produtos…</div>
       </>
     );
-  if (!dados) return <div className="card">Não foi possível carregar os produtos.</div>;
+  if (!dados)
+    return (
+      <>
+        {filtrosTopo}
+        <div className="card">
+          Não foi possível carregar os produtos{falha ? ` (${falha})` : ""}. A primeira carga é
+          pesada; tente de novo em alguns minutos.
+        </div>
+      </>
+    );
 
   const lista = dados.itens.filter((l) =>
     filtro === "todos" ? true : filtro === "A" ? l.abc === "A" : l.situacao === filtro
@@ -140,6 +153,12 @@ export function Produtos({
       {filtrosTopo}
       <div style={{ opacity: carregando ? 0.6 : 1 }}>
       {dados.erro && <div className="card err-msg">{dados.erro}</div>}
+      {dados.incompleto && (
+        <div className="parcial">
+          Ainda faltam dias e produtos nesta primeira carga — recarregue em alguns minutos para ver
+          tudo. Do segundo acesso em diante vem do cache.
+        </div>
+      )}
 
       <div className="tiles">
         <div className="tile">
