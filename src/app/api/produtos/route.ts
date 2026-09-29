@@ -54,8 +54,10 @@ export async function GET(req: NextRequest) {
   );
 
   const agrup = (sp.get("agrup") ?? "modelo") as Agrupamento;
-  // Sem categoria não há consulta: a tela pede para escolher uma primeiro
+  // Sem categoria não há consulta: a tela pede para escolher uma primeiro.
+  // TOP20 é o atalho que atravessa todas as categorias.
   const categoria = (sp.get("cat") ?? "").trim().toUpperCase();
+  const maisVendidos = categoria === "TOP20";
   if (!categoria) {
     return NextResponse.json({ erro: "Escolha uma categoria", itens: [], transferencias: [] }, { status: 400 });
   }
@@ -82,7 +84,7 @@ export async function GET(req: NextRequest) {
 
   // Vendas do período, já agregadas por dia/produto/loja
   for (const v of vendas.itens) {
-    if (categoriaDe(v.nome) !== categoria) continue;
+    if (!maisVendidos && categoriaDe(v.nome) !== categoria) continue;
     if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
     const chave = rotulo(v.nome, agrup);
     if (!chave) continue;
@@ -93,11 +95,24 @@ export async function GET(req: NextRequest) {
     linhas.set(chave, e);
   }
 
+  // No atalho dos mais vendidos, só os 20 primeiros seguem adiante
+  if (maisVendidos) {
+    const top = Array.from(linhas.values())
+      .sort((a, b) => b.pecas - a.pecas)
+      .slice(0, 20)
+      .map((l) => l.produto);
+    for (const chave of Array.from(linhas.keys())) {
+      if (!top.includes(chave)) linhas.delete(chave);
+    }
+  }
+
   // Saldo atual, restrito à categoria e às lojas filtradas
   for (const s of estoque.itens) {
-    if (categoriaDe(s.nome) !== categoria) continue;
+    if (!maisVendidos && categoriaDe(s.nome) !== categoria) continue;
     const chave = rotulo(s.nome, agrup);
     if (!chave) continue;
+    // No atalho, só interessa o saldo de quem já está na lista
+    if (maisVendidos && !linhas.has(chave)) continue;
     const e = linhas.get(chave) ?? nova(chave);
     for (const [loja, qtd] of Object.entries(s.porLoja)) {
       if (lojasSel.length && !lojasSel.includes(loja)) continue;
@@ -117,7 +132,9 @@ export async function GET(req: NextRequest) {
     return { ...l, cobertura, situacao };
   });
 
-  itens.sort((a, b) => b.faturamento - a.faturamento || b.estoque - a.estoque);
+  itens.sort((a, b) =>
+    maisVendidos ? b.pecas - a.pecas : b.faturamento - a.faturamento || b.estoque - a.estoque
+  );
 
   // Curva ABC: A são os produtos que somam os primeiros 80% do faturamento
   const totalFat = itens.reduce((s, i) => s + i.faturamento, 0);

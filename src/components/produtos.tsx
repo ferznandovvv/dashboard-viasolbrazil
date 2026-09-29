@@ -129,6 +129,13 @@ export function Produtos({
         <div className="empty">Carregando categorias…</div>
       ) : (
         <div className="filters" role="group" aria-label="Categorias">
+          <button
+            className={categoria === "TOP20" ? "active" : ""}
+            onClick={() => setCategoria(categoria === "TOP20" ? "" : "TOP20")}
+            title="Os 20 produtos que mais saíram no período, de todas as categorias"
+          >
+            ★ 20 mais vendidos
+          </button>
           {categorias.map((c) => (
             <button
               key={c.nome}
@@ -174,7 +181,11 @@ export function Produtos({
         </>
       )}
 
-      {categoria && carregando && !dados && <div className="empty">Buscando {categoria}…</div>}
+      {categoria && carregando && !dados && (
+        <div className="empty">
+          Buscando {categoria === "TOP20" ? "os mais vendidos" : categoria}…
+        </div>
+      )}
       {categoria && falha && (
         <div className="card">
           Não foi possível carregar ({falha}). A primeira busca de cada categoria é a mais pesada;
@@ -225,7 +236,7 @@ export function Produtos({
               <table className="prod-tbl">
                 <thead>
                   <tr>
-                    <th>{categoria}</th>
+                    <th>{categoria === "TOP20" ? "20 mais vendidos" : categoria}</th>
                     <th className="n">Vendeu</th>
                     <th className="n">R$</th>
                     <th className="n">Estoque</th>
