@@ -109,7 +109,7 @@ export async function fetchEstoqueDeProdutos(nomes: string[]): Promise<Estoque> 
 
 async function buscarEstoque(filtroExtra: Record<string, unknown> = {}): Promise<Estoque> {
   const inicio = Date.now();
-  const ORCAMENTO = 30000; // além disso a rota estoura o tempo da Vercel
+  const ORCAMENTO = 18000; // devolver parcial é melhor do que estourar a rota
   const filiais = Object.keys(LOJAS).map(Number);
   const corpo = (pagina: number) => ({
     filter: { startProductCode: 1, endProductCode: 99999999, ...filtroExtra },
