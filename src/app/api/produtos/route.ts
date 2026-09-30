@@ -113,21 +113,22 @@ export async function GET(req: NextRequest) {
 
   /**
    * O saldo vem de TODAS as lojas, mesmo com uma loja filtrada: a pergunta é
-   * "Ribeirão vendeu isso, quem tem para mandar?" — restringir o estoque à
-   * loja filtrada esconderia justamente a resposta.
+   * "esta loja vendeu, quem tem para mandar?" — restringir o saldo à loja
+   * filtrada esconderia justamente a resposta.
    *
-   * Nos mais vendidos e na busca, consulta só os produtos da lista; numa
-   * categoria inteira, uma consulta só pela categoria sai mais barato.
+   * Nos mais vendidos, o saldo é buscado produto a produto (a lista já está
+   * fechada). Na busca e na categoria, é uma consulta só pelo nome, porque
+   * ali o estoque também CRIA linha: um produto que não vendeu no período
+   * mas tem saldo precisa aparecer — senão some justamente a cor parada,
+   * que é o que se quer enxergar.
    */
-  const estoque =
-    maisVendidos || busca
-      ? await fetchEstoqueDeProdutos(Array.from(linhas.values()).map((l) => l.produto))
-      : await fetchEstoqueCategoria(categoria);
+  const estoque = maisVendidos
+    ? await fetchEstoqueDeProdutos(Array.from(linhas.values()).map((l) => l.produto))
+    : await fetchEstoqueCategoria(busca || categoria);
 
   /**
-   * Casar estoque com venda pelo nome exige tolerância: o nome no cadastro do
-   * produto e o nome no item da nota nem sempre são idênticos. Tenta o rótulo
-   * exato e, se falhar, a linha cujo nome seja começo do nome do produto.
+   * O nome no cadastro do produto e o nome no item da nota nem sempre são
+   * idênticos, então o cruzamento aceita o rótulo exato ou o prefixo.
    */
   const chaves = Array.from(linhas.keys()).sort((a, b) => b.length - a.length);
   const casar = (nomeProduto: string): string | null => {
@@ -140,12 +141,12 @@ export async function GET(req: NextRequest) {
   let comSaldoAchado = 0;
   for (const s of estoque.itens) {
     let chave: string | null;
-    if (maisVendidos || busca) {
-      chave = casar(s.nome);
+    if (maisVendidos) {
+      chave = casar(s.nome); // lista fechada: só anexa saldo a quem já está nela
       if (!chave) continue;
     } else {
       if (!combina(s.nome)) continue;
-      chave = rotulo(s.nome, agrup);
+      chave = casar(s.nome) ?? rotulo(s.nome, agrup); // cria linha se não houver
       if (!chave) continue;
     }
     const e = linhas.get(chave) ?? nova(chave);
