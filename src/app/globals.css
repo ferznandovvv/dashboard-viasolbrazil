@@ -501,3 +501,9 @@ th.num { text-align: right; }
   min-width: 190px; max-width: 260px;
 }
 .prod-tbl tr.clicavel:hover td:first-child { background: var(--page); }
+
+.link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--brand); font-size: inherit; font-weight: 600; text-decoration: underline;
+}
+.link:disabled { color: var(--text-muted); cursor: default; }

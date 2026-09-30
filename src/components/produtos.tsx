@@ -97,6 +97,8 @@ export function Produtos({
     to: string;
     units: string[];
     agrup: string;
+    /** Estoque sozinho responde em uma consulta; a venda do período é cara */
+    comVendas: boolean;
   } | null>(null);
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -104,7 +106,7 @@ export function Produtos({
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<{ col: Coluna; desc: boolean }>({
-    col: "faturamento",
+    col: "estoque",
     desc: true,
   });
   const pedido = useRef(0);
@@ -119,7 +121,7 @@ export function Produtos({
     const q = p.get("q") ?? "";
     if (cat) setCategoria(cat);
     if (q) setBusca(q);
-    if (cat || q) setConsulta({ q, cat, from, to, units, agrup });
+    if (cat || q) setConsulta({ q, cat, from, to, units, agrup, comVendas: false });
     // só na montagem: depois disso quem manda é o botão
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -152,7 +154,8 @@ export function Produtos({
       `cat=${encodeURIComponent(consulta.cat)}&q=${encodeURIComponent(consulta.q)}` +
       `&from=${consulta.from}&to=${consulta.to}` +
       `&agrup=${consulta.agrup}` +
-      (consulta.units.length ? `&units=${encodeURIComponent(consulta.units.join(","))}` : "");
+      (consulta.units.length ? `&units=${encodeURIComponent(consulta.units.join(","))}` : "") +
+      (consulta.comVendas ? "" : "&sem=vendas");
     const salvo = guardado.current.get(qs);
     if (salvo) {
       setDados(salvo);
@@ -161,18 +164,6 @@ export function Produtos({
     }
     setCarregando(true);
     setFalha("");
-
-    // Primeiro só o saldo, que volta rápido; a venda do período chega depois
-    if (consulta.cat !== "TOP20") {
-      fetch(`/api/produtos?${qs}&sem=vendas`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((parcial: Resposta | null) => {
-          if (parcial && id === pedido.current && !guardado.current.has(qs)) setDados(parcial);
-        })
-        .catch(() => {
-          /* a busca completa logo abaixo é quem manda */
-        });
-    }
 
     fetch(`/api/produtos?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Erro ${r.status}`))))
@@ -189,6 +180,9 @@ export function Produtos({
   }, [consulta]);
 
   const lojas = Object.keys(LOJA_CORES);
+  const comVendas = consulta?.comVendas ?? false;
+  const carregarVendas = () => consulta && setConsulta({ ...consulta, comVendas: true });
+
   const pendente =
     Boolean(categoria || busca.trim()) &&
     (!consulta ||
@@ -204,7 +198,7 @@ export function Produtos({
     // a pergunta — por isso a busca abre separada por cor
     const agrupUsado = q && !mexeuNoAgrup.current ? "cor" : agrup;
     if (agrupUsado !== agrup) aoTrocarAgrup(agrupUsado as "cor");
-    setConsulta({ q, cat: categoria, from, to, units, agrup: agrupUsado });
+    setConsulta({ q, cat: categoria, from, to, units, agrup: agrupUsado, comVendas: false });
   };
 
   const ordenar = (col: Coluna) =>
@@ -350,8 +344,11 @@ export function Produtos({
           {dados.erro && <div className="card err-msg">{dados.erro}</div>}
           {dados.semVendas && (
             <div className="parcial">
-              Saldo de estoque já carregado. As vendas do período estão vindo — a coluna
-              &quot;vendeu&quot; ainda está zerada.
+              Só estoque — é a consulta rápida. As vendas do período são o que demora, então elas
+              vêm só se você pedir.{" "}
+              <button className="link" onClick={carregarVendas} disabled={carregando}>
+                {carregando ? "carregando vendas…" : "trazer as vendas do período"}
+              </button>
             </div>
           )}
           {dados.incompleto && (
@@ -399,12 +396,16 @@ export function Produtos({
                       {consulta.cat === "TOP20" ? "20 mais vendidos" : dados.categoria}
                       {ordem.col === "produto" ? (ordem.desc ? " ↓" : " ↑") : ""}
                     </th>
-                    <th className="n ord" onClick={() => ordenar("pecas")}>
-                      Vendeu{ordem.col === "pecas" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                    </th>
-                    <th className="n ord" onClick={() => ordenar("faturamento")}>
-                      R${ordem.col === "faturamento" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                    </th>
+                    {!dados.semVendas && (
+                      <>
+                        <th className="n ord" onClick={() => ordenar("pecas")}>
+                          Vendeu{ordem.col === "pecas" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                        </th>
+                        <th className="n ord" onClick={() => ordenar("faturamento")}>
+                          R${ordem.col === "faturamento" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                        </th>
+                      </>
+                    )}
                     <th className="n ord" onClick={() => ordenar("estoque")}>
                       Estoque{ordem.col === "estoque" ? (ordem.desc ? " ↓" : " ↑") : ""}
                     </th>
@@ -413,18 +414,26 @@ export function Produtos({
                         {l}
                       </th>
                     ))}
-                    <th className="n ord" onClick={() => ordenar("cobertura")}>
-                      Cobertura{ordem.col === "cobertura" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                    </th>
-                    <th>Situação</th>
+                    {!dados.semVendas && (
+                      <>
+                        <th className="n ord" onClick={() => ordenar("cobertura")}>
+                          Cobertura{ordem.col === "cobertura" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                        </th>
+                        <th>Situação</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {lista.map((l) => (
                     <tr key={l.produto}>
                       <td>{l.produto}</td>
-                      <td className="n">{l.pecas.toLocaleString("pt-BR")}</td>
-                      <td className="n">{brl.format(l.faturamento)}</td>
+                      {!dados.semVendas && (
+                        <>
+                          <td className="n">{l.pecas.toLocaleString("pt-BR")}</td>
+                          <td className="n">{brl.format(l.faturamento)}</td>
+                        </>
+                      )}
                       <td className="n">
                         <b style={l.estoque < 0 ? { color: "var(--c-meli)" } : undefined}>
                           {l.estoque.toLocaleString("pt-BR")}
@@ -435,12 +444,16 @@ export function Produtos({
                           {l.porLoja[loja] ?? 0}
                         </td>
                       ))}
-                      <td className="n">{l.cobertura === null ? "—" : `${l.cobertura} d`}</td>
-                      <td>
-                        <span className="sit" style={{ color: SITUACAO[l.situacao].cor }}>
-                          {SITUACAO[l.situacao].rotulo}
-                        </span>
-                      </td>
+                      {!dados.semVendas && (
+                        <>
+                          <td className="n">{l.cobertura === null ? "—" : `${l.cobertura} d`}</td>
+                          <td>
+                            <span className="sit" style={{ color: SITUACAO[l.situacao].cor }}>
+                              {SITUACAO[l.situacao].rotulo}
+                            </span>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
