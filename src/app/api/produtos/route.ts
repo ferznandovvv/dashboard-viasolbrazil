@@ -60,6 +60,9 @@ export async function GET(req: NextRequest) {
   const maisVendidos = categoria === "TOP20";
   // Busca por nome atravessa as categorias; a API do saldo filtra por nome
   const busca = (sp.get("q") ?? "").trim().toUpperCase();
+  // ?sem=vendas responde só com o saldo, que é uma consulta só e volta rápido.
+  // A venda do período é o que demora, e vem na segunda chamada.
+  const semVendas = sp.get("sem") === "vendas" && !maisVendidos;
   if (!categoria && !busca) {
     return NextResponse.json({ erro: "Escolha uma categoria", itens: [], transferencias: [] }, { status: 400 });
   }
@@ -69,7 +72,9 @@ export async function GET(req: NextRequest) {
     .filter(([, nome]) => lojasSel.includes(nome))
     .map(([codigo]) => Number(codigo));
 
-  const vendas = await fetchVendasPorProduto(from, to);
+  const vendas = semVendas
+    ? { itens: [], incompleto: false, erro: undefined as string | undefined }
+    : await fetchVendasPorProduto(from, to);
 
   const combina = (nome: string) =>
     busca ? nome.toUpperCase().includes(busca) : maisVendidos || categoriaDe(nome) === categoria;
@@ -226,6 +231,7 @@ export async function GET(req: NextRequest) {
       exemploRecebido: estoque.itens[0]?.nome ?? "",
       estoqueErro: estoque.erro ?? "",
     },
+    semVendas,
     incompleto: vendas.incompleto || Boolean(estoque.incompleto),
     lojasDisponiveis: Object.values(LOJAS),
     erro: estoque.erro ?? vendas.erro,

@@ -25,6 +25,7 @@ interface Transferencia {
 
 interface Resposta {
   dias: number;
+  semVendas?: boolean;
   categoria: string;
   erro?: string;
   incompleto?: boolean;
@@ -160,6 +161,19 @@ export function Produtos({
     }
     setCarregando(true);
     setFalha("");
+
+    // Primeiro só o saldo, que volta rápido; a venda do período chega depois
+    if (consulta.cat !== "TOP20") {
+      fetch(`/api/produtos?${qs}&sem=vendas`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((parcial: Resposta | null) => {
+          if (parcial && id === pedido.current && !guardado.current.has(qs)) setDados(parcial);
+        })
+        .catch(() => {
+          /* a busca completa logo abaixo é quem manda */
+        });
+    }
+
     fetch(`/api/produtos?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Erro ${r.status}`))))
       .then((json: Resposta) => {
@@ -334,6 +348,12 @@ export function Produtos({
             </div>
           )}
           {dados.erro && <div className="card err-msg">{dados.erro}</div>}
+          {dados.semVendas && (
+            <div className="parcial">
+              Saldo de estoque já carregado. As vendas do período estão vindo — a coluna
+              &quot;vendeu&quot; ainda está zerada.
+            </div>
+          )}
           {dados.incompleto && (
             <div className="parcial">
               Os números abaixo já valem, mas ainda falta parte do estoque entrar — recarregue em
