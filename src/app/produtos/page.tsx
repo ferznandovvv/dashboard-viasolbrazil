@@ -17,6 +17,8 @@ export default function PaginaProdutos() {
   const [sel, setSel] = useState<string[]>([]);
   const [agrup, setAgrup] = useState<Agrup>("modelo");
   const [pronto, setPronto] = useState(false);
+  // Estoque é sempre o de agora: período só entra quando se pede a venda
+  const [comVendas, setComVendas] = useState(false);
 
   // Recupera a escolha anterior: recarregar a página não pode zerar o filtro
   useEffect(() => {
@@ -59,17 +61,24 @@ export default function PaginaProdutos() {
         </Link>
       </div>
 
-      <div className="filters" role="group" aria-label="Período">
-        {presets.map((p) => (
-          <button
-            key={p.key}
-            className={period.key === p.key ? "active" : ""}
-            onClick={() => setPeriod(p)}
-          >
-            {p.key}
-          </button>
-        ))}
-      </div>
+      {comVendas && (
+        <>
+          <div className="passo">
+            <span className="passo-num">3</span> Período das vendas
+          </div>
+          <div className="filters" role="group" aria-label="Período">
+            {presets.map((p) => (
+              <button
+                key={p.key}
+                className={period.key === p.key ? "active" : ""}
+                onClick={() => setPeriod(p)}
+              >
+                {p.key}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <Produtos
         from={period.from}
@@ -78,6 +87,8 @@ export default function PaginaProdutos() {
         agrup={agrup}
         aoAlternarLoja={alternar}
         aoTrocarAgrup={setAgrup}
+        comVendas={comVendas}
+        aoPedirVendas={() => setComVendas(true)}
       />
     </main>
   );

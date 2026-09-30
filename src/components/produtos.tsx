@@ -79,6 +79,8 @@ export function Produtos({
   agrup,
   aoAlternarLoja,
   aoTrocarAgrup,
+  comVendas,
+  aoPedirVendas,
 }: {
   from: string;
   to: string;
@@ -86,6 +88,8 @@ export function Produtos({
   agrup: string;
   aoAlternarLoja: (nome: string) => void;
   aoTrocarAgrup: (a: "modelo" | "cor" | "tamanho" | "completo") => void;
+  comVendas: boolean;
+  aoPedirVendas: () => void;
 }) {
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
   const [categoria, setCategoria] = useState("");
@@ -181,8 +185,10 @@ export function Produtos({
   }, [consulta]);
 
   const lojas = Object.keys(LOJA_CORES);
-  const comVendas = consulta?.comVendas ?? false;
-  const carregarVendas = () => consulta && setConsulta({ ...consulta, comVendas: true });
+  const carregarVendas = () => {
+    aoPedirVendas();
+    if (consulta) setConsulta({ ...consulta, comVendas: true });
+  };
 
   const pendente =
     Boolean(categoria || busca.trim()) &&
@@ -192,14 +198,15 @@ export function Produtos({
       consulta.from !== from ||
       consulta.to !== to ||
       consulta.agrup !== agrup ||
-      consulta.units.join(",") !== units.join(","));
+      consulta.units.join(",") !== units.join(",") ||
+      consulta.comVendas !== comVendas);
   const buscar = () => {
     const q = busca.trim();
     // Procurar "bolsa lari" e ver uma linha só, somando as cores, não responde
     // a pergunta — por isso a busca abre separada por cor
     const agrupUsado = q && !mexeuNoAgrup.current ? "cor" : agrup;
     if (agrupUsado !== agrup) aoTrocarAgrup(agrupUsado as "cor");
-    setConsulta({ q, cat: categoria, from, to, units, agrup: agrupUsado, comVendas: false });
+    setConsulta({ q, cat: categoria, from, to, units, agrup: agrupUsado, comVendas });
   };
 
   const ordenar = (col: Coluna) =>
@@ -407,9 +414,11 @@ export function Produtos({
                         </th>
                       </>
                     )}
-                    <th className="n ord" onClick={() => ordenar("estoque")}>
-                      Estoque{ordem.col === "estoque" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                    </th>
+                    {!dados.semVendas && (
+                      <th className="n ord" onClick={() => ordenar("estoque")}>
+                        Estoque{ordem.col === "estoque" ? (ordem.desc ? " ↓" : " ↑") : ""}
+                      </th>
+                    )}
                     {comSaldo.map((l) => (
                       <th key={l} className="n">
                         {l}
@@ -435,11 +444,13 @@ export function Produtos({
                           <td className="n">{brl.format(l.faturamento)}</td>
                         </>
                       )}
-                      <td className="n">
-                        <b style={l.estoque < 0 ? { color: "var(--c-meli)" } : undefined}>
-                          {l.estoque.toLocaleString("pt-BR")}
-                        </b>
-                      </td>
+                      {!dados.semVendas && (
+                        <td className="n">
+                          <b style={l.estoque < 0 ? { color: "var(--c-meli)" } : undefined}>
+                            {l.estoque.toLocaleString("pt-BR")}
+                          </b>
+                        </td>
+                      )}
                       {comSaldo.map((loja) => (
                         <td key={loja} className="n loja-col">
                           {l.porLoja[loja] ?? 0}
@@ -485,14 +496,20 @@ export function Produtos({
                 .{" "}
               </>
             )}
-            {consulta.units.length > 0 ? (
-                <>
-                  <b>Vendas de {consulta.units.join(", ")}</b>, mas o estoque é de{" "}
-                  <b>todas as lojas</b> — é assim que dá para ver quem tem peça para remanejar.{" "}
-                </>
-              ) : null}
-              Estoque é o saldo de agora; venda é do período escolhido. Cobertura = quantos dias o
-              saldo dura no ritmo dos últimos {dados.dias} dias.
+            {dados.semVendas ? (
+              "Números por loja, em peças."
+            ) : (
+              <>
+                {consulta.units.length > 0 ? (
+                  <>
+                    <b>Vendas de {consulta.units.join(", ")}</b>, mas o estoque é de{" "}
+                    <b>todas as lojas</b> — é assim que dá para ver quem tem peça para remanejar.{" "}
+                  </>
+                ) : null}
+                Venda é do período escolhido. Cobertura = quantos dias o saldo dura no ritmo dos
+                últimos {dados.dias} dias.
+              </>
+            )}
             </div>
           </div>
         </div>
