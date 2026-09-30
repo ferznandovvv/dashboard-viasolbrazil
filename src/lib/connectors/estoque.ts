@@ -43,6 +43,8 @@ export interface Estoque {
 interface Guardado {
   at: number;
   incompleto: boolean;
+  /** Página onde parar de varrer, para continuar na próxima chamada */
+  proximaPagina?: number;
   itens: SaldoProduto[];
 }
 
@@ -70,19 +72,26 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
   if (guardado) memoria = guardado;
   if (!forcar && guardado && Date.now() - guardado.at < VALIDADE_MS) return resposta(guardado);
 
-  // Nada guardado: aí não tem jeito, varre agora
-  if (!guardado || forcar) {
-    const novo = await varrer();
-    if (novo.itens.length > 0) {
-      memoria = { at: Date.now(), incompleto: Boolean(novo.incompleto), itens: novo.itens };
-      await gravarBlob(PREFIXO, CHAVE, memoria);
-      return resposta(memoria);
-    }
-    if (!guardado) return novo;
+  // Sem foto, foto vencida ou foto pela metade: varre (continuando de onde
+  // parou, quando for o caso — são quase 180 páginas e nem sempre cabem numa
+  // requisição só)
+  const continuar = !forcar && guardado?.incompleto ? guardado : null;
+  const novo = await varrer(continuar?.proximaPagina ?? 1, continuar?.itens ?? []);
+
+  if (novo.itens.length > 0) {
+    memoria = {
+      at: continuar ? continuar.at : Date.now(),
+      incompleto: Boolean(novo.incompleto),
+      proximaPagina: novo.proximaPagina,
+      itens: novo.itens,
+    };
+    await gravarBlob(PREFIXO, CHAVE, memoria);
+    return resposta(memoria);
   }
 
-  // Foto velha é melhor que nenhuma; o cron atualiza de madrugada
-  return resposta(guardado!);
+  // Deu ruim agora: foto velha é melhor que nenhuma
+  if (guardado) return resposta(guardado);
+  return novo;
 }
 
 function resposta(g: Guardado): Estoque {
@@ -94,8 +103,15 @@ function resposta(g: Guardado): Estoque {
   };
 }
 
-/** Varre o catálogo inteiro; sem filtro de nome, que a API ignora na prática. */
-async function varrer(): Promise<Estoque> {
+/**
+ * Varre o catálogo. Como a API só aceita nome exato de produto, não há como
+ * pedir menos — então a varredura é retomável: guarda onde parou e a próxima
+ * chamada continua dali, até fechar a foto inteira.
+ */
+async function varrer(
+  dePagina: number,
+  itensAnteriores: SaldoProduto[]
+): Promise<Estoque & { proximaPagina?: number }> {
   const inicio = Date.now();
   const ORCAMENTO = 45000;
   const filiais = Object.keys(LOJAS).map(Number);
@@ -108,7 +124,7 @@ async function varrer(): Promise<Estoque> {
     pageSize: PAGE,
   });
 
-  const itens: SaldoProduto[] = [];
+  const itens: SaldoProduto[] = [...itensAnteriores];
   const coletar = (linhas: LinhaSaldo[]) => {
     for (const l of linhas) {
       const nome = (l.productName ?? "").trim();
@@ -128,7 +144,7 @@ async function varrer(): Promise<Estoque> {
   };
 
   try {
-    const primeira = await totvsFetch(BALANCES, corpo(1));
+    const primeira = await totvsFetch(BALANCES, corpo(dePagina));
     if (primeira.status !== 200) {
       const msg = primeira.json ? JSON.stringify(primeira.json).slice(0, 160) : primeira.text.slice(0, 160);
       return { conectado: true, itens: [], erro: `Estoque: HTTP ${primeira.status} — ${msg}` };
@@ -137,7 +153,8 @@ async function varrer(): Promise<Estoque> {
 
     const paginas = Math.min(Math.ceil(Number(primeira.json?.count ?? 0) / PAGE), 300);
     let incompleto = false;
-    for (let pagina = 2; pagina <= paginas; pagina += 20) {
+    let pagina = dePagina + 1;
+    for (; pagina <= paginas; pagina += 20) {
       if (Date.now() - inicio > ORCAMENTO) {
         incompleto = true;
         break;
@@ -148,7 +165,12 @@ async function varrer(): Promise<Estoque> {
         if (r.status === 200) coletar((r.json?.items as LinhaSaldo[] | undefined) ?? []);
       }
     }
-    return { conectado: true, itens, incompleto };
+    return {
+      conectado: true,
+      itens,
+      incompleto,
+      proximaPagina: incompleto ? pagina : undefined,
+    };
   } catch (e) {
     return { conectado: true, itens, erro: e instanceof Error ? e.message : "Erro desconhecido" };
   }

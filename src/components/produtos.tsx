@@ -221,7 +221,8 @@ export function Produtos({
     a.click();
     URL.revokeObjectURL(url);
   };
-  const comSaldo = lojas.filter((l) => dados?.itens.some((i) => (i.porLoja[l] ?? 0) !== 0));
+  // Todas as lojas, sempre: "zero em Belo Horizonte" também é resposta
+  const comSaldo = lojas;
   const lista = (dados?.itens ?? [])
     .filter((l) => filtro === "todos" || l.situacao === filtro)
     .sort((a, b) => {
@@ -361,8 +362,9 @@ export function Produtos({
           )}
           {dados.incompleto && (
             <div className="parcial">
-              Os números abaixo já valem, mas ainda falta parte do estoque entrar — recarregue em
-              alguns minutos e eles podem aumentar.
+              A foto do estoque ainda está sendo montada (são quase 18 mil produtos). Ela continua
+              de onde parou a cada consulta — busque de novo em alguns segundos até este aviso
+              sumir.
             </div>
           )}
 
