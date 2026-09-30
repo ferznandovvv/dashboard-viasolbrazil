@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
-import { fetchEstoque, fetchEstoqueCategoria } from "@/lib/connectors/estoque";
+import { fetchEstoqueCategoria, fetchEstoqueDeProdutos } from "@/lib/connectors/estoque";
 import { Agrupamento, categoriaDe, rotulo } from "@/lib/produtos";
 import { spMidnight, todaySpKey } from "@/lib/types";
 
@@ -69,11 +69,7 @@ export async function GET(req: NextRequest) {
     .filter(([, nome]) => lojasSel.includes(nome))
     .map(([codigo]) => Number(codigo));
 
-  const [vendas, estoque] = await Promise.all([
-    fetchVendasPorProduto(from, to),
-    // Nos 20 mais vendidos os produtos podem ser de qualquer categoria
-    busca ? fetchEstoqueCategoria(busca) : maisVendidos ? fetchEstoque() : fetchEstoqueCategoria(categoria),
-  ]);
+  const vendas = await fetchVendasPorProduto(from, to);
 
   const combina = (nome: string) =>
     busca ? nome.toUpperCase().includes(busca) : maisVendidos || categoriaDe(nome) === categoria;
@@ -115,16 +111,27 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Saldo atual, restrito à categoria e às lojas filtradas
+  /**
+   * O saldo vem de TODAS as lojas, mesmo com uma loja filtrada: a pergunta é
+   * "Ribeirão vendeu isso, quem tem para mandar?" — restringir o estoque à
+   * loja filtrada esconderia justamente a resposta.
+   *
+   * Nos mais vendidos e na busca, consulta só os produtos da lista; numa
+   * categoria inteira, uma consulta só pela categoria sai mais barato.
+   */
+  const estoque =
+    maisVendidos || busca
+      ? await fetchEstoqueDeProdutos(Array.from(linhas.values()).map((l) => l.produto))
+      : await fetchEstoqueCategoria(categoria);
+
   for (const s of estoque.itens) {
-    if (!combina(s.nome)) continue;
     const chave = rotulo(s.nome, agrup);
     if (!chave) continue;
-    // No atalho, só interessa o saldo de quem já está na lista
-    if (maisVendidos && !linhas.has(chave)) continue;
+    // Com lista definida, só interessa o saldo de quem já está nela
+    if ((maisVendidos || busca) && !linhas.has(chave)) continue;
+    if (!maisVendidos && !busca && !combina(s.nome)) continue;
     const e = linhas.get(chave) ?? nova(chave);
     for (const [loja, qtd] of Object.entries(s.porLoja)) {
-      if (lojasSel.length && !lojasSel.includes(loja)) continue;
       e.estoque += qtd;
       e.porLoja[loja] = (e.porLoja[loja] ?? 0) + qtd;
     }

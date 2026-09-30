@@ -67,6 +67,46 @@ export async function fetchEstoqueCategoria(categoria: string): Promise<Estoque>
   return { ...completo, itens: completo.itens };
 }
 
+/**
+ * Saldo de uma lista específica de produtos, em todas as filiais.
+ *
+ * É o caminho rápido: em vez de varrer o catálogo e jogar 99% fora, faz uma
+ * consulta por produto (a API filtra por nome) e junta. Vinte produtos custam
+ * vinte consultas pequenas, contra quase duzentas páginas da varredura.
+ */
+export async function fetchEstoqueDeProdutos(nomes: string[]): Promise<Estoque> {
+  if (!totvsConfigured()) return { conectado: false, itens: [] };
+  const alvos = Array.from(new Set(nomes.map((n) => n.trim()).filter(Boolean))).slice(0, 60);
+  if (alvos.length === 0) return { conectado: true, itens: [] };
+
+  const itens: SaldoProduto[] = [];
+  let erro: string | undefined;
+
+  for (let i = 0; i < alvos.length; i += 8) {
+    const lote = alvos.slice(i, i + 8);
+    const partes = await Promise.all(
+      lote.map((nome) =>
+        comCache(`estoque|prod|${nome}`, () => buscarEstoque({ productName: nome }), 60 * 60000)
+      )
+    );
+    for (const parte of partes) {
+      if (parte.erro) erro = erro ?? parte.erro;
+      itens.push(...parte.itens);
+    }
+  }
+
+  // O mesmo produto pode vir em mais de uma consulta
+  const vistos = new Set<string>();
+  const unicos = itens.filter((i) => {
+    const k = `${i.nome}|${i.cor}|${i.tamanho}`;
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+
+  return { conectado: true, itens: unicos, erro };
+}
+
 async function buscarEstoque(filtroExtra: Record<string, unknown> = {}): Promise<Estoque> {
   const inicio = Date.now();
   const ORCAMENTO = 30000; // além disso a rota estoura o tempo da Vercel

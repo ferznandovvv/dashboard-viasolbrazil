@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Produtos } from "@/components/produtos";
 import { type Period, buildPresets } from "@/lib/periodos";
 
@@ -9,11 +9,38 @@ import { type Period, buildPresets } from "@/lib/periodos";
  * Produtos e estoque em página própria: é a consulta mais pesada do sistema,
  * e a dashboard de vendas precisa continuar leve.
  */
+type Agrup = "modelo" | "cor" | "tamanho" | "completo";
+
 export default function PaginaProdutos() {
   const [presets] = useState(buildPresets);
   const [period, setPeriod] = useState<Period>(presets[3]); // Mês atual
   const [sel, setSel] = useState<string[]>([]);
-  const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
+  const [agrup, setAgrup] = useState<Agrup>("modelo");
+  const [pronto, setPronto] = useState(false);
+
+  // Recupera a escolha anterior: recarregar a página não pode zerar o filtro
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const periodo = p.get("periodo");
+    const achado = presets.find((x) => x.key === periodo);
+    if (achado) setPeriod(achado);
+    const lojas = p.get("lojas");
+    if (lojas) setSel(lojas.split(",").filter(Boolean));
+    const a = p.get("agrup") as Agrup | null;
+    if (a) setAgrup(a);
+    setPronto(true);
+  }, [presets]);
+
+  // E guarda a atual, sem criar entrada nova no histórico do navegador
+  useEffect(() => {
+    if (!pronto) return;
+    const p = new URLSearchParams(window.location.search);
+    p.set("periodo", period.key);
+    p.set("agrup", agrup);
+    if (sel.length) p.set("lojas", sel.join(","));
+    else p.delete("lojas");
+    window.history.replaceState(null, "", `?${p.toString()}`);
+  }, [pronto, period, sel, agrup]);
 
   const alternar = (nome: string) =>
     setSel((atual) => (atual.includes(nome) ? atual.filter((x) => x !== nome) : [...atual, nome]));

@@ -109,6 +109,28 @@ export function Produtos({
   const pedido = useRef(0);
   const guardado = useRef<Map<string, Resposta>>(new Map());
 
+  // Categoria e busca também sobrevivem à recarga
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const cat = p.get("cat") ?? "";
+    const q = p.get("q") ?? "";
+    if (cat) setCategoria(cat);
+    if (q) setBusca(q);
+    if (cat || q) setConsulta({ q, cat, from, to, units, agrup });
+    // só na montagem: depois disso quem manda é o botão
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!consulta) return;
+    const p = new URLSearchParams(window.location.search);
+    if (consulta.cat) p.set("cat", consulta.cat);
+    else p.delete("cat");
+    if (consulta.q) p.set("q", consulta.q);
+    else p.delete("q");
+    window.history.replaceState(null, "", `?${p.toString()}`);
+  }, [consulta]);
+
   // A lista de categorias é leve e vem do estoque já em cache
   useEffect(() => {
     fetch("/api/produtos/categorias", { cache: "no-store" })
@@ -385,6 +407,12 @@ export function Produtos({
               </button>
             )}
             <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
+              {consulta.units.length > 0 ? (
+                <>
+                  <b>Vendas de {consulta.units.join(", ")}</b>, mas o estoque é de{" "}
+                  <b>todas as lojas</b> — é assim que dá para ver quem tem peça para remanejar.{" "}
+                </>
+              ) : null}
               Estoque é o saldo de agora; venda é do período escolhido. Cobertura = quantos dias o
               saldo dura no ritmo dos últimos {dados.dias} dias.
             </div>
