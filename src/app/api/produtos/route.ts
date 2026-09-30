@@ -124,17 +124,36 @@ export async function GET(req: NextRequest) {
       ? await fetchEstoqueDeProdutos(Array.from(linhas.values()).map((l) => l.produto))
       : await fetchEstoqueCategoria(categoria);
 
+  /**
+   * Casar estoque com venda pelo nome exige tolerância: o nome no cadastro do
+   * produto e o nome no item da nota nem sempre são idênticos. Tenta o rótulo
+   * exato e, se falhar, a linha cujo nome seja começo do nome do produto.
+   */
+  const chaves = Array.from(linhas.keys()).sort((a, b) => b.length - a.length);
+  const casar = (nomeProduto: string): string | null => {
+    const exato = rotulo(nomeProduto, agrup);
+    if (linhas.has(exato)) return exato;
+    const alvo = nomeProduto.trim().toUpperCase();
+    return chaves.find((k) => alvo.startsWith(k.toUpperCase())) ?? null;
+  };
+
+  let comSaldoAchado = 0;
   for (const s of estoque.itens) {
-    const chave = rotulo(s.nome, agrup);
-    if (!chave) continue;
-    // Com lista definida, só interessa o saldo de quem já está nela
-    if ((maisVendidos || busca) && !linhas.has(chave)) continue;
-    if (!maisVendidos && !busca && !combina(s.nome)) continue;
+    let chave: string | null;
+    if (maisVendidos || busca) {
+      chave = casar(s.nome);
+      if (!chave) continue;
+    } else {
+      if (!combina(s.nome)) continue;
+      chave = rotulo(s.nome, agrup);
+      if (!chave) continue;
+    }
     const e = linhas.get(chave) ?? nova(chave);
     for (const [loja, qtd] of Object.entries(s.porLoja)) {
       e.estoque += qtd;
       e.porLoja[loja] = (e.porLoja[loja] ?? 0) + qtd;
     }
+    comSaldoAchado += 1;
     linhas.set(chave, e);
   }
 
@@ -196,6 +215,16 @@ export async function GET(req: NextRequest) {
     lojas: lojasSel,
     estoqueConectado: estoque.conectado,
     categoria: busca ? `Busca: ${busca}` : categoria,
+    // Diagnóstico do cruzamento: separa "a API não devolveu" de
+    // "devolveu mas o nome não bate com o da venda"
+    diag: {
+      produtosConsultados: linhas.size,
+      saldosRecebidos: estoque.itens.length,
+      saldosCasados: comSaldoAchado,
+      exemploConsultado: Array.from(linhas.keys())[0] ?? "",
+      exemploRecebido: estoque.itens[0]?.nome ?? "",
+      estoqueErro: estoque.erro ?? "",
+    },
     incompleto: vendas.incompleto || Boolean(estoque.incompleto),
     lojasDisponiveis: Object.values(LOJAS),
     erro: estoque.erro ?? vendas.erro,

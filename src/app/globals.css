@@ -492,3 +492,12 @@ th.num { text-align: right; }
   border: 1px solid var(--border); border-radius: 999px; font-size: 12.5px; cursor: pointer;
 }
 .exportar:hover { color: var(--text-primary); background: var(--page); }
+
+/* Nome do produto fixo enquanto as colunas de loja rolam para o lado */
+.prod-tbl th:first-child,
+.prod-tbl td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface-1);
+  min-width: 190px; max-width: 260px;
+}
+.prod-tbl tr.clicavel:hover td:first-child { background: var(--page); }

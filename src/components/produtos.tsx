@@ -307,6 +307,11 @@ export function Produtos({
 
       {consulta && dados && (
         <div style={{ opacity: carregando ? 0.6 : 1 }}>
+          {pendente && !carregando && (
+            <div className="parcial">
+              Isto é o resultado do filtro anterior — toque no botão acima para atualizar.
+            </div>
+          )}
           {dados.erro && <div className="card err-msg">{dados.erro}</div>}
           {dados.incompleto && (
             <div className="parcial">
@@ -400,6 +405,11 @@ export function Produtos({
                 </tbody>
               </table>
             </div>
+            {comSaldo.length > 3 && (
+              <div className="rank-aviso" style={{ margin: "8px 0 0" }}>
+                Arraste a tabela para o lado para ver todas as lojas.
+              </div>
+            )}
             {lista.length === 0 && <div className="empty">Nenhum produto nessa situação.</div>}
             {lista.length > 0 && (
               <button className="exportar" onClick={baixarCSV}>
