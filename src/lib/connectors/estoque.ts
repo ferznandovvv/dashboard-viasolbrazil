@@ -3,14 +3,23 @@
  *
  * O depósito 1 é o FISICO — o que está na loja. O 3 (FIS+INSPECAO) é a soma
  * dele com o 2, então contar os três dobraria o saldo.
+ *
+ * A API só filtra por nome EXATO de produto (medido: "BOLSA LARI" devolve 0,
+ * sem filtro devolve 17.605), então não dá para pedir "os produtos que
+ * começam com". A estratégia é baixar o catálogo inteiro de vez em quando,
+ * guardar o resultado e filtrar aqui — é o que mantém a tela instantânea.
  */
 
 import { LOJAS, totvsConfigured, totvsFetch } from "./totvs";
-import { comCache } from "../cache";
+import { gravarBlob, lerBlobs } from "../blobCache";
 
 const BALANCES = "/api/totvsmoda/product/v2/balances/search";
 const DEPOSITO_FISICO = 1;
 const PAGE = 100;
+const PREFIXO = "estoque/";
+const CHAVE = "atual";
+/** Saldo muda o dia todo, mas de hora em hora basta para decidir reposição. */
+const VALIDADE_MS = 60 * 60000;
 
 export interface SaldoProduto {
   /** Nome completo, como vem na nota — é o que permite cruzar com a venda */
@@ -21,6 +30,22 @@ export interface SaldoProduto {
   porLoja: Record<string, number>;
 }
 
+export interface Estoque {
+  conectado: boolean;
+  itens: SaldoProduto[];
+  /** Não deu tempo de varrer tudo nesta requisição */
+  incompleto?: boolean;
+  /** Quando esta foto do estoque foi tirada */
+  em?: string;
+  erro?: string;
+}
+
+interface Guardado {
+  at: number;
+  incompleto: boolean;
+  itens: SaldoProduto[];
+}
+
 interface LinhaSaldo {
   productName?: string;
   colorName?: string;
@@ -28,91 +53,54 @@ interface LinhaSaldo {
   balances?: { branchCode?: number; stockCode?: number; stock?: number }[];
 }
 
-export interface Estoque {
-  conectado: boolean;
-  itens: SaldoProduto[];
-  /** Não deu tempo de varrer tudo nesta requisição */
-  incompleto?: boolean;
-  erro?: string;
-}
-
-export async function fetchEstoque(): Promise<Estoque> {
-  if (!totvsConfigured()) return { conectado: false, itens: [] };
-  // Saldo muda o dia todo, mas de hora em hora é resolução de sobra para
-  // decidir reposição — e a consulta inteira custa quase 200 páginas
-  return comCache("estoque|fisico", buscarEstoque, 60 * 60000);
-}
+let memoria: Guardado | null = null;
 
 /**
- * Saldo de uma categoria só. A API filtra por nome de produto, e como a
- * categoria é o começo do nome ("TOP ..."), isso evita varrer o catálogo
- * inteiro para montar uma tela de uma categoria.
- *
- * Se o filtro por nome não devolver nada — comportamento que pode variar no
- * ERP —, cai para a varredura completa, que é lenta mas sempre funciona.
+ * Foto atual do estoque. Se houver uma recente, devolve na hora; se houver
+ * uma velha, devolve a velha mesmo assim (melhor um número de ontem em um
+ * segundo do que o de agora em quarenta) e só varre de novo quando não há
+ * nada guardado.
  */
-export async function fetchEstoqueCategoria(categoria: string): Promise<Estoque> {
+export async function fetchEstoque(forcar = false): Promise<Estoque> {
   if (!totvsConfigured()) return { conectado: false, itens: [] };
-  const alvo = categoria.trim();
-  if (!alvo) return fetchEstoque();
 
-  const porNome = await comCache(
-    `estoque|cat|${alvo}`,
-    () => buscarEstoque({ productName: alvo }),
-    60 * 60000
-  );
-  if (porNome.itens.length > 0 || porNome.erro) return porNome;
+  if (!forcar && memoria && Date.now() - memoria.at < VALIDADE_MS) return resposta(memoria);
 
-  const completo = await fetchEstoque();
-  return { ...completo, itens: completo.itens };
-}
+  const guardado = (await lerBlobs<Guardado>(PREFIXO, [CHAVE])).get(CHAVE);
+  if (guardado) memoria = guardado;
+  if (!forcar && guardado && Date.now() - guardado.at < VALIDADE_MS) return resposta(guardado);
 
-/**
- * Saldo de uma lista específica de produtos, em todas as filiais.
- *
- * É o caminho rápido: em vez de varrer o catálogo e jogar 99% fora, faz uma
- * consulta por produto (a API filtra por nome) e junta. Vinte produtos custam
- * vinte consultas pequenas, contra quase duzentas páginas da varredura.
- */
-export async function fetchEstoqueDeProdutos(nomes: string[]): Promise<Estoque> {
-  if (!totvsConfigured()) return { conectado: false, itens: [] };
-  const alvos = Array.from(new Set(nomes.map((n) => n.trim()).filter(Boolean))).slice(0, 60);
-  if (alvos.length === 0) return { conectado: true, itens: [] };
-
-  const itens: SaldoProduto[] = [];
-  let erro: string | undefined;
-
-  for (let i = 0; i < alvos.length; i += 8) {
-    const lote = alvos.slice(i, i + 8);
-    const partes = await Promise.all(
-      lote.map((nome) =>
-        comCache(`estoque|prod|${nome}`, () => buscarEstoque({ productName: nome }), 60 * 60000)
-      )
-    );
-    for (const parte of partes) {
-      if (parte.erro) erro = erro ?? parte.erro;
-      itens.push(...parte.itens);
+  // Nada guardado: aí não tem jeito, varre agora
+  if (!guardado || forcar) {
+    const novo = await varrer();
+    if (novo.itens.length > 0) {
+      memoria = { at: Date.now(), incompleto: Boolean(novo.incompleto), itens: novo.itens };
+      await gravarBlob(PREFIXO, CHAVE, memoria);
+      return resposta(memoria);
     }
+    if (!guardado) return novo;
   }
 
-  // O mesmo produto pode vir em mais de uma consulta
-  const vistos = new Set<string>();
-  const unicos = itens.filter((i) => {
-    const k = `${i.nome}|${i.cor}|${i.tamanho}`;
-    if (vistos.has(k)) return false;
-    vistos.add(k);
-    return true;
-  });
-
-  return { conectado: true, itens: unicos, erro };
+  // Foto velha é melhor que nenhuma; o cron atualiza de madrugada
+  return resposta(guardado!);
 }
 
-async function buscarEstoque(filtroExtra: Record<string, unknown> = {}): Promise<Estoque> {
+function resposta(g: Guardado): Estoque {
+  return {
+    conectado: true,
+    itens: g.itens,
+    incompleto: g.incompleto,
+    em: new Date(g.at).toISOString(),
+  };
+}
+
+/** Varre o catálogo inteiro; sem filtro de nome, que a API ignora na prática. */
+async function varrer(): Promise<Estoque> {
   const inicio = Date.now();
-  const ORCAMENTO = 18000; // devolver parcial é melhor do que estourar a rota
+  const ORCAMENTO = 45000;
   const filiais = Object.keys(LOJAS).map(Number);
   const corpo = (pagina: number) => ({
-    filter: { startProductCode: 1, endProductCode: 99999999, ...filtroExtra },
+    filter: { startProductCode: 1, endProductCode: 99999999 },
     option: {
       balances: filiais.map((f) => ({ branchCode: f, stockCodeList: [DEPOSITO_FISICO] })),
     },
@@ -147,15 +135,15 @@ async function buscarEstoque(filtroExtra: Record<string, unknown> = {}): Promise
     }
     coletar((primeira.json?.items as LinhaSaldo[] | undefined) ?? []);
 
-    const paginas = Math.min(Math.ceil(Number(primeira.json?.count ?? 0) / PAGE), 250);
+    const paginas = Math.min(Math.ceil(Number(primeira.json?.count ?? 0) / PAGE), 300);
     let incompleto = false;
-    for (let pagina = 2; pagina <= paginas; pagina += 15) {
+    for (let pagina = 2; pagina <= paginas; pagina += 20) {
       if (Date.now() - inicio > ORCAMENTO) {
         incompleto = true;
         break;
       }
       const lote = [];
-      for (let p = pagina; p < pagina + 15 && p <= paginas; p++) lote.push(totvsFetch(BALANCES, corpo(p)));
+      for (let p = pagina; p < pagina + 20 && p <= paginas; p++) lote.push(totvsFetch(BALANCES, corpo(p)));
       for (const r of await Promise.all(lote)) {
         if (r.status === 200) coletar((r.json?.items as LinhaSaldo[] | undefined) ?? []);
       }

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const [vendasMes, produtos, estoque] = await Promise.all([
     fetchTotvsSales(inicioMes, hoje),
     fetchVendasPorProduto(inicioMes, hoje, 40000),
-    fetchEstoque(),
+    fetchEstoque(true), // de madrugada, varre de novo para a foto ficar fresca
   ]);
 
   // A lista de categorias sai do mesmo estoque, e fica pronta para a tela

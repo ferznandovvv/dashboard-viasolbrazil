@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
-import { fetchEstoqueCategoria, fetchEstoqueDeProdutos } from "@/lib/connectors/estoque";
+import { fetchEstoque } from "@/lib/connectors/estoque";
 import { Agrupamento, categoriaDe, rotulo } from "@/lib/produtos";
 import { spMidnight, todaySpKey } from "@/lib/types";
 
@@ -127,9 +127,8 @@ export async function GET(req: NextRequest) {
    * mas tem saldo precisa aparecer — senão some justamente a cor parada,
    * que é o que se quer enxergar.
    */
-  const estoque = maisVendidos
-    ? await fetchEstoqueDeProdutos(Array.from(linhas.values()).map((l) => l.produto))
-    : await fetchEstoqueCategoria(busca || categoria);
+  // Uma foto só do estoque, filtrada aqui: a API não filtra por parte do nome
+  const estoque = await fetchEstoque();
 
   /**
    * O nome no cadastro do produto e o nome no item da nota nem sempre são
@@ -230,8 +229,10 @@ export async function GET(req: NextRequest) {
       exemploConsultado: Array.from(linhas.keys())[0] ?? "",
       exemploRecebido: estoque.itens[0]?.nome ?? "",
       estoqueErro: estoque.erro ?? "",
+      estoqueEm: estoque.em ?? "",
     },
     semVendas,
+    estoqueEm: estoque.em ?? "",
     incompleto: vendas.incompleto || Boolean(estoque.incompleto),
     lojasDisponiveis: Object.values(LOJAS),
     erro: estoque.erro ?? vendas.erro,

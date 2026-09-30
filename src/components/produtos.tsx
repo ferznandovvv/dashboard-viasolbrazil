@@ -26,6 +26,7 @@ interface Transferencia {
 interface Resposta {
   dias: number;
   semVendas?: boolean;
+  estoqueEm?: string;
   categoria: string;
   erro?: string;
   incompleto?: boolean;
@@ -471,7 +472,20 @@ export function Produtos({
               </button>
             )}
             <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
-              {consulta.units.length > 0 ? (
+              {dados.estoqueEm && (
+              <>
+                Saldo de{" "}
+                {new Date(dados.estoqueEm).toLocaleString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "America/Sao_Paulo",
+                })}
+                .{" "}
+              </>
+            )}
+            {consulta.units.length > 0 ? (
                 <>
                   <b>Vendas de {consulta.units.join(", ")}</b>, mas o estoque é de{" "}
                   <b>todas as lojas</b> — é assim que dá para ver quem tem peça para remanejar.{" "}
