@@ -511,3 +511,5 @@ th.num { text-align: right; }
 
 .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .prod-tbl th:not(:first-child), .prod-tbl td:not(:first-child) { padding-left: 14px; }
+
+.prod-tbl td.loja-col.ordenada { color: var(--text-primary); font-weight: 600; }

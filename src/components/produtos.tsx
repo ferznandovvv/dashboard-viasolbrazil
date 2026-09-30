@@ -50,7 +50,8 @@ const SITUACAO: Record<Linha["situacao"], { rotulo: string; cor: string }> = {
 };
 
 type Filtro = "todos" | "ruptura" | "acabando" | "parado" | "negativo";
-type Coluna = "produto" | "pecas" | "faturamento" | "estoque" | "cobertura";
+/** "loja:Centro" ordena pelo saldo daquela loja. */
+type Coluna = "produto" | "pecas" | "faturamento" | "estoque" | "cobertura" | `loja:${string}`;
 
 /** Gera o CSV da lista como ela está na tela. */
 function paraCSV(linhas: Linha[], lojas: string[]): string {
@@ -228,13 +229,21 @@ export function Produtos({
     .sort((a, b) => {
       const dir = ordem.desc ? -1 : 1;
       if (ordem.col === "produto") return a.produto.localeCompare(b.produto, "pt-BR") * dir;
+      if (ordem.col.startsWith("loja:")) {
+        const loja = ordem.col.slice(5);
+        return ((a.porLoja[loja] ?? 0) - (b.porLoja[loja] ?? 0)) * dir;
+      }
       if (ordem.col === "cobertura") {
         // Sem venda não tem cobertura: fica sempre no fim
         const va = a.cobertura ?? Number.MAX_SAFE_INTEGER;
         const vb = b.cobertura ?? Number.MAX_SAFE_INTEGER;
         return (va - vb) * dir;
       }
-      return (a[ordem.col] - b[ordem.col]) * dir;
+      return (
+        (a[ordem.col as "pecas" | "faturamento" | "estoque"] -
+          b[ordem.col as "pecas" | "faturamento" | "estoque"]) *
+        dir
+      );
     });
 
   return (
@@ -422,8 +431,14 @@ export function Produtos({
                       </th>
                     )}
                     {comSaldo.map((l) => (
-                      <th key={l} className="n">
+                      <th
+                        key={l}
+                        className="n ord"
+                        onClick={() => ordenar(`loja:${l}`)}
+                        title={`Ordenar pelo saldo de ${l}`}
+                      >
                         {l}
+                        {ordem.col === `loja:${l}` ? (ordem.desc ? " ↓" : " ↑") : ""}
                       </th>
                     ))}
                     {!dados.semVendas && (
@@ -454,7 +469,10 @@ export function Produtos({
                         </td>
                       )}
                       {comSaldo.map((loja) => (
-                        <td key={loja} className="n loja-col">
+                        <td
+                          key={loja}
+                          className={`n loja-col${ordem.col === `loja:${loja}` ? " ordenada" : ""}`}
+                        >
                           {l.porLoja[loja] ?? 0}
                         </td>
                       ))}
