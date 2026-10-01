@@ -2,6 +2,7 @@ import type { AdsSpendResult } from "./meta";
 
 import { comCache } from "../cache";
 import { addDays } from "../types";
+import { env } from "../env";
 
 const API = "https://business-api.tiktok.com/open_api/v1.3";
 
@@ -37,8 +38,8 @@ async function buscarTikTokAds(
   fromKey: string,
   toKey: string,
 ): Promise<AdsSpendResult> {
-  const token = process.env.TIKTOK_ADS_ACCESS_TOKEN;
-  const advertiserId = process.env.TIKTOK_ADS_ADVERTISER_ID;
+  const token = (env("TIKTOK_ADS_ACCESS_TOKEN") || undefined);
+  const advertiserId = (env("TIKTOK_ADS_ADVERTISER_ID") || undefined);
   if (!token || !advertiserId) {
     return { connected: false, daily: [] };
   }

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "./lib/env";
 
 /**
  * Proteção opcional por senha: defina DASHBOARD_PASSWORD nas variáveis de
  * ambiente e o dashboard passa a exigir login. Sem a variável, fica aberto.
  */
 export function middleware(req: NextRequest) {
-  const password = process.env.DASHBOARD_PASSWORD;
+  const password = (env("DASHBOARD_PASSWORD") || undefined);
   if (!password) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
@@ -18,7 +19,7 @@ export function middleware(req: NextRequest) {
   // Modo TV: roda sem login na tela da loja, mas com um código na URL —
   // senão o faturamento por loja fica aberto para quem tiver o link.
   if (pathname === "/tv" || pathname === "/api/tv") {
-    const codigo = process.env.TV_CODE;
+    const codigo = (env("TV_CODE") || undefined);
     if (codigo && req.nextUrl.searchParams.get("k") === codigo) return NextResponse.next();
   }
 

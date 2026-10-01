@@ -1,5 +1,6 @@
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
+import { env } from "../env";
 
 const API = "https://api.mercadolibre.com";
 
@@ -11,9 +12,9 @@ let rotatedRefreshToken: string | null = null;
 async function getAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
 
-  const refreshToken = rotatedRefreshToken ?? process.env.ML_REFRESH_TOKEN;
-  const clientId = process.env.ML_CLIENT_ID;
-  const clientSecret = process.env.ML_CLIENT_SECRET;
+  const refreshToken = rotatedRefreshToken ?? (env("ML_REFRESH_TOKEN") || undefined);
+  const clientId = (env("ML_CLIENT_ID") || undefined);
+  const clientSecret = (env("ML_CLIENT_SECRET") || undefined);
 
   if (refreshToken && clientId && clientSecret) {
     const res = await fetch(`${API}/oauth/token`, {
@@ -37,7 +38,7 @@ async function getAccessToken(): Promise<string | null> {
       return cachedToken.token;
     }
   }
-  return process.env.ML_ACCESS_TOKEN ?? null;
+  return (env("ML_ACCESS_TOKEN") || undefined) ?? null;
 }
 
 interface MeliOrder {
@@ -61,8 +62,8 @@ export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
 
 async function buscar(since: Date): Promise<ChannelResult> {
   const hasCreds =
-    process.env.ML_ACCESS_TOKEN ||
-    (process.env.ML_REFRESH_TOKEN && process.env.ML_CLIENT_ID && process.env.ML_CLIENT_SECRET);
+    (env("ML_ACCESS_TOKEN") || undefined) ||
+    ((env("ML_REFRESH_TOKEN") || undefined) && (env("ML_CLIENT_ID") || undefined) && (env("ML_CLIENT_SECRET") || undefined));
   if (!hasCreds) {
     return { channel: "meli", connected: false, orders: [] };
   }

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
+import { env } from "../env";
 
 const HOST = "https://open-api.tiktokglobalshop.com";
 const AUTH_HOST = "https://auth.tiktok-shops.com";
@@ -28,9 +29,9 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 async function getAccessToken(): Promise<string | null> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
 
-  const appKey = process.env.TIKTOK_APP_KEY;
-  const appSecret = process.env.TIKTOK_APP_SECRET;
-  const refreshToken = process.env.TIKTOK_REFRESH_TOKEN;
+  const appKey = (env("TIKTOK_APP_KEY") || undefined);
+  const appSecret = (env("TIKTOK_APP_SECRET") || undefined);
+  const refreshToken = (env("TIKTOK_REFRESH_TOKEN") || undefined);
 
   if (appKey && appSecret && refreshToken) {
     const url = new URL(`${AUTH_HOST}/api/v2/token/refresh`);
@@ -51,7 +52,7 @@ async function getAccessToken(): Promise<string | null> {
       }
     }
   }
-  return process.env.TIKTOK_ACCESS_TOKEN ?? null;
+  return (env("TIKTOK_ACCESS_TOKEN") || undefined) ?? null;
 }
 
 interface TikTokOrder {
@@ -72,11 +73,11 @@ export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
 }
 
 async function buscar(since: Date): Promise<ChannelResult> {
-  const appKey = process.env.TIKTOK_APP_KEY;
-  const appSecret = process.env.TIKTOK_APP_SECRET;
+  const appKey = (env("TIKTOK_APP_KEY") || undefined);
+  const appSecret = (env("TIKTOK_APP_SECRET") || undefined);
   // Cipher é opcional: lojas locais de app próprio podem dispensá-lo
-  const shopCipher = process.env.TIKTOK_SHOP_CIPHER;
-  const hasToken = process.env.TIKTOK_REFRESH_TOKEN || process.env.TIKTOK_ACCESS_TOKEN;
+  const shopCipher = (env("TIKTOK_SHOP_CIPHER") || undefined);
+  const hasToken = (env("TIKTOK_REFRESH_TOKEN") || undefined) || (env("TIKTOK_ACCESS_TOKEN") || undefined);
   if (!appKey || !appSecret || !hasToken) {
     return { channel: "tiktok", connected: false, orders: [] };
   }

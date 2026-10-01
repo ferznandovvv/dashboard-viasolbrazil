@@ -10,6 +10,7 @@
 
 import { ChannelResult, NormalizedOrder, addDays } from "../types";
 import { comCache } from "../cache";
+import { env, envUrl } from "../env";
 import { gravarBlob, lerBlobs } from "../blobCache";
 
 const DEFAULT_URL = "https://apitotvsmoda.bhan.com.br";
@@ -40,15 +41,12 @@ export function nomeAtualDaLoja(nome: string): string {
 }
 
 export function totvsBaseUrl(): string {
-  return (process.env.TOTVS_API_URL ?? DEFAULT_URL).replace(/\/$/, "");
+  return envUrl("TOTVS_API_URL", DEFAULT_URL);
 }
 
 export function totvsConfigured(): boolean {
   return Boolean(
-    process.env.TOTVS_CLIENT_ID &&
-      process.env.TOTVS_CLIENT_SECRET &&
-      process.env.TOTVS_USERNAME &&
-      process.env.TOTVS_PASSWORD
+    env("TOTVS_CLIENT_ID") && env("TOTVS_CLIENT_SECRET") && env("TOTVS_USERNAME") && env("TOTVS_PASSWORD")
   );
 }
 
@@ -63,10 +61,10 @@ export async function getTotvsToken(): Promise<string> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "password",
-      client_id: process.env.TOTVS_CLIENT_ID!,
-      client_secret: process.env.TOTVS_CLIENT_SECRET!,
-      username: process.env.TOTVS_USERNAME!,
-      password: process.env.TOTVS_PASSWORD!,
+      client_id: env("TOTVS_CLIENT_ID"),
+      client_secret: env("TOTVS_CLIENT_SECRET"),
+      username: env("TOTVS_USERNAME"),
+      password: env("TOTVS_PASSWORD"),
     }),
     cache: "no-store",
   });

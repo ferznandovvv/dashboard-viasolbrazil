@@ -1,5 +1,6 @@
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
+import { env } from "../env";
 
 const API_VERSION = "2024-10";
 
@@ -28,8 +29,8 @@ export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
 
 async function buscar(since: Date): Promise<ChannelResult> {
   const domain =
-    process.env.SHOPIFY_STORE_DOMAIN ?? "totvs-ibirapuera-viasolbrazil-dc.myshopify.com";
-  const token = process.env.SHOPIFY_ADMIN_TOKEN;
+    (env("SHOPIFY_STORE_DOMAIN") || undefined) ?? "totvs-ibirapuera-viasolbrazil-dc.myshopify.com";
+  const token = (env("SHOPIFY_ADMIN_TOKEN") || undefined);
   if (!domain || !token) {
     return { channel: "shopify", connected: false, orders: [] };
   }

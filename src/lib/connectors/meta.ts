@@ -6,6 +6,7 @@ export interface AdsSpendResult {
 }
 
 import { comCache } from "../cache";
+import { env } from "../env";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 // Conta "Via Sol Brazil" — pode ser trocada pela env META_AD_ACCOUNT_ID
@@ -17,8 +18,8 @@ export async function fetchMetaSpend(fromKey: string, toKey: string): Promise<Ad
 }
 
 async function buscarMeta(fromKey: string, toKey: string): Promise<AdsSpendResult> {
-  const token = process.env.META_ACCESS_TOKEN;
-  const account = process.env.META_AD_ACCOUNT_ID ?? DEFAULT_ACCOUNT;
+  const token = (env("META_ACCESS_TOKEN") || undefined);
+  const account = (env("META_AD_ACCOUNT_ID") || undefined) ?? DEFAULT_ACCOUNT;
   if (!token) {
     return { connected: false, daily: [] };
   }
