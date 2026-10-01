@@ -1,10 +1,28 @@
 import { list, put } from "@vercel/blob";
 
 /**
- * Cache de longa duração no Vercel Blob, usado para os meses já fechados das
- * lojas físicas. O cache em memória não resolve aqui: cada requisição na
- * Vercel pode cair numa instância nova, que começa com a memória vazia.
+ * Armazenamento de longa duração: Vercel Blob quando o sistema roda na
+ * Vercel, pasta local quando roda numa máquina própria.
+ *
+ * O cache em memória sozinho não resolve na Vercel — cada requisição pode
+ * cair numa instância nova, que começa vazia.
  */
+
+const NA_VERCEL = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+
+/**
+ * O acesso a disco é carregado sob demanda: o empacotador do Next compila
+ * estes módulos também para o Edge, onde `fs` não existe.
+ */
+async function disco() {
+  const [fs, path] = await Promise.all([import("node:fs/promises"), import("node:path")]);
+  const pasta = process.env.DADOS_DIR ?? path.join(process.cwd(), "dados");
+  return {
+    fs,
+    caminho: (prefixo: string, chave: string) => path.join(pasta, `${prefixo}${chave}.json`),
+    pastaDe: (arquivo: string) => path.dirname(arquivo),
+  };
+}
 
 /** Listagem por prefixo, memorizada por alguns segundos dentro da instância. */
 const listagens = new Map<string, { at: number; nomes: Map<string, string> }>();
@@ -21,7 +39,23 @@ async function listar(prefixo: string): Promise<Map<string, string>> {
 /** Lê vários registros de uma vez (uma listagem só, downloads em paralelo). */
 export async function lerBlobs<T>(prefixo: string, chaves: string[]): Promise<Map<string, T>> {
   const achados = new Map<string, T>();
-  if (!process.env.BLOB_READ_WRITE_TOKEN || chaves.length === 0) return achados;
+  if (chaves.length === 0) return achados;
+
+  if (!NA_VERCEL) {
+    const d = await disco();
+    await Promise.all(
+      chaves.map(async (chave) => {
+        try {
+          const texto = await d.fs.readFile(d.caminho(prefixo, chave), "utf8");
+          achados.set(chave, JSON.parse(texto) as T);
+        } catch {
+          /* arquivo ainda não existe */
+        }
+      })
+    );
+    return achados;
+  }
+
   try {
     const porNome = await listar(prefixo);
     await Promise.all(
@@ -59,9 +93,18 @@ export async function comCacheBlob<T>(
 
 /** Grava um registro; falha de escrita nunca derruba a requisição. */
 export async function gravarBlob(prefixo: string, chave: string, dados: unknown): Promise<void> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return;
   try {
     const corpo = JSON.stringify(dados);
+
+    if (!NA_VERCEL) {
+      // Em disco não há custo de transferência: grava de qualquer tamanho
+      const d = await disco();
+      const destino = d.caminho(prefixo, chave);
+      await d.fs.mkdir(d.pastaDe(destino), { recursive: true });
+      await d.fs.writeFile(destino, corpo, "utf8");
+      return;
+    }
+
     // Acima disso a gravação custa mais tempo do que o cache economiza
     if (corpo.length > 2_000_000) return;
     await put(`${prefixo}${chave}.json`, corpo, {

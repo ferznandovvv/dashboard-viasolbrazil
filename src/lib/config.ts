@@ -1,4 +1,4 @@
-import { list, put } from "@vercel/blob";
+import { gravarBlob, lerBlobs } from "./blobCache";
 import { nomeAtualDaLoja } from "./connectors/totvs";
 
 export interface AppConfig {
@@ -7,21 +7,20 @@ export interface AppConfig {
   metas?: Record<string, number>;
 }
 
-const PATH = "config/settings.json";
+const PREFIXO = "config/";
+const CHAVE = "settings";
 let cache: { value: AppConfig; at: number } | null = null;
 
+/** Fora da Vercel grava em disco, então sempre há onde guardar. */
 export function blobAvailable(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return true;
 }
 
 export async function readConfig(): Promise<AppConfig> {
-  if (!blobAvailable()) return {};
   if (cache && Date.now() - cache.at < 60000) return cache.value;
   try {
-    const { blobs } = await list({ prefix: PATH, limit: 1 });
-    if (blobs.length === 0) return {};
-    const res = await fetch(blobs[0].url, { cache: "no-store" });
-    const bruto = (await res.json()) as AppConfig;
+    const bruto = (await lerBlobs<AppConfig>(PREFIXO, [CHAVE])).get(CHAVE);
+    if (!bruto) return {};
     // Meta salva antes de uma loja ser renomeada continua valendo
     const value: AppConfig = {
       ...bruto,
@@ -37,11 +36,6 @@ export async function readConfig(): Promise<AppConfig> {
 }
 
 export async function writeConfig(value: AppConfig): Promise<void> {
-  await put(PATH, JSON.stringify(value), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+  await gravarBlob(PREFIXO, CHAVE, value);
   cache = { value, at: Date.now() };
 }
