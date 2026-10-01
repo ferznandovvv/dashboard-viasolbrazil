@@ -7,7 +7,12 @@
  */
 export function env(nome: string, padrao = ""): string {
   const bruto = process.env[nome] ?? padrao;
-  return bruto.trim().replace(/^["']|["']$/g, "").trim();
+  const valor = bruto.trim().replace(/^["']|["']$/g, "").trim();
+  // A Vercel não devolve variáveis marcadas como sensíveis: `vercel env pull`
+  // grava este texto no lugar do valor. Tratar como ausente faz a tela dizer
+  // "não conectado" em vez de tentar usar a palavra como se fosse a chave.
+  if (valor === "[SENSITIVE]") return padrao.trim();
+  return valor;
 }
 
 /** Mesma limpeza, garantindo um endereço absoluto e sem barra no fim. */
