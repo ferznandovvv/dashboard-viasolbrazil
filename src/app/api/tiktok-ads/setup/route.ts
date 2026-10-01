@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
+import { envUrl } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,11 @@ export async function GET(req: NextRequest) {
   const appId = process.env.TIKTOK_ADS_APP_ID;
   const secret = process.env.TIKTOK_ADS_APP_SECRET;
   const authCode = req.nextUrl.searchParams.get("auth_code");
-  const redirectUri = `https://${req.headers.get("host")}/`;
+  // Tem que ser exatamente o endereço cadastrado no app — inclusive quando o
+  // sistema roda fora da Vercel. Aí a autorização volta para o endereço da
+  // Vercel (mesmo pausado, o código vem na barra do navegador) e basta trocar
+  // o começo do endereço por http://localhost:3000 para concluir aqui.
+  const redirectUri = envUrl("REDIRECT_URL", "https://dashboard-viasolbrazil.vercel.app") + "/";
 
   if (!appId || !secret) {
     return page(
