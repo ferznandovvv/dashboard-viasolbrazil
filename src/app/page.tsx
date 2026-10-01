@@ -138,19 +138,6 @@ export default function Dashboard() {
       setLoading(true);
       setFetchError("");
 
-      // Etapa rápida: canais online primeiro, para a tela sair do "carregando"
-      // enquanto as lojas físicas ainda estão sendo buscadas
-      if (!salvo) {
-        fetch(`/api/dashboard?${qs}&sem=lojas`, { cache: "no-store" })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((parcial: DashboardData | null) => {
-            if (parcial && id === pedidoAtual.current && !cache.has(qs)) setData(parcial);
-          })
-          .catch(() => {
-            /* a busca completa logo abaixo é quem manda */
-          });
-      }
-
       try {
         const res = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`Erro ${res.status}`);
@@ -173,39 +160,6 @@ export default function Dashboard() {
   useEffect(() => {
     load(period, selKey ? selKey.split(",") : [], canal);
   }, [period, selKey, canal, load]);
-
-  // Aquece os períodos que costumam ser os próximos cliques, sem travar a tela
-  useEffect(() => {
-    if (loading) return;
-    // Só os períodos curtos: aquecer "Ano atual" custaria mais do que o clique
-    // O mês atual primeiro: é para onde se vai depois de olhar o dia
-    const ordem = ["Mês atual", "Ontem", "Últimos 7 dias", "Mês passado"];
-    const alvos = ordem
-      .map((k) => presets.find((p) => p.key === k))
-      .filter((p): p is Period => Boolean(p) && p!.key !== period.key);
-    let cancelado = false;
-    const timer = setTimeout(async () => {
-      // Um de cada vez: em paralelo o pré-carregamento competiria com a tela
-      for (const p of alvos) {
-        if (cancelado) return;
-        const qs =
-          `from=${p.from}&to=${p.to}` +
-          (selKey ? `&units=${encodeURIComponent(selKey)}` : "") +
-          (canal ? `&channel=${canal}` : "");
-        if (cache.has(qs)) continue;
-        try {
-          const r = await fetch(`/api/dashboard?${qs}`, { cache: "no-store" });
-          if (r.ok) cache.set(qs, (await r.json()) as DashboardData);
-        } catch {
-          /* pré-carregamento é oportunista: falhou, o clique busca de novo */
-        }
-      }
-    }, 1500);
-    return () => {
-      cancelado = true;
-      clearTimeout(timer);
-    };
-  }, [loading, period, selKey, canal, presets, cache]);
 
   // Redirect das autorizações OAuth (TikTok Shop, TikTok Ads e Mercado Livre)
   useEffect(() => {

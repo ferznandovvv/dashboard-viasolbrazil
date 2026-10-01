@@ -3,6 +3,10 @@
     {
       "path": "/api/aquecer",
       "schedule": "40 9 * * *"
+    },
+    {
+      "path": "/api/aquecer?so=estoque",
+      "schedule": "55 9 * * *"
     }
   ]
 }

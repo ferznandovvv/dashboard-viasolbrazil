@@ -72,10 +72,23 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
   if (guardado) memoria = guardado;
   if (!forcar && guardado && Date.now() - guardado.at < VALIDADE_MS) return resposta(guardado);
 
-  // Sem foto, foto vencida ou foto pela metade: varre (continuando de onde
-  // parou, quando for o caso — são quase 180 páginas e nem sempre cabem numa
-  // requisição só)
-  const continuar = !forcar && guardado?.incompleto ? guardado : null;
+  /**
+   * A varredura custa ~180 chamadas de API dentro de uma função de até 60s —
+   * foi ela que estourou o limite gratuito da Vercel. Por isso ela só roda
+   * quando pedida explicitamente (o cron de madrugada); a tela usa sempre a
+   * última foto que existir, mesmo velha ou incompleta, e nunca dispara uma.
+   */
+  if (!forcar) {
+    if (guardado) return resposta(guardado);
+    return {
+      conectado: true,
+      itens: [],
+      erro: "O estoque ainda não foi carregado. Ele é atualizado todo dia de madrugada.",
+    };
+  }
+
+  // Pedido explícito: varre, continuando de onde parou se a última ficou pela metade
+  const continuar = guardado?.incompleto ? guardado : null;
   const novo = await varrer(continuar?.proximaPagina ?? 1, continuar?.itens ?? []);
 
   if (novo.itens.length > 0) {
@@ -89,7 +102,6 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
     return resposta(memoria);
   }
 
-  // Deu ruim agora: foto velha é melhor que nenhuma
   if (guardado) return resposta(guardado);
   return novo;
 }

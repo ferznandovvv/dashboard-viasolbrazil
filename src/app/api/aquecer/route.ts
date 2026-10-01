@@ -18,6 +18,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
+  // Segunda passada do dia: só continua a foto do estoque, caso a primeira
+  // não tenha conseguido varrer o catálogo inteiro dentro do tempo
+  if (req.nextUrl.searchParams.get("so") === "estoque") {
+    const estoque = await fetchEstoque(true);
+    const categorias = calcularCategorias(estoque.itens);
+    if (!estoque.incompleto) await gravarCategorias(categorias);
+    return NextResponse.json({
+      estoque: { itens: estoque.itens.length, incompleto: estoque.incompleto, erro: estoque.erro },
+      categorias: categorias.length,
+    });
+  }
+
   const hoje = todaySpKey();
   const inicioMes = `${hoje.slice(0, 7)}-01`;
 
