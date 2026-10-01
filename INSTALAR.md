@@ -19,11 +19,25 @@ cd dashboard-viasolbrazil
 npm install
 ```
 
-Copie `.env.local.exemplo` para `.env.local` e preencha com os mesmos valores
-que estão hoje na Vercel (Settings → Environment Variables).
+### Trazer as variáveis da Vercel automaticamente
 
-**Não copie o `BLOB_READ_WRITE_TOKEN`.** É a ausência dele que faz o sistema
-usar a pasta local em vez do armazenamento da Vercel.
+Em vez de copiar uma a uma, deixe a CLI da Vercel baixar tudo:
+
+```bash
+npm install -g vercel
+vercel login
+vercel link          # escolha a conta e o projeto dashboard-viasolbrazil
+vercel env pull .env.local --environment=production
+```
+
+Isso cria o `.env.local` já preenchido.
+
+**Depois, abra o `.env.local` e apague a linha `BLOB_READ_WRITE_TOKEN=...`.**
+É a ausência dela que faz o sistema guardar os dados na pasta local em vez de
+tentar falar com a Vercel.
+
+Se preferir fazer à mão, use `.env.local.exemplo` como modelo e copie os
+valores de Settings → Environment Variables (ícone de olho para revelar).
 
 ## 3. Subir
 
