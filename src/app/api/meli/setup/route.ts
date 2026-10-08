@@ -120,11 +120,11 @@ ${
            ? `<p style="background:#e7f4ea;border:1px solid #b7dcc0;border-radius:8px;padding:10px;color:#1f5c2e">✓ <b>Salvo automaticamente e já valendo.</b> Não precisa copiar nada — <a href="/configurar">voltar para a configuração</a>.</p>`
            : ""
        }
-       <p>Adicione esta variável na Vercel (<b>Settings → Environment Variables</b>)
+${salvoLocal ? "" : `       <p>Adicione esta variável na Vercel (<b>Settings → Environment Variables</b>)
        e faça redeploy:</p>
        <table>
          <tr><td>ML_REFRESH_TOKEN</td><td><code>${mascarar(refresh_token, revelar)}</code></td></tr>
-       </table>${revelar ? "" : AVISO_REVELAR}
+       </table>${revelar ? "" : AVISO_REVELAR}`}
        <p>O dashboard renova o access token sozinho. Atenção: no Mercado Livre o
        refresh token é rotativo — se um dia o canal cair com erro de token, é só
        abrir <code>/api/meli/setup</code> de novo e repetir esta autorização.</p>`,

@@ -121,13 +121,13 @@ ${
            ? `<p style="background:#e7f4ea;border:1px solid #b7dcc0;border-radius:8px;padding:10px;color:#1f5c2e">✓ <b>Salvo automaticamente e já valendo.</b> Não precisa copiar nada — <a href="/configurar">voltar para a configuração</a>.</p>`
            : ""
        }
-       <p>Adicione estas variáveis na Vercel (<b>Settings → Environment Variables</b>)
+${salvoLocal ? "" : `       <p>Adicione estas variáveis na Vercel (<b>Settings → Environment Variables</b>)
        e faça redeploy:</p>
        <table>
          <tr><td>TIKTOK_ADS_ACCESS_TOKEN</td><td><code>${mascarar(accessToken, revelar)}</code></td></tr>
          <tr><td>TIKTOK_ADS_ADVERTISER_ID</td><td>escolha o ID da conta certa abaixo</td></tr>
          ${advRows.join("")}
-       </table>${revelar ? "" : AVISO_REVELAR}
+       </table>${revelar ? "" : AVISO_REVELAR}`}
        <p>O token do TikTok Ads é de longa duração — não precisa renovar.</p>`,
       true
     );
