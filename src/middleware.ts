@@ -16,9 +16,10 @@ export function middleware(req: NextRequest) {
   // conferido dentro da própria rota.
   if (pathname === "/api/aquecer") return NextResponse.next();
 
-  // Modo TV: roda sem login na tela da loja, mas com um código na URL —
+  // Modo TV e tela da loja: rodam sem login no aparelho da loja, mas com um
+  // código na URL —
   // senão o faturamento por loja fica aberto para quem tiver o link.
-  if (pathname === "/tv" || pathname === "/api/tv") {
+  if (pathname === "/tv" || pathname === "/api/tv" || pathname === "/loja" || pathname === "/api/loja") {
     const codigo = (env("TV_CODE") || undefined);
     if (codigo && req.nextUrl.searchParams.get("k") === codigo) return NextResponse.next();
   }

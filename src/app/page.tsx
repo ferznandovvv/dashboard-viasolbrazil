@@ -1110,6 +1110,8 @@ export default function Dashboard() {
         <a href="/produtos">produtos e estoque</a>
         <span aria-hidden="true"> · </span>
         <a href="/configurar">configuração</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/loja">tela das lojas</a>
       </div>
     </main>
   );
