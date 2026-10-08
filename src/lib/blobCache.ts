@@ -120,3 +120,15 @@ export async function gravarBlob(prefixo: string, chave: string, dados: unknown)
     /* melhor servir os dados sem cache do que falhar */
   }
 }
+
+/** Apaga o cache curto guardado em disco (rodando fora da Vercel). */
+export async function limparCacheEmDisco(): Promise<void> {
+  if (NA_VERCEL) return;
+  try {
+    const d = await disco();
+    const pasta = d.pastaDe(d.caminho("cache/", "x"));
+    await d.fs.rm(pasta, { recursive: true, force: true });
+  } catch {
+    /* sem cache em disco: nada a limpar */
+  }
+}

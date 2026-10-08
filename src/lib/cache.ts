@@ -44,3 +44,12 @@ export async function comCache<T>(
   emVoo.set(chave, p);
   return p;
 }
+
+/**
+ * Esquece tudo o que estava em cache. Usado quando uma credencial muda: o
+ * resultado guardado de "canal não conectado" não pode sobreviver à chave nova.
+ */
+export function limparCache(): void {
+  store.clear();
+  emVoo.clear();
+}

@@ -450,10 +450,8 @@ export default function Dashboard() {
           {/* ——— Unidades: sempre visíveis, funcionam como filtro ——— */}
           {lojasCh && !lojasCh.connected ? (
             <div className="card muted" style={{ fontSize: 12 }}>
-              Lojas físicas não conectadas — configure{" "}
-              {CHANNEL_META.lojas.envVars.map((v) => (
-                <code key={v}>{v}</code>
-              ))}
+              Lojas físicas não conectadas — falta configurar a TOTVS na{" "}
+              <a href="/configurar">tela de configuração</a>.
             </div>
           ) : lojasCh?.error ? (
             <div className="card">

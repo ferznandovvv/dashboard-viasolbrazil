@@ -11,6 +11,8 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { limparCache } from "./cache";
+import { limparCacheEmDisco } from "./blobCache";
 
 const ARQUIVO = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "credenciais.json");
 
@@ -55,6 +57,10 @@ export function salvarCredenciais(novas: Record<string, string>): void {
   }
   mkdirSync(dirname(ARQUIVO), { recursive: true });
   writeFileSync(ARQUIVO, JSON.stringify(atuais, null, 2), "utf8");
+  // Resultado guardado com a chave antiga ("não conectado") não pode
+  // continuar sendo servido depois da chave nova
+  limparCache();
+  void limparCacheEmDisco();
 }
 
 /** Quais chaves estão preenchidas — sem nunca devolver o valor. */
