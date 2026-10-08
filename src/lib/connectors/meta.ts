@@ -7,6 +7,7 @@ export interface AdsSpendResult {
 
 import { comCache } from "../cache";
 import { env } from "../env";
+import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 // Conta "Via Sol Brazil" — pode ser trocada pela env META_AD_ACCOUNT_ID

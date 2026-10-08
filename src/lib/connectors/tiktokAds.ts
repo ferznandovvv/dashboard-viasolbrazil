@@ -3,6 +3,7 @@ import type { AdsSpendResult } from "./meta";
 import { comCache } from "../cache";
 import { addDays } from "../types";
 import { env } from "../env";
+import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
 const API = "https://business-api.tiktok.com/open_api/v1.3";
 

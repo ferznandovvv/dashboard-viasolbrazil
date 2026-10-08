@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
+import { rodandoLocal, salvarCredenciais } from "@/lib/credenciais";
 import { envUrl } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -106,10 +107,19 @@ export async function GET(req: NextRequest) {
       ? `OK — ${ordersJson.paging?.total ?? 0} pedido(s) no total da conta`
       : `falhou: ${ordersJson.message ?? ordersRes.status}`;
 
+    // Rodando numa máquina própria, o token vai direto para o cofre local
+    const salvoLocal = rodandoLocal();
+    if (salvoLocal) salvarCredenciais({ ML_REFRESH_TOKEN: refresh_token });
+
     return page(
       "Autorizado!",
       `<div class="s">✓ Conta autorizada — ${me.nickname ?? user_id}</div>
        <p><b>Teste da API de pedidos:</b> ${orderTest}</p>
+${
+         salvoLocal
+           ? `<p style="background:#e7f4ea;border:1px solid #b7dcc0;border-radius:8px;padding:10px;color:#1f5c2e">✓ <b>Salvo automaticamente e já valendo.</b> Não precisa copiar nada — <a href="/configurar">voltar para a configuração</a>.</p>`
+           : ""
+       }
        <p>Adicione esta variável na Vercel (<b>Settings → Environment Variables</b>)
        e faça redeploy:</p>
        <table>

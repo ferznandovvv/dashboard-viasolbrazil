@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
+import { rodandoLocal, salvarCredenciais } from "@/lib/credenciais";
 import { tiktokSign } from "@/lib/connectors/tiktok";
 
 export const dynamic = "force-dynamic";
@@ -139,6 +140,11 @@ export async function GET(req: NextRequest) {
       ? `<tr><td>TIKTOK_SHOP_CIPHER</td><td><code>${mascarar(cipher, revelar)}</code><br><small>${shops[0].name ?? ""} (${shops[0].region ?? ""})</small></td></tr>`
       : "";
 
+    // Rodando numa máquina própria, os tokens vão direto para o cofre local:
+    // ninguém precisa copiar e colar nada
+    const salvoLocal = rodandoLocal();
+    if (salvoLocal) salvarCredenciais({ TIKTOK_REFRESH_TOKEN: refresh_token, TIKTOK_SHOP_CIPHER: cipher ?? "" });
+
     return page(
       worked ? "Autorizado!" : "Quase lá",
       `<div class="s">${worked ? "✓" : "△"} Autorização concluída${seller_name ? ` — ${seller_name}` : ""}</div>
@@ -146,6 +152,11 @@ export async function GET(req: NextRequest) {
        ${
          !cipher
            ? `<p><small>Endpoints de cipher: ${failures.join(" | ") || "nenhum tentado"}</small></p>`
+           : ""
+       }
+${
+         salvoLocal
+           ? `<p style="background:#e7f4ea;border:1px solid #b7dcc0;border-radius:8px;padding:10px;color:#1f5c2e">✓ <b>Salvo automaticamente e já valendo.</b> Não precisa copiar nada — <a href="/configurar">voltar para a configuração</a>.</p>`
            : ""
        }
        <p>Adicione ${cipher ? "estas variáveis" : "esta variável"} na Vercel

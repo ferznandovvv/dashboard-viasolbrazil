@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AVISO_REVELAR, mascarar } from "@/lib/segredo";
+import { rodandoLocal, salvarCredenciais } from "@/lib/credenciais";
 import { envUrl } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -102,9 +103,24 @@ export async function GET(req: NextRequest) {
       /* mantém a lista simples de IDs */
     }
 
+    // Rodando numa máquina própria, vai direto para o cofre local. Com uma
+    // conta de anúncios só, não há o que escolher: salva o ID também
+    const salvoLocal = rodandoLocal();
+    if (salvoLocal) {
+      salvarCredenciais({
+        TIKTOK_ADS_ACCESS_TOKEN: accessToken,
+        ...(advertiserIds.length === 1 ? { TIKTOK_ADS_ADVERTISER_ID: advertiserIds[0] } : {}),
+      });
+    }
+
     return page(
       "Autorizado!",
       `<div class="s">✓ Conta autorizada</div>
+${
+         salvoLocal
+           ? `<p style="background:#e7f4ea;border:1px solid #b7dcc0;border-radius:8px;padding:10px;color:#1f5c2e">✓ <b>Salvo automaticamente e já valendo.</b> Não precisa copiar nada — <a href="/configurar">voltar para a configuração</a>.</p>`
+           : ""
+       }
        <p>Adicione estas variáveis na Vercel (<b>Settings → Environment Variables</b>)
        e faça redeploy:</p>
        <table>

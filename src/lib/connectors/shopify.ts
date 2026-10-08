@@ -1,6 +1,7 @@
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
 import { env } from "../env";
+import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
 const API_VERSION = "2024-10";
 

@@ -12,6 +12,7 @@
 
 import { LOJAS, totvsConfigured, totvsFetch } from "./totvs";
 import { gravarBlob, lerBlobs } from "../blobCache";
+import { rodandoLocal } from "../credenciais";
 
 const BALANCES = "/api/totvsmoda/product/v2/balances/search";
 const DEPOSITO_FISICO = 1;
@@ -78,6 +79,9 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
    * quando pedida explicitamente (o cron de madrugada); a tela usa sempre a
    * última foto que existir, mesmo velha ou incompleta, e nunca dispara uma.
    */
+  // Na máquina própria não há limite de plano: sem foto, varre na hora
+  if (!forcar && rodandoLocal() && (!guardado || guardado.incompleto)) forcar = true;
+
   if (!forcar) {
     if (guardado) return resposta(guardado);
     return {

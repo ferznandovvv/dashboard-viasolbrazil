@@ -1,4 +1,5 @@
 import { list, put } from "@vercel/blob";
+import { env } from "./env";
 
 /**
  * Armazenamento de longa duração: Vercel Blob quando o sistema roda na
@@ -8,7 +9,8 @@ import { list, put } from "@vercel/blob";
  * cair numa instância nova, que começa vazia.
  */
 
-const NA_VERCEL = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+// O marcador [SENSITIVE] que `vercel env pull` grava não é um token de verdade
+const NA_VERCEL = Boolean(env("BLOB_READ_WRITE_TOKEN"));
 
 /**
  * O acesso a disco é carregado sob demanda: o empacotador do Next compila

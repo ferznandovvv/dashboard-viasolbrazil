@@ -1,6 +1,7 @@
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
 import { env } from "../env";
+import { rodandoLocal, salvarCredenciais } from "../credenciais";
 
 const API = "https://api.mercadolibre.com";
 
@@ -30,7 +31,12 @@ async function getAccessToken(): Promise<string | null> {
     });
     if (res.ok) {
       const json = await res.json();
-      if (json.refresh_token) rotatedRefreshToken = json.refresh_token;
+      if (json.refresh_token) {
+        rotatedRefreshToken = json.refresh_token;
+        // O antigo deixa de valer: na máquina própria, guarda o novo em disco
+        // para o próximo reinício não começar com um token morto
+        if (rodandoLocal()) salvarCredenciais({ ML_REFRESH_TOKEN: json.refresh_token });
+      }
       cachedToken = {
         token: json.access_token,
         expiresAt: Date.now() + (json.expires_in - 300) * 1000,

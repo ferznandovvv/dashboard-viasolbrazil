@@ -19,25 +19,33 @@ cd dashboard-viasolbrazil
 npm install
 ```
 
-### Trazer as variáveis da Vercel automaticamente
+### Configurar as chaves
 
-Em vez de copiar uma a uma, deixe a CLI da Vercel baixar tudo:
+As chaves das integrações não vêm da Vercel: as marcadas como sensíveis lá
+nunca são devolvidas, nem para o dono. Elas são recolocadas pelo próprio
+sistema, numa tela feita para isso.
 
-```bash
-npm install -g vercel
-vercel login
-vercel link          # escolha a conta e o projeto dashboard-viasolbrazil
-vercel env pull .env.local --environment=production
+Crie um arquivo `.env.local` só com a senha de acesso:
+
+```
+DASHBOARD_PASSWORD=sua-senha
 ```
 
-Isso cria o `.env.local` já preenchido.
+Depois de subir o sistema (passo 3), abra **/configurar** — ou o link
+"configuração" no rodapé da dashboard. Para cada integração:
 
-**Depois, abra o `.env.local` e apague a linha `BLOB_READ_WRITE_TOKEN=...`.**
-É a ausência dela que faz o sistema guardar os dados na pasta local em vez de
-tentar falar com a Vercel.
+- **TOTVS, Shopify e Meta** — cole as chaves e clique em Salvar.
+- **TikTok Shop, Mercado Livre e TikTok Ads** — cole as chaves do app, salve
+  e clique em **autorizar agora**. O token gerado é salvo sozinho.
 
-Se preferir fazer à mão, use `.env.local.exemplo` como modelo e copie os
-valores de Settings → Environment Variables (ícone de olho para revelar).
+Tudo vale na hora, sem reiniciar, e fica guardado em `dados/credenciais.json`
+(fora do Git).
+
+**Truque da autorização:** os apps estão cadastrados com o endereço da
+Vercel. Depois de autorizar, o navegador vai para
+`https://dashboard-viasolbrazil.vercel.app/?code=...` — mesmo que a página
+apareça pausada ou com erro, troque só o começo do endereço por
+`http://localhost:3000` (mantendo o `/?code=...` do resto) e aperte Enter.
 
 ## 3. Subir
 

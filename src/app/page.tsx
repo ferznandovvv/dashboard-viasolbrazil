@@ -1110,6 +1110,8 @@ export default function Dashboard() {
       )}
       <div className="rodape">
         <a href="/produtos">produtos e estoque</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/configurar">configuração</a>
       </div>
     </main>
   );

@@ -12,6 +12,7 @@ import { ChannelResult, NormalizedOrder, addDays } from "../types";
 import { comCache } from "../cache";
 import { env, envUrl } from "../env";
 import { gravarBlob, lerBlobs } from "../blobCache";
+import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
 const DEFAULT_URL = "https://apitotvsmoda.bhan.com.br";
 const INVOICES = "/api/totvsmoda/fiscal/v2/invoices/search";

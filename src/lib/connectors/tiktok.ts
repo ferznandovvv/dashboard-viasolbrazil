@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { ChannelResult, NormalizedOrder } from "../types";
 import { comCache } from "../cache";
 import { env } from "../env";
+import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
 const HOST = "https://open-api.tiktokglobalshop.com";
 const AUTH_HOST = "https://auth.tiktok-shops.com";
