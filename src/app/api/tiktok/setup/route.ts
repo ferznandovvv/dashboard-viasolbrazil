@@ -50,11 +50,24 @@ export async function GET(req: NextRequest) {
     );
   }
   if (!code) {
+    // O TikTok Shop não aceita autorização iniciada por um link montado aqui:
+    // o link sai do portal de parceiros, já amarrado ao app
     return page(
-      "Código ausente",
-      `<div class="s">Código de autorização não encontrado</div>
-       <p>Abra este endereço a partir do redirecionamento da autorização do TikTok Shop
-       (ele precisa vir com <code>?code=...</code> na URL).</p>`,
+      "Autorizar o TikTok Shop",
+      `<div class="s" style="color:#8a6d00">Falta autorizar a loja</div>
+       <p>O link de autorização do TikTok Shop sai do portal de parceiros:</p>
+       <ol style="font-size:14px;line-height:1.7;color:#3a3936">
+         <li>Abra <a href="https://partner.tiktokshop.com" target="_blank" rel="noopener">partner.tiktokshop.com</a>
+             e entre no seu app.</li>
+         <li>Procure o link de <b>autorização</b> da loja (em "Authorization", "Authorize" ou
+             "Share authorization link") e abra.</li>
+         <li>Entre com a conta da loja Via Sol e confirme.</li>
+         <li>O TikTok manda para <code>https://dashboard-viasolbrazil.vercel.app/?code=...</code> —
+             pode aparecer pausado ou com erro, tudo bem.</li>
+         <li>Na barra de endereço, troque só o começo por <code>http://localhost:3000</code>,
+             mantenha o resto e aperte Enter.</li>
+       </ol>
+       <p>O token é salvo sozinho e aparece uma faixa verde confirmando.</p>`,
       false
     );
   }
