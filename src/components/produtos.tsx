@@ -35,11 +35,11 @@ const TOPS = [20, 50, 100];
 /** Nomes curtos no topo das colunas, para as 8 lojas caberem sem rolar. */
 const CURTO: Record<string, string> = {
   "Loja de Fábrica": "Fábrica",
-  "Rio de Janeiro": "Rio",
-  "Ribeirão Preto": "Ribeirão",
-  "SP — Itaim": "Itaim",
+  "Rio de Janeiro": "RJ",
+  "Ribeirão Preto": "RP",
+  "SP — Itaim": "SP",
   "Belo Horizonte": "BH",
-  "Praia Grande": "P. Grande",
+  "Praia Grande": "PG",
 };
 const curto = (loja: string) => CURTO[loja] ?? loja;
 
