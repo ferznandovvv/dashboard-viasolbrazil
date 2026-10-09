@@ -49,6 +49,12 @@ function saldoEm(l: Linha, lojas: string[]): number {
   return lojas.reduce((s, loja) => s + (l.porLoja[loja] ?? 0), 0);
 }
 
+/**
+ * Destaque pelo que importa: quem TEM peça aparece forte; zero e negativo
+ * (divergência de inventário) ficam apagados, para não roubar a atenção.
+ */
+const tom = (v: number) => (v > 0 ? "tem" : v === 0 ? "vazio" : "negativo");
+
 /** Vendeu mais do que tem: precisa repor. */
 function precisaRepor(l: Linha, lojas: string[]): boolean {
   return saldoEm(l, lojas) < l.vendidas;
@@ -440,8 +446,9 @@ export function Produtos() {
                           </td>
                           {dados.modo === "vendidos" && <td className="n">{l.vendidas}</td>}
                           {dados.modo === "vendidos" && escolhidas.length > 0 && (
-                            <td className={`n col-sel${repor ? (saldoSel <= 0 ? " zerado" : " baixo") : ""}`}>
-                              <b>{saldoSel}</b>
+                            <td className={`n col-sel ${tom(saldoSel)}`}>
+                              {repor && <span className="repor-tag">repor</span>}
+                              {saldoSel}
                             </td>
                           )}
                           {colunasLojas.map((loja) => {
@@ -449,9 +456,7 @@ export function Produtos() {
                             return (
                               <td
                                 key={loja}
-                                className={`n loja-col${v < 0 ? " negativo" : v === 0 ? " vazio" : ""}${
-                                  ordem?.col === `loja:${loja}` ? " ordenada" : ""
-                                }`}
+                                className={`n ${tom(v)}`}
                               >
                                 {v}
                               </td>
@@ -485,7 +490,7 @@ export function Produtos() {
                 </>
               )}
               {dados.modo === "vendidos" &&
-                "Vendidas = peças vendidas no período nas lojas escolhidas. Em vermelho: sem estoque; em amarelo: tem menos do que vendeu."}
+                "Vendidas = peças vendidas no período nas lojas escolhidas. \"repor\" = tem menos do que vendeu."}
               {" "}Clique no nome de uma coluna para ordenar.
             </div>
           </div>
