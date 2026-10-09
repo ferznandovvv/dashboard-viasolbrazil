@@ -18,6 +18,13 @@ export interface LinhaProduto {
   porLoja: Record<string, number>;
 }
 
+/**
+ * Itens que saem na nota mas não são produto (frete de motoboy): ficam fora
+ * das listas por enquanto, e a tela avisa que estão sendo ignorados.
+ */
+const IGNORAR = [/^FRETE\b/];
+const ignorado = (nomeNormalizado: string) => IGNORAR.some((r) => r.test(nomeNormalizado));
+
 /** "Boné" acha "BONE" e vice-versa: o cadastro nem sempre tem acento. */
 function normalizar(texto: string): string {
   return texto
@@ -59,7 +66,7 @@ export async function GET(req: NextRequest) {
     for (const s of estoque.itens) {
       const nome = nomeCompleto(s.nome, s.cor, s.tamanho);
       const alvo = normalizar(nome);
-      if (!palavras.every((p) => alvo.includes(p))) continue;
+      if (!palavras.every((p) => alvo.includes(p)) || ignorado(alvo)) continue;
       const e = linhas.get(alvo) ?? { produto: nome, vendidas: 0, vendasPorLoja: {}, porLoja: {} };
       somarSaldo(e, s.porLoja);
       linhas.set(alvo, e);
@@ -88,10 +95,15 @@ export async function GET(req: NextRequest) {
   const vendas = await fetchVendasPorProduto(from, to, rodandoLocal() ? 5 * 60000 : 35000);
 
   const linhas = new Map<string, LinhaProduto>();
+  const ignorados = new Map<string, number>();
   for (const v of vendas.itens) {
     if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
     const chave = normalizar(v.nome);
     if (!chave) continue;
+    if (ignorado(chave)) {
+      ignorados.set(v.nome.trim(), (ignorados.get(v.nome.trim()) ?? 0) + v.qtd);
+      continue;
+    }
     const e = linhas.get(chave) ?? { produto: v.nome.trim(), vendidas: 0, vendasPorLoja: {}, porLoja: {} };
     e.vendidas += v.qtd;
     if (v.loja) e.vendasPorLoja[v.loja] = (e.vendasPorLoja[v.loja] ?? 0) + v.qtd;
@@ -126,6 +138,7 @@ export async function GET(req: NextRequest) {
     lojasSel,
     top,
     vendasIncompletas: vendas.incompleto,
+    ignorados: Array.from(ignorados, ([produto, vendidas]) => ({ produto, vendidas })),
     erro: vendas.erro ?? estoque.erro,
     itens: ranking.map(([, l]) => l),
     total: ranking.length,

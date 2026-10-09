@@ -24,6 +24,7 @@ interface Resposta {
   lojasSel?: string[];
   top?: number;
   vendasIncompletas?: boolean;
+  ignorados?: { produto: string; vendidas: number }[];
 }
 
 type Aba = "busca" | "vendidos";
@@ -377,6 +378,13 @@ export function Produtos() {
                 {dados.total > dados.itens.length && (
                   <span className="muted">mostrando as primeiras {dados.itens.length} — refine a busca</span>
                 )}
+              </div>
+            )}
+
+            {dados.modo === "vendidos" && (dados.ignorados?.length ?? 0) > 0 && (
+              <div className="rank-aviso" style={{ margin: "0 0 10px" }}>
+                Fora da lista por enquanto:{" "}
+                {dados.ignorados!.map((i) => `${i.produto} (${i.vendidas})`).join(", ")}
               </div>
             )}
 
