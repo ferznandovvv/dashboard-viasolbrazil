@@ -14,15 +14,6 @@ interface Linha {
   abc: "A" | "B" | "C";
 }
 
-interface Transferencia {
-  produto: string;
-  de: string;
-  sobra: number;
-  para: string;
-  vendeu: number;
-  sugestao: number;
-}
-
 interface Resposta {
   dias: number;
   semVendas?: boolean;
@@ -32,7 +23,6 @@ interface Resposta {
   incompleto?: boolean;
   lojasDisponiveis?: string[];
   itens: Linha[];
-  transferencias: Transferencia[];
 }
 
 interface Categoria {
@@ -345,27 +335,6 @@ export function Produtos({
             <div className="parcial">
               A foto do estoque ainda está sendo montada (são quase 18 mil produtos) — pode faltar
               produto. Busque de novo em 1 ou 2 minutos, até este aviso sumir.
-            </div>
-          )}
-
-          {dados.transferencias.length > 0 && (
-            <div className="card">
-              <h2>Sugestões de transferência</h2>
-              <div className="rank-aviso" style={{ margin: "0 0 10px" }}>
-                Parado numa loja, vendendo e sem saldo em outra.
-              </div>
-              <div className="transf">
-                {dados.transferencias.map((t) => (
-                  <div key={`${t.produto}-${t.de}-${t.para}`} className="transf-linha">
-                    <span className="transf-prod">{t.produto}</span>
-                    <span className="transf-mov">
-                      <b>{t.de}</b> ({t.sobra} parad{t.sobra === 1 ? "a" : "as"}) → <b>{t.para}</b>{" "}
-                      (vendeu {t.vendeu}, sem saldo)
-                    </span>
-                    <span className="transf-qtd">enviar ~{t.sugestao}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
