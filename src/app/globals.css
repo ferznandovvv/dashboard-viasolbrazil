@@ -598,3 +598,14 @@ th.num { text-align: right; }
   .online-total { font-size: 18px; }
   .channels.online { grid-template-columns: 1fr 1fr; }
 }
+
+/* ——— Tela de produtos: abas, posição e destaques de reposição ——— */
+.abas-prod { margin: 8px 0 14px; }
+.abas-prod button { padding: 9px 20px; font-size: 13.5px; }
+.prod-tbl .pos { display: inline-block; min-width: 30px; color: var(--text-muted); font-size: 12px; }
+.prod-tbl td.loja-col.vazio { opacity: 0.35; }
+.prod-tbl td.loja-col.negativo { color: var(--c-meli); font-weight: 600; }
+.prod-tbl .col-sel { background: var(--page); }
+.prod-tbl td.col-sel.zerado { color: var(--critical); }
+.prod-tbl td.col-sel.baixo { color: var(--c-meli); }
+.so-repor { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }

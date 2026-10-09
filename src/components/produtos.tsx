@@ -1,442 +1,451 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { LOJA_CORES, brl } from "./viz";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { type Period, buildPresets, spToday } from "@/lib/periodos";
+import { fmtDay } from "@/components/viz";
 
 interface Linha {
   produto: string;
-  pecas: number;
-  faturamento: number;
-  estoque: number;
+  vendidas: number;
+  vendasPorLoja: Record<string, number>;
   porLoja: Record<string, number>;
-  cobertura: number | null;
-  situacao: "ruptura" | "acabando" | "ok" | "parado" | "negativo";
-  abc: "A" | "B" | "C";
 }
 
 interface Resposta {
-  dias: number;
-  semVendas?: boolean;
-  estoqueEm?: string;
-  categoria: string;
+  modo: "busca" | "vendidos";
+  lojas: string[];
+  estoqueEm: string;
+  estoqueIncompleto: boolean;
   erro?: string;
-  incompleto?: boolean;
-  lojasDisponiveis?: string[];
   itens: Linha[];
+  total: number;
+  from?: string;
+  to?: string;
+  lojasSel?: string[];
+  top?: number;
+  vendasIncompletas?: boolean;
 }
 
-interface Categoria {
-  nome: string;
-  produtos: number;
-  pecas: number;
+type Aba = "busca" | "vendidos";
+
+/** Períodos que fazem sentido para decidir reposição. */
+const PERIODOS = ["Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
+const TOPS = [20, 50, 100];
+
+/** Saldo somado das lojas escolhidas (ou de todas, sem escolha). */
+function saldoEm(l: Linha, lojas: string[]): number {
+  return lojas.reduce((s, loja) => s + (l.porLoja[loja] ?? 0), 0);
 }
 
-const SITUACAO: Record<Linha["situacao"], { rotulo: string; cor: string }> = {
-  ruptura: { rotulo: "Ruptura", cor: "var(--c-meli)" },
-  acabando: { rotulo: "Acabando", cor: "var(--brand)" },
-  ok: { rotulo: "OK", cor: "var(--text-muted)" },
-  parado: { rotulo: "Parado", cor: "var(--c-tiktok)" },
-  negativo: { rotulo: "Negativo", cor: "var(--c-meli)" },
-};
-
-type Filtro = "todos" | "ruptura" | "acabando" | "parado" | "negativo";
-/** "loja:Centro" ordena pelo saldo daquela loja. */
-type Coluna = "produto" | "pecas" | "faturamento" | "estoque" | "cobertura" | `loja:${string}`;
-
-/** Gera o CSV da lista como ela está na tela. */
-function paraCSV(linhas: Linha[], lojas: string[]): string {
-  const cab = ["Produto", "Vendidos", "Faturamento", "Estoque", ...lojas, "Cobertura", "Situação"];
-  const corpo = linhas.map((l) => [
-    `"${l.produto.replace(/"/g, "\"\"")}"`,
-    l.pecas,
-    l.faturamento.toFixed(2).replace(".", ","),
-    l.estoque,
-    ...lojas.map((loja) => l.porLoja[loja] ?? 0),
-    l.cobertura ?? "",
-    SITUACAO[l.situacao].rotulo,
-  ]);
-  // Ponto e vírgula: é o que o Excel em português espera
-  return [cab, ...corpo].map((linha) => linha.join(";")).join("\n");
+/** Vendeu mais do que tem: precisa repor. */
+function precisaRepor(l: Linha, lojas: string[]): boolean {
+  return saldoEm(l, lojas) < l.vendidas;
 }
 
 /**
- * Produtos em dois passos: escolher a categoria e só então buscar. A consulta
- * completa é cara demais para rodar sem alguém pedir.
+ * Produtos e estoque, de dois jeitos:
+ *  - Buscar produto: parte do nome → saldo de agora em todas as lojas
+ *  - Mais vendidos: loja(s) e período → o que mais saiu, com o saldo ao lado
  */
-export function Produtos({
-  from,
-  to,
-  units,
-  agrup,
-  aoAlternarLoja,
-  comVendas,
-  aoPedirVendas,
-}: {
-  from: string;
-  to: string;
-  units: string[];
-  agrup: string;
-  aoAlternarLoja: (nome: string) => void;
-  comVendas: boolean;
-  aoPedirVendas: () => void;
-}) {
-  const [categorias, setCategorias] = useState<Categoria[] | null>(null);
-  const [categoria, setCategoria] = useState("");
-  // Filtros escolhidos × filtros já consultados: a busca é cara demais para
-  // disparar a cada clique, então ela espera o botão
-  const [consulta, setConsulta] = useState<{
-    q: string;
-    cat: string;
-    from: string;
-    to: string;
-    units: string[];
-    agrup: string;
-    /** Estoque sozinho responde em uma consulta; a venda do período é cara */
-    comVendas: boolean;
-  } | null>(null);
+export function Produtos() {
+  const presets = useMemo(() => buildPresets().filter((p) => PERIODOS.includes(p.key)), []);
+  const [aba, setAba] = useState<Aba>("busca");
+  const [q, setQ] = useState("");
+  const [periodo, setPeriodo] = useState<Period>(
+    () => presets.find((p) => p.key === "Mês passado") ?? presets[0]
+  );
+  const [customAberto, setCustomAberto] = useState(false);
+  const [customDe, setCustomDe] = useState("");
+  const [customAte, setCustomAte] = useState("");
+  const [lojasSel, setLojasSel] = useState<string[]>([]);
+  const [top, setTop] = useState(20);
+  const [soRepor, setSoRepor] = useState(false);
   const [dados, setDados] = useState<Resposta | null>(null);
+  const [lojas, setLojas] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [falha, setFalha] = useState("");
-  const [filtro, setFiltro] = useState<Filtro>("todos");
-  const [busca, setBusca] = useState("");
-  const [ordem, setOrdem] = useState<{ col: Coluna; desc: boolean }>({
-    col: "estoque",
-    desc: true,
-  });
+  const [ordem, setOrdem] = useState<{ col: string; desc: boolean } | null>(null);
+  const [pronto, setPronto] = useState(false);
   const pedido = useRef(0);
-  const guardado = useRef<Map<string, Resposta>>(new Map());
 
-  // Categoria e busca também sobrevivem à recarga
+  const consultar = async (qs: string) => {
+    const id = ++pedido.current;
+    setCarregando(true);
+    setFalha("");
+    try {
+      const r = await fetch(`/api/produtos?${qs}`, { cache: "no-store" });
+      const j = (await r.json()) as Resposta;
+      if (id !== pedido.current) return;
+      setDados(j);
+      if (j.lojas?.length) setLojas(j.lojas);
+      setOrdem(null);
+    } catch {
+      if (id === pedido.current) setFalha("Não consegui buscar agora. Tente de novo.");
+    } finally {
+      if (id === pedido.current) setCarregando(false);
+    }
+  };
+
+  const verMaisVendidos = (p = periodo, ls = lojasSel, t = top) => {
+    setAba("vendidos");
+    consultar(
+      `modo=vendidos&from=${p.from}&to=${p.to}&top=${t}` +
+        (ls.length ? `&lojas=${encodeURIComponent(ls.join(","))}` : "")
+    );
+  };
+
+  // Lista das lojas para os filtros (a consulta vazia só devolve isso)
+  useEffect(() => {
+    fetch("/api/produtos?modo=busca", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: Resposta) => j.lojas?.length && setLojas(j.lojas))
+      .catch(() => {});
+  }, []);
+
+  // Recarregar a página volta para a mesma consulta
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    const cat = p.get("cat") ?? "";
-    const q = p.get("q") ?? "";
-    if (cat) setCategoria(cat);
-    if (q) setBusca(q);
-    if (cat || q) setConsulta({ q, cat, from, to, units, agrup, comVendas: false });
-    // só na montagem: depois disso quem manda é o botão
+    const lsUrl = (p.get("lojas") ?? "").split(",").filter(Boolean);
+    const tUrl = Number(p.get("top")) || 20;
+    const de = p.get("de") ?? "";
+    const ate = p.get("ate") ?? "";
+    const perUrl =
+      presets.find((x) => x.key === p.get("periodo")) ??
+      (de && ate ? { key: "custom", from: de, to: ate } : null);
+    if (lsUrl.length) setLojasSel(lsUrl);
+    setTop(tUrl);
+    if (perUrl) setPeriodo(perUrl);
+    if (p.get("aba") === "vendidos") verMaisVendidos(perUrl ?? periodo, lsUrl, tUrl);
+    else if (p.get("q")) setQ(p.get("q") ?? "");
+    setPronto(true);
+    // só na montagem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!consulta) return;
-    const p = new URLSearchParams(window.location.search);
-    if (consulta.cat) p.set("cat", consulta.cat);
-    else p.delete("cat");
-    if (consulta.q) p.set("q", consulta.q);
-    else p.delete("q");
+    if (!pronto) return;
+    const p = new URLSearchParams();
+    p.set("aba", aba);
+    if (aba === "busca") {
+      if (q.trim()) p.set("q", q.trim());
+    } else {
+      if (periodo.key === "custom") {
+        p.set("de", periodo.from);
+        p.set("ate", periodo.to);
+      } else p.set("periodo", periodo.key);
+      if (lojasSel.length) p.set("lojas", lojasSel.join(","));
+      p.set("top", String(top));
+    }
     window.history.replaceState(null, "", `?${p.toString()}`);
-  }, [consulta]);
+  }, [pronto, aba, q, periodo, lojasSel, top]);
 
-  // A lista de categorias é leve e vem do estoque já em cache
+  // Busca por nome é instantânea (filtra a foto do estoque): vai enquanto digita
   useEffect(() => {
-    fetch("/api/produtos/categorias", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { categorias?: Categoria[] } | null) => setCategorias(j?.categorias ?? []))
-      .catch(() => setCategorias([]));
-  }, []);
-
-  useEffect(() => {
-    if (!consulta) {
+    if (!pronto || aba !== "busca") return;
+    const termo = q.trim();
+    if (termo.length < 2) {
       setDados(null);
       return;
     }
-    const id = ++pedido.current;
-    const qs =
-      `cat=${encodeURIComponent(consulta.cat)}&q=${encodeURIComponent(consulta.q)}` +
-      `&from=${consulta.from}&to=${consulta.to}` +
-      `&agrup=${consulta.agrup}` +
-      (consulta.units.length ? `&units=${encodeURIComponent(consulta.units.join(","))}` : "") +
-      (consulta.comVendas ? "" : "&sem=vendas");
-    const salvo = guardado.current.get(qs);
-    if (salvo) {
-      setDados(salvo);
-      setCarregando(false);
-      return;
-    }
-    setCarregando(true);
-    setFalha("");
+    const t = setTimeout(() => consultar(`modo=busca&q=${encodeURIComponent(termo)}`), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, aba, pronto]);
 
-    fetch(`/api/produtos?${qs}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Erro ${r.status}`))))
-      .then((json: Resposta) => {
-        guardado.current.set(qs, json);
-        if (id === pedido.current) setDados(json);
-      })
-      .catch((e: Error) => {
-        if (id === pedido.current) setFalha(e.message);
-      })
-      .finally(() => {
-        if (id === pedido.current) setCarregando(false);
-      });
-  }, [consulta]);
-
-  const lojas = Object.keys(LOJA_CORES);
-  const carregarVendas = () => {
-    aoPedirVendas();
-    if (consulta) setConsulta({ ...consulta, comVendas: true });
+  const trocarAba = (a: Aba) => {
+    if (a === aba) return;
+    pedido.current++; // descarta resposta em voo da outra aba
+    setCarregando(false);
+    setDados(null);
+    setSoRepor(false);
+    setAba(a);
   };
 
-  const pendente =
-    Boolean(categoria || busca.trim()) &&
-    (!consulta ||
-      consulta.q !== busca.trim() ||
-      consulta.cat !== categoria ||
-      consulta.from !== from ||
-      consulta.to !== to ||
-      consulta.agrup !== agrup ||
-      consulta.units.join(",") !== units.join(",") ||
-      consulta.comVendas !== comVendas);
-  const buscar = () => {
-    const q = busca.trim();
-    setConsulta({ q, cat: categoria, from, to, units, agrup, comVendas });
-  };
+  const alternarLoja = (loja: string) =>
+    setLojasSel((atual) => (atual.includes(loja) ? atual.filter((x) => x !== loja) : [...atual, loja]));
 
-  const ordenar = (col: Coluna) =>
-    setOrdem((o) => ({ col, desc: o.col === col ? !o.desc : true }));
+  const ordenar = (col: string) =>
+    setOrdem((o) => ({ col, desc: o?.col === col ? !o.desc : true }));
+  const seta = (col: string) => (ordem?.col === col ? (ordem.desc ? " ↓" : " ↑") : "");
+
+  const colunasLojas = lojas.length ? lojas : dados?.lojas ?? [];
+  const escolhidas = dados?.modo === "vendidos" ? dados.lojasSel ?? [] : [];
+  const posicao = new Map((dados?.itens ?? []).map((l, i) => [l.produto, i + 1]));
+
+  const lista = (() => {
+    if (!dados) return [];
+    let itens = dados.itens;
+    if (dados.modo === "vendidos" && soRepor && escolhidas.length)
+      itens = itens.filter((l) => precisaRepor(l, escolhidas));
+    if (!ordem) return itens;
+    const valor = (l: Linha): number | string =>
+      ordem.col === "produto"
+        ? l.produto
+        : ordem.col === "vendidas"
+          ? l.vendidas
+          : ordem.col === "sel"
+            ? saldoEm(l, escolhidas)
+            : l.porLoja[ordem.col.slice(5)] ?? 0;
+    return [...itens].sort((a, b) => {
+      const va = valor(a);
+      const vb = valor(b);
+      const c = typeof va === "string" ? va.localeCompare(vb as string, "pt-BR") : va - (vb as number);
+      return ordem.desc ? -c : c;
+    });
+  })();
 
   const baixarCSV = () => {
-    const csv = paraCSV(lista, comSaldo);
-    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+    if (!dados) return;
+    const vend = dados.modo === "vendidos";
+    const cab = [
+      ...(vend ? ["Posição"] : []),
+      "Produto",
+      ...(vend ? ["Vendidas"] : []),
+      ...(vend && escolhidas.length ? [`Estoque ${escolhidas.join(" + ")}`] : []),
+      ...colunasLojas,
+    ];
+    const corpo = lista.map((l) => [
+      ...(vend ? [String(posicao.get(l.produto) ?? "")] : []),
+      `"${l.produto.replace(/"/g, '""')}"`,
+      ...(vend ? [String(l.vendidas)] : []),
+      ...(vend && escolhidas.length ? [String(saldoEm(l, escolhidas))] : []),
+      ...colunasLojas.map((loja) => String(l.porLoja[loja] ?? 0)),
+    ]);
+    const csv = [cab, ...corpo].map((r) => r.join(";")).join("\n");
+    const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `produtos-${consulta?.cat || consulta?.q || "lista"}-${from}-a-${to}.csv`;
+    a.download = vend
+      ? `mais-vendidos-${escolhidas.join("-") || "todas"}-${dados.from}-a-${dados.to}.csv`
+      : `estoque-${q.trim() || "busca"}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
-  // Todas as lojas, sempre: "zero em Belo Horizonte" também é resposta
-  const comSaldo = lojas;
-  const lista = (dados?.itens ?? [])
-    .filter((l) => filtro === "todos" || l.situacao === filtro)
-    .sort((a, b) => {
-      const dir = ordem.desc ? -1 : 1;
-      if (ordem.col === "produto") return a.produto.localeCompare(b.produto, "pt-BR") * dir;
-      if (ordem.col.startsWith("loja:")) {
-        const loja = ordem.col.slice(5);
-        return ((a.porLoja[loja] ?? 0) - (b.porLoja[loja] ?? 0)) * dir;
-      }
-      if (ordem.col === "cobertura") {
-        // Sem venda não tem cobertura: fica sempre no fim
-        const va = a.cobertura ?? Number.MAX_SAFE_INTEGER;
-        const vb = b.cobertura ?? Number.MAX_SAFE_INTEGER;
-        return (va - vb) * dir;
-      }
-      return (
-        (a[ordem.col as "pecas" | "faturamento" | "estoque"] -
-          b[ordem.col as "pecas" | "faturamento" | "estoque"]) *
-        dir
-      );
-    });
+
+  const nomePeriodo =
+    periodo.key === "custom" ? `${fmtDay(periodo.from)} a ${fmtDay(periodo.to)}` : periodo.key;
 
   return (
     <div>
-      {/* Passo 1 — categoria */}
-      <div className="passo">
-        <span className="passo-num">1</span> Escolha a categoria
+      <div className="seg abas-prod" role="tablist">
+        <button className={aba === "busca" ? "on" : ""} onClick={() => trocarAba("busca")}>
+          Buscar produto
+        </button>
+        <button className={aba === "vendidos" ? "on" : ""} onClick={() => trocarAba("vendidos")}>
+          Mais vendidos
+        </button>
       </div>
-      {categorias === null ? (
-        <div className="empty">Carregando categorias…</div>
+
+      {aba === "busca" ? (
+        <>
+          <input
+            className="busca"
+            autoFocus
+            placeholder="Digite parte do nome (ex.: bolsa lari, top maresias)"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <div className="rank-aviso" style={{ margin: "4px 0 0" }}>
+            Mostra o estoque de agora em todas as lojas, cada cor e tamanho numa linha.
+          </div>
+        </>
       ) : (
-        <div className="filters" role="group" aria-label="Categorias">
-          <button
-            className={categoria === "TOP20" ? "active" : ""}
-            onClick={() => setCategoria(categoria === "TOP20" ? "" : "TOP20")}
-            title="Os 20 produtos que mais saíram no período, de todas as categorias"
-          >
-            ★ 20 mais vendidos
-          </button>
-          {categorias.map((c) => (
-            <button
-              key={c.nome}
-              className={categoria === c.nome ? "active" : ""}
-              onClick={() => setCategoria(categoria === c.nome ? "" : c.nome)}
-              title={`${c.produtos} produtos · ${c.pecas} peças em estoque`}
-            >
-              {c.nome}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <input
-        className="busca"
-        type="search"
-        placeholder="…ou busque pelo nome do produto (ex.: cortininha)"
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && pendente) buscar();
-        }}
-      />
-
-      {!categoria && !busca.trim() && (
-        <div className="empty">
-          Nenhum produto carregado ainda — escolha uma categoria acima, depois as lojas, e toque em
-          buscar.
-        </div>
-      )}
-
-      {(categoria || busca.trim()) && (
         <>
           <div className="passo">
-            <span className="passo-num">2</span> Filtre se quiser
+            <span className="passo-num">1</span> Loja <span className="muted">(nenhuma = todas)</span>
           </div>
           <div className="filters" role="group" aria-label="Lojas">
-            {lojas.map((loja) => (
+            {colunasLojas.map((loja) => (
               <button
                 key={loja}
-                className={units.includes(loja) ? "active" : ""}
-                onClick={() => aoAlternarLoja(loja)}
+                className={lojasSel.includes(loja) ? "active" : ""}
+                onClick={() => alternarLoja(loja)}
               >
                 {loja}
               </button>
             ))}
           </div>
-          <button className="buscar" onClick={buscar} disabled={carregando || !pendente}>
-            {carregando
-              ? "Buscando…"
-              : pendente
-                ? `Ver ${busca.trim() || (categoria === "TOP20" ? "os mais vendidos" : categoria)}`
-                : "Resultado abaixo"}
-          </button>
-        </>
-      )}
 
-      {consulta && carregando && !dados && (
-        <div className="empty">
-          Buscando {categoria === "TOP20" ? "os mais vendidos" : categoria}…
-        </div>
-      )}
-      {consulta && falha && (
-        <div className="card">
-          Não foi possível carregar ({falha}). A primeira busca de cada categoria é a mais pesada;
-          tente de novo em instantes.
-        </div>
-      )}
-
-      {consulta && dados && (
-        <div style={{ opacity: carregando ? 0.6 : 1 }}>
-          {pendente && !carregando && (
-            <div className="parcial">
-              Isto é o resultado do filtro anterior — toque no botão acima para atualizar.
-            </div>
-          )}
-          {dados.erro && <div className="card err-msg">{dados.erro}</div>}
-          {dados.semVendas && (
-            <div className="parcial">
-              Só estoque — é a consulta rápida. As vendas do período são o que demora, então elas
-              vêm só se você pedir.{" "}
-              <button className="link" onClick={carregarVendas} disabled={carregando}>
-                {carregando ? "carregando vendas…" : "trazer as vendas do período"}
+          <div className="passo">
+            <span className="passo-num">2</span> Vendas de quando
+          </div>
+          <div className="filters" role="group" aria-label="Período">
+            {presets.map((p) => (
+              <button
+                key={p.key}
+                className={periodo.key === p.key ? "active" : ""}
+                onClick={() => {
+                  setCustomAberto(false);
+                  setPeriodo(p);
+                }}
+              >
+                {p.key}
+              </button>
+            ))}
+            <button
+              className={periodo.key === "custom" ? "active" : ""}
+              onClick={() => setCustomAberto((v) => !v)}
+            >
+              Personalizado
+            </button>
+          </div>
+          {customAberto && (
+            <div className="custom-range">
+              <input type="date" value={customDe} max={spToday()} onChange={(e) => setCustomDe(e.target.value)} />
+              <span className="muted">até</span>
+              <input type="date" value={customAte} max={spToday()} onChange={(e) => setCustomAte(e.target.value)} />
+              <button
+                className="apply"
+                disabled={!customDe || !customAte || customDe > customAte}
+                onClick={() => {
+                  setPeriodo({ key: "custom", from: customDe, to: customAte });
+                  setCustomAberto(false);
+                }}
+              >
+                Aplicar
               </button>
             </div>
           )}
-          {dados.incompleto && (
-            <div className="parcial">
-              A foto do estoque ainda está sendo montada (são quase 18 mil produtos) — pode faltar
-              produto. Busque de novo em 1 ou 2 minutos, até este aviso sumir.
-            </div>
-          )}
 
-          <div className="seg" role="group" aria-label="Situação">
-            {(["todos", "ruptura", "acabando", "parado", "negativo"] as Filtro[]).map((f) => (
-              <button key={f} className={filtro === f ? "on" : ""} onClick={() => setFiltro(f)}>
-                {f === "todos" ? "Todos" : SITUACAO[f].rotulo}
+          <div className="passo">
+            <span className="passo-num">3</span> Quantos produtos
+          </div>
+          <div className="seg" role="group" aria-label="Quantos">
+            {TOPS.map((t) => (
+              <button key={t} className={top === t ? "on" : ""} onClick={() => setTop(t)}>
+                {t} mais vendidos
               </button>
             ))}
           </div>
 
-          <div className="card">
-            <div className="tbl-wrap">
-              <table className="prod-tbl">
-                <thead>
-                  <tr>
-                    <th className="ord" onClick={() => ordenar("produto")}>
-                      {consulta.cat === "TOP20" ? "20 mais vendidos" : dados.categoria}
-                      {ordem.col === "produto" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                    </th>
-                    {!dados.semVendas && (
-                      <>
-                        <th className="n ord" onClick={() => ordenar("pecas")}>
-                          Vendeu{ordem.col === "pecas" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                        </th>
-                        <th className="n ord" onClick={() => ordenar("faturamento")}>
-                          R${ordem.col === "faturamento" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                        </th>
-                      </>
-                    )}
-                    {!dados.semVendas && (
-                      <th className="n ord" onClick={() => ordenar("estoque")}>
-                        Estoque{ordem.col === "estoque" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                      </th>
-                    )}
-                    {comSaldo.map((l) => (
-                      <th
-                        key={l}
-                        className="n ord"
-                        onClick={() => ordenar(`loja:${l}`)}
-                        title={`Ordenar pelo saldo de ${l}`}
-                      >
-                        {l}
-                        {ordem.col === `loja:${l}` ? (ordem.desc ? " ↓" : " ↑") : ""}
-                      </th>
-                    ))}
-                    {!dados.semVendas && (
-                      <>
-                        <th className="n ord" onClick={() => ordenar("cobertura")}>
-                          Cobertura{ordem.col === "cobertura" ? (ordem.desc ? " ↓" : " ↑") : ""}
-                        </th>
-                        <th>Situação</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lista.map((l) => (
-                    <tr key={l.produto}>
-                      <td>{l.produto}</td>
-                      {!dados.semVendas && (
-                        <>
-                          <td className="n">{l.pecas.toLocaleString("pt-BR")}</td>
-                          <td className="n">{brl.format(l.faturamento)}</td>
-                        </>
-                      )}
-                      {!dados.semVendas && (
-                        <td className="n">
-                          <b style={l.estoque < 0 ? { color: "var(--c-meli)" } : undefined}>
-                            {l.estoque.toLocaleString("pt-BR")}
-                          </b>
-                        </td>
-                      )}
-                      {comSaldo.map((loja) => (
-                        <td
-                          key={loja}
-                          className={`n loja-col${ordem.col === `loja:${loja}` ? " ordenada" : ""}`}
-                        >
-                          {l.porLoja[loja] ?? 0}
-                        </td>
-                      ))}
-                      {!dados.semVendas && (
-                        <>
-                          <td className="n">{l.cobertura === null ? "—" : `${l.cobertura} d`}</td>
-                          <td>
-                            <span className="sit" style={{ color: SITUACAO[l.situacao].cor }}>
-                              {SITUACAO[l.situacao].rotulo}
-                            </span>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <button className="buscar" onClick={() => verMaisVendidos()} disabled={carregando}>
+            {carregando ? "Buscando as vendas…" : "Ver os mais vendidos"}
+          </button>
+          {carregando && (
+            <div className="rank-aviso" style={{ margin: "6px 0 0" }}>
+              Na primeira vez que um período é pedido, a TOTVS demora alguns minutos para mandar as
+              vendas. Depois ele fica guardado e abre na hora.
             </div>
-            {comSaldo.length > 3 && (
-              <div className="rank-aviso" style={{ margin: "8px 0 0" }}>
-                Arraste a tabela para o lado para ver todas as lojas.
+          )}
+        </>
+      )}
+
+      {falha && <div className="card err-msg">{falha}</div>}
+      {aba === "busca" && carregando && !dados && <div className="empty">Buscando…</div>}
+
+      {dados && (
+        <div style={{ opacity: carregando ? 0.6 : 1, marginTop: 16 }}>
+          {dados.erro && <div className="card err-msg">{dados.erro}</div>}
+          {dados.estoqueIncompleto && (
+            <div className="parcial">
+              A foto do estoque ainda está sendo montada (são quase 18 mil produtos) — pode faltar
+              produto. Tente de novo em 1 ou 2 minutos, até este aviso sumir.
+            </div>
+          )}
+          {dados.vendasIncompletas && (
+            <div className="parcial">
+              Ainda faltam dias de venda nesse período — a TOTVS não mandou tudo a tempo. Clique em
+              ver de novo em 1 ou 2 minutos.
+            </div>
+          )}
+
+          <div className="card">
+            {dados.modo === "vendidos" ? (
+              <div className="goal-head">
+                <h2>
+                  {dados.top} mais vendidos · {escolhidas.length ? escolhidas.join(" + ") : "todas as lojas"}
+                </h2>
+                <span className="muted">
+                  {nomePeriodo}
+                  {dados.from && dados.to && ` (${fmtDay(dados.from)} a ${fmtDay(dados.to)})`}
+                </span>
+              </div>
+            ) : (
+              <div className="goal-head">
+                <h2>{dados.total.toLocaleString("pt-BR")} variações com estoque</h2>
+                {dados.total > dados.itens.length && (
+                  <span className="muted">mostrando as primeiras {dados.itens.length} — refine a busca</span>
+                )}
               </div>
             )}
-            {lista.length === 0 && <div className="empty">Nenhum produto nessa situação.</div>}
+
+            {dados.modo === "vendidos" && escolhidas.length > 0 && (
+              <label className="so-repor">
+                <input type="checkbox" checked={soRepor} onChange={(e) => setSoRepor(e.target.checked)} />
+                Só o que precisa repor (vendeu mais do que tem em {escolhidas.join(" + ")})
+              </label>
+            )}
+
+            {lista.length === 0 ? (
+              <div className="empty">
+                {dados.modo === "busca" ? "Nenhum produto com estoque com esse nome." : "Nada para mostrar."}
+              </div>
+            ) : (
+              <div className="tbl-wrap">
+                <table className="prod-tbl">
+                  <thead>
+                    <tr>
+                      <th className="ord" onClick={() => ordenar("produto")}>
+                        Produto{seta("produto")}
+                      </th>
+                      {dados.modo === "vendidos" && (
+                        <th className="n ord" onClick={() => ordenar("vendidas")}>
+                          Vendidas{seta("vendidas")}
+                        </th>
+                      )}
+                      {dados.modo === "vendidos" && escolhidas.length > 0 && (
+                        <th className="n ord col-sel" onClick={() => ordenar("sel")}>
+                          Estoque {escolhidas.length === 1 ? escolhidas[0] : "nas escolhidas"}
+                          {seta("sel")}
+                        </th>
+                      )}
+                      {colunasLojas.map((loja) => (
+                        <th key={loja} className="n ord" onClick={() => ordenar(`loja:${loja}`)}>
+                          {loja}
+                          {seta(`loja:${loja}`)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lista.map((l) => {
+                      const saldoSel = saldoEm(l, escolhidas);
+                      const repor = dados.modo === "vendidos" && escolhidas.length > 0 && saldoSel < l.vendidas;
+                      return (
+                        <tr key={l.produto}>
+                          <td>
+                            {dados.modo === "vendidos" && (
+                              <span className="pos">{posicao.get(l.produto)}º</span>
+                            )}
+                            {l.produto}
+                          </td>
+                          {dados.modo === "vendidos" && <td className="n">{l.vendidas}</td>}
+                          {dados.modo === "vendidos" && escolhidas.length > 0 && (
+                            <td className={`n col-sel${repor ? (saldoSel <= 0 ? " zerado" : " baixo") : ""}`}>
+                              <b>{saldoSel}</b>
+                            </td>
+                          )}
+                          {colunasLojas.map((loja) => {
+                            const v = l.porLoja[loja] ?? 0;
+                            return (
+                              <td
+                                key={loja}
+                                className={`n loja-col${v < 0 ? " negativo" : v === 0 ? " vazio" : ""}${
+                                  ordem?.col === `loja:${loja}` ? " ordenada" : ""
+                                }`}
+                              >
+                                {v}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {lista.length > 0 && (
               <button className="exportar" onClick={baixarCSV}>
                 Baixar em planilha ({lista.length} linhas)
@@ -444,32 +453,21 @@ export function Produtos({
             )}
             <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
               {dados.estoqueEm && (
-              <>
-                Saldo de{" "}
-                {new Date(dados.estoqueEm).toLocaleString("pt-BR", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  timeZone: "America/Sao_Paulo",
-                })}
-                .{" "}
-              </>
-            )}
-            {dados.semVendas ? (
-              "Números por loja, em peças."
-            ) : (
-              <>
-                {consulta.units.length > 0 ? (
-                  <>
-                    <b>Vendas de {consulta.units.join(", ")}</b>, mas o estoque é de{" "}
-                    <b>todas as lojas</b> — é assim que dá para ver quem tem peça para remanejar.{" "}
-                  </>
-                ) : null}
-                Venda é do período escolhido. Cobertura = quantos dias o saldo dura no ritmo dos
-                últimos {dados.dias} dias.
-              </>
-            )}
+                <>
+                  Estoque de{" "}
+                  {new Date(dados.estoqueEm).toLocaleString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "America/Sao_Paulo",
+                  })}
+                  , em peças, de todas as lojas.{" "}
+                </>
+              )}
+              {dados.modo === "vendidos" &&
+                "Vendidas = peças vendidas no período nas lojas escolhidas. Em vermelho: sem estoque; em amarelo: tem menos do que vendeu."}
+              {" "}Clique no nome de uma coluna para ordenar.
             </div>
           </div>
         </div>

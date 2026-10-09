@@ -1,40 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { fetchEstoque } from "@/lib/connectors/estoque";
-import { Agrupamento, categoriaDe, rotulo } from "@/lib/produtos";
-import { spMidnight, todaySpKey } from "@/lib/types";
+import { rodandoLocal } from "@/lib/credenciais";
+import { todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export interface LinhaProduto {
+  /** Nome completo da variação (modelo, cor e tamanho) */
   produto: string;
-  pecas: number;
-  faturamento: number;
-  estoque: number;
-  /** Saldo por loja */
-  porLoja: Record<string, number>;
-  /** Dias que o estoque dura no ritmo do período; null quando não vende */
-  cobertura: number | null;
-  situacao: "ruptura" | "acabando" | "ok" | "parado" | "negativo";
-  /** Curva ABC por faturamento acumulado: A até 80%, B até 95%, C o resto */
-  abc: "A" | "B" | "C";
-  /** Peças vendidas por loja */
+  /** Peças vendidas nas lojas escolhidas, no período (só nos mais vendidos) */
+  vendidas: number;
+  /** Peças vendidas por loja, no período */
   vendasPorLoja: Record<string, number>;
+  /** Saldo de agora, por loja — sempre de todas as lojas */
+  porLoja: Record<string, number>;
+}
+
+/** "Boné" acha "BONE" e vice-versa: o cadastro nem sempre tem acento. */
+function normalizar(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
 }
 
 /**
- * Relação venda × estoque por produto. Venda vem das notas do período,
- * estoque é o saldo de agora — por isso a cobertura é uma projeção, não um
- * número histórico.
+ * Dois jeitos de olhar produto:
+ *  - ?modo=busca&q=parte do nome → saldo de agora em todas as lojas
+ *  - ?modo=vendidos&from&to&lojas&top → o que mais vendeu nas lojas e no
+ *    período escolhidos, com o saldo de agora em todas as lojas ao lado
  */
-/** "Boné" acha "BONE" e vice-versa: o cadastro nem sempre tem acento. */
-function semAcento(texto: string): string {
-  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
-}
-
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
+  const modo = sp.get("modo") === "vendidos" ? "vendidos" : "busca";
+  const todasLojas = Object.values(LOJAS);
+
+  // Uma foto só do estoque, filtrada aqui: a API não filtra por parte do nome
+  const estoque = await fetchEstoque();
+  const base = {
+    modo,
+    lojas: todasLojas,
+    estoqueEm: estoque.em ?? "",
+    estoqueIncompleto: Boolean(estoque.incompleto),
+    erro: estoque.erro,
+  };
+
+  if (modo === "busca") {
+    // Cada palavra precisa aparecer, em qualquer ordem: "lari bolsa" acha "BOLSA LARI"
+    const palavras = normalizar(sp.get("q") ?? "").split(" ").filter(Boolean);
+    if (palavras.length === 0 || palavras.join("").length < 2) {
+      return NextResponse.json({ ...base, itens: [], total: 0 });
+    }
+    const linhas = new Map<string, LinhaProduto>();
+    for (const s of estoque.itens) {
+      const nome = nomeCompleto(s.nome, s.cor, s.tamanho);
+      const alvo = normalizar(nome);
+      if (!palavras.every((p) => alvo.includes(p))) continue;
+      const e = linhas.get(alvo) ?? { produto: nome, vendidas: 0, vendasPorLoja: {}, porLoja: {} };
+      somarSaldo(e, s.porLoja);
+      linhas.set(alvo, e);
+    }
+    const itens = Array.from(linhas.values()).sort((a, b) => a.produto.localeCompare(b.produto, "pt-BR"));
+    return NextResponse.json({ ...base, itens: itens.slice(0, 500), total: itens.length });
+  }
+
+  // ——— Mais vendidos ———
   const hoje = todaySpKey();
   const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
   let from = sp.get("from") ?? "";
@@ -44,177 +78,68 @@ export async function GET(req: NextRequest) {
     from = `${hoje.slice(0, 7)}-01`;
   }
   if (to > hoje) to = hoje;
-  const dias = Math.max(
-    1,
-    Math.round((spMidnight(to).getTime() - spMidnight(from).getTime()) / 86400000) + 1
-  );
+  const lojasSel = (sp.get("lojas") ?? "")
+    .split(",")
+    .map((l) => l.trim())
+    .filter((l) => todasLojas.includes(l));
+  const top = Math.min(Math.max(Number(sp.get("top")) || 20, 1), 200);
 
-  const agrup = (sp.get("agrup") ?? "modelo") as Agrupamento;
-  // Sem categoria não há consulta: a tela pede para escolher uma primeiro.
-  // TOP20 é o atalho que atravessa todas as categorias.
-  const categoria = (sp.get("cat") ?? "").trim().toUpperCase();
-  const maisVendidos = categoria === "TOP20";
-  // Busca por nome atravessa as categorias; a API do saldo filtra por nome
-  const busca = semAcento(sp.get("q") ?? "");
-  // ?sem=vendas responde só com o saldo, que é uma consulta só e volta rápido.
-  // A venda do período é o que demora, e vem na segunda chamada.
-  const semVendas = sp.get("sem") === "vendas" && !maisVendidos;
-  if (!categoria && !busca) {
-    return NextResponse.json({ erro: "Escolha uma categoria", itens: [] }, { status: 400 });
-  }
-  const units = (sp.get("units") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
-  const lojasSel = units.filter((u) => u !== "Site");
-  const filiaisSel = Object.entries(LOJAS)
-    .filter(([, nome]) => lojasSel.includes(nome))
-    .map(([codigo]) => Number(codigo));
-
-  const vendas = semVendas
-    ? { itens: [], incompleto: false, erro: undefined as string | undefined }
-    : await fetchVendasPorProduto(from, to);
-
-  const combina = (nome: string) =>
-    busca ? semAcento(nome).includes(busca) : maisVendidos || categoriaDe(nome) === categoria;
+  // Na máquina própria não há limite de tempo: espera o período inteiro
+  const vendas = await fetchVendasPorProduto(from, to, rodandoLocal() ? 5 * 60000 : 35000);
 
   const linhas = new Map<string, LinhaProduto>();
-  const nova = (produto: string): LinhaProduto => ({
-    produto,
-    pecas: 0,
-    faturamento: 0,
-    estoque: 0,
-    porLoja: {},
-    cobertura: null,
-    situacao: "ok",
-    abc: "C",
-    vendasPorLoja: {},
-  });
-
-  // Vendas do período, já agregadas por dia/produto/loja
   for (const v of vendas.itens) {
-    if (!combina(v.nome)) continue;
     if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
-    const chave = rotulo(v.nome, agrup);
+    const chave = normalizar(v.nome);
     if (!chave) continue;
-    const e = linhas.get(chave) ?? nova(chave);
-    e.pecas += v.qtd;
-    e.faturamento += v.receita;
+    const e = linhas.get(chave) ?? { produto: v.nome.trim(), vendidas: 0, vendasPorLoja: {}, porLoja: {} };
+    e.vendidas += v.qtd;
     if (v.loja) e.vendasPorLoja[v.loja] = (e.vendasPorLoja[v.loja] ?? 0) + v.qtd;
     linhas.set(chave, e);
   }
-
-  // No atalho dos mais vendidos, só os 20 primeiros seguem adiante
-  if (maisVendidos) {
-    const top = Array.from(linhas.values())
-      .sort((a, b) => b.pecas - a.pecas)
-      .slice(0, 20)
-      .map((l) => l.produto);
-    for (const chave of Array.from(linhas.keys())) {
-      if (!top.includes(chave)) linhas.delete(chave);
-    }
-  }
-
-  /**
-   * O saldo vem de TODAS as lojas, mesmo com uma loja filtrada: a pergunta é
-   * "esta loja vendeu, quem tem para mandar?" — restringir o saldo à loja
-   * filtrada esconderia justamente a resposta.
-   *
-   * Nos mais vendidos, o saldo é buscado produto a produto (a lista já está
-   * fechada). Na busca e na categoria, é uma consulta só pelo nome, porque
-   * ali o estoque também CRIA linha: um produto que não vendeu no período
-   * mas tem saldo precisa aparecer — senão some justamente a cor parada,
-   * que é o que se quer enxergar.
-   */
-  // Uma foto só do estoque, filtrada aqui: a API não filtra por parte do nome
-  const estoque = await fetchEstoque();
+  const ranking = Array.from(linhas.entries())
+    .filter(([, l]) => l.vendidas > 0)
+    .sort((a, b) => b[1].vendidas - a[1].vendidas)
+    .slice(0, top);
+  const escolhidos = new Map(ranking);
 
   /**
    * O nome no cadastro do produto e o nome no item da nota nem sempre são
-   * idênticos, então o cruzamento aceita o rótulo exato ou o prefixo.
+   * idênticos, então o cruzamento aceita o nome exato ou o prefixo.
    */
-  const chaves = Array.from(linhas.keys()).sort((a, b) => b.length - a.length);
-  const casar = (nomeProduto: string): string | null => {
-    const exato = rotulo(nomeProduto, agrup);
-    if (linhas.has(exato)) return exato;
-    const alvo = nomeProduto.trim().toUpperCase();
-    return chaves.find((k) => alvo.startsWith(k.toUpperCase())) ?? null;
-  };
-
-  let comSaldoAchado = 0;
+  const chaves = Array.from(escolhidos.keys()).sort((a, b) => b.length - a.length);
   for (const s of estoque.itens) {
-    let chave: string | null;
-    if (maisVendidos) {
-      chave = casar(s.nome); // lista fechada: só anexa saldo a quem já está nela
-      if (!chave) continue;
-    } else {
-      if (!combina(s.nome)) continue;
-      chave = casar(s.nome) ?? rotulo(s.nome, agrup); // cria linha se não houver
-      if (!chave) continue;
-    }
-    const e = linhas.get(chave) ?? nova(chave);
-    for (const [loja, qtd] of Object.entries(s.porLoja)) {
-      e.estoque += qtd;
-      e.porLoja[loja] = (e.porLoja[loja] ?? 0) + qtd;
-    }
-    comSaldoAchado += 1;
-    linhas.set(chave, e);
+    const alvo = normalizar(nomeCompleto(s.nome, s.cor, s.tamanho));
+    const curto = normalizar(s.nome);
+    const chave = escolhidos.has(alvo)
+      ? alvo
+      : escolhidos.has(curto)
+        ? curto
+        : chaves.find((k) => alvo.startsWith(k) || k.startsWith(alvo));
+    if (chave) somarSaldo(escolhidos.get(chave)!, s.porLoja);
   }
-
-  const itens = Array.from(linhas.values()).map((l) => {
-    const porDia = l.pecas / dias;
-    const cobertura = porDia > 0 ? Math.round(l.estoque / porDia) : null;
-    let situacao: LinhaProduto["situacao"] = "ok";
-    if (l.estoque < 0) situacao = "negativo"; // divergência de inventário
-    else if (l.pecas > 0 && l.estoque <= 0) situacao = "ruptura";
-    else if (cobertura !== null && cobertura < 15) situacao = "acabando";
-    else if (l.pecas === 0 && l.estoque > 0) situacao = "parado";
-    return { ...l, cobertura, situacao };
-  });
-
-  itens.sort((a, b) =>
-    maisVendidos ? b.pecas - a.pecas : b.faturamento - a.faturamento || b.estoque - a.estoque
-  );
-
-  // Curva ABC: A são os produtos que somam os primeiros 80% do faturamento
-  const totalFat = itens.reduce((s, i) => s + i.faturamento, 0);
-  let acumulado = 0;
-  for (const i of itens) {
-    acumulado += i.faturamento;
-    const parte = totalFat > 0 ? acumulado / totalFat : 1;
-    i.abc = parte <= 0.8 ? "A" : parte <= 0.95 ? "B" : "C";
-  }
-
 
   return NextResponse.json({
+    ...base,
     from,
     to,
-    dias,
-    agrup,
-    lojas: lojasSel,
-    estoqueConectado: estoque.conectado,
-    categoria: busca ? `Busca: ${busca}` : categoria,
-    // Diagnóstico do cruzamento: separa "a API não devolveu" de
-    // "devolveu mas o nome não bate com o da venda"
-    diag: {
-      produtosConsultados: linhas.size,
-      saldosRecebidos: estoque.itens.length,
-      saldosCasados: comSaldoAchado,
-      exemploConsultado: Array.from(linhas.keys())[0] ?? "",
-      exemploRecebido: estoque.itens[0]?.nome ?? "",
-      estoqueErro: estoque.erro ?? "",
-      estoqueEm: estoque.em ?? "",
-    },
-    semVendas,
-    estoqueEm: estoque.em ?? "",
-    incompleto: vendas.incompleto || Boolean(estoque.incompleto),
-    lojasDisponiveis: Object.values(LOJAS),
-    erro: estoque.erro ?? vendas.erro,
-    itens: itens.slice(0, 400),
-    totais: {
-      produtos: itens.length,
-      rupturas: itens.filter((i) => i.situacao === "ruptura").length,
-      acabando: itens.filter((i) => i.situacao === "acabando").length,
-      parados: itens.filter((i) => i.situacao === "parado").length,
-      negativos: itens.filter((i) => i.situacao === "negativo").length,
-      pecasEstoque: itens.reduce((s, i) => s + i.estoque, 0),
-    },
+    lojasSel,
+    top,
+    vendasIncompletas: vendas.incompleto,
+    erro: vendas.erro ?? estoque.erro,
+    itens: ranking.map(([, l]) => l),
+    total: ranking.length,
   });
+}
+
+/** Nome da nota já traz cor e tamanho; o do saldo às vezes vem separado. */
+function nomeCompleto(nome: string, cor: string, tamanho: string): string {
+  const base = nome.trim();
+  const tem = normalizar(base);
+  const extra = [cor, tamanho].filter((x) => x && !` ${tem} `.includes(` ${normalizar(x)} `));
+  return [base, ...extra].join(" ");
+}
+
+function somarSaldo(l: LinhaProduto, porLoja: Record<string, number>) {
+  for (const [loja, qtd] of Object.entries(porLoja)) l.porLoja[loja] = (l.porLoja[loja] ?? 0) + qtd;
 }

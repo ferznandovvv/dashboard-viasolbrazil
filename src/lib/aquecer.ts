@@ -1,4 +1,3 @@
-import { calcularCategorias, gravarCategorias } from "./categorias";
 import { fetchEstoque } from "./connectors/estoque";
 import { fetchTotvsSales, fetchVendasPorProduto } from "./connectors/totvs";
 import { todaySpKey } from "./types";
@@ -18,16 +17,18 @@ export async function aquecer() {
     fetchEstoque(true), // varre de novo para a foto ficar fresca
   ]);
 
-  // A lista de categorias sai do mesmo estoque, e fica pronta para a tela
-  const categorias = calcularCategorias(estoque.itens);
-  if (!estoque.incompleto && estoque.itens.length > 0) await gravarCategorias(categorias);
+  // Mês passado também, para os "mais vendidos" abrirem na hora; depois de
+  // guardado, cada dia não é buscado de novo
+  const [y, m] = hoje.split("-").map(Number);
+  const ini = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
+  const fim = new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10);
+  await fetchVendasPorProduto(ini, fim, 10 * 60000);
 
   return {
     periodo: { de: inicioMes, ate: hoje },
     vendas: { notas: vendasMes.orders.length, erro: vendasMes.error },
     produtos: { linhas: produtos.itens.length, incompleto: produtos.incompleto, erro: produtos.erro },
     estoque: { itens: estoque.itens.length, incompleto: estoque.incompleto, erro: estoque.erro },
-    categorias: categorias.length,
   };
 }
 
@@ -37,10 +38,7 @@ export async function aquecer() {
  */
 export async function continuarEstoque() {
   const estoque = await fetchEstoque(true);
-  const categorias = calcularCategorias(estoque.itens);
-  if (!estoque.incompleto && estoque.itens.length > 0) await gravarCategorias(categorias);
   return {
     estoque: { itens: estoque.itens.length, incompleto: estoque.incompleto, erro: estoque.erro },
-    categorias: categorias.length,
   };
 }
