@@ -45,75 +45,45 @@ Tudo vale na hora, sem reiniciar, e fica guardado em `dados/credenciais.json`
 Vercel. Depois de autorizar, o navegador vai para
 `https://dashboard-viasolbrazil.vercel.app/?code=...` — mesmo que a página
 apareça pausada ou com erro, troque só o começo do endereço por
-`http://localhost:3000` (mantendo o `/?code=...` do resto) e aperte Enter.
+`http://localhost:3100` (mantendo o `/?code=...` do resto) e aperte Enter.
 
 ## 3. Subir
 
-```bash
-npm run build
-npm start
-```
+Dê dois cliques em **`iniciar-painel.cmd`**, na pasta do projeto. Ele busca
+atualizações, prepara o sistema e sobe em <http://localhost:3100> — a porta
+3100 para não brigar com outros programas que usam a 3000 (Remotion etc.).
+Não feche a janela.
 
-O sistema fica em <http://localhost:3000>. Para abrir de outro computador da
-mesma rede, use o IP da máquina (ex.: `http://192.168.0.50:3000`).
+## 4. Ligar junto com o Windows
 
-## 4. Deixar rodando sozinho
+1. `Win + R` → digite `shell:startup` → Enter (abre a pasta Inicializar)
+2. Clique com o botão direito em `iniciar-painel.cmd` → **Mostrar mais opções →
+   Criar atalho**, e arraste o atalho para essa pasta
 
-**Windows** — instale o gerenciador de processos e registre como serviço:
-
-```bash
-npm install -g pm2
-pm2 start npm --name viasol -- start
-pm2 save
-pm2 startup
-```
-
-Assim ele volta sozinho quando a máquina reinicia.
+Toda vez que o computador ligar, o painel sobe sozinho — já atualizado.
 
 ## 5. Atualizar os dados todo dia
 
-Na Vercel isso era o cron. Aqui, agende uma chamada diária à rota de
-aquecimento — é ela que deixa estoque e vendas prontos antes de alguém abrir.
+Não precisa configurar nada: rodando na máquina, o próprio sistema aquece o
+cache às 6h40 (vendas, venda por produto e estoque), continua o estoque às
+6h58, e também um minuto depois de ligar.
 
-**Windows (Agendador de Tarefas):** crie uma tarefa diária às 6h40 que execute
+## 6. Acessar de fora da loja
 
-```
-curl http://localhost:3000/api/aquecer
-```
-
-**Linux (crontab -e):**
-
-```
-40 6 * * * curl -s http://localhost:3000/api/aquecer > /dev/null
-```
-
-## 6. Acessar de fora da loja (opcional)
-
-Para abrir do celular em qualquer lugar, sem liberar porta no roteador, use
-um túnel do Cloudflare — é gratuito e dá um endereço HTTPS fixo:
-
-```bash
-npm install -g cloudflared
-cloudflared tunnel --url http://localhost:3000
-```
-
-Ele imprime um endereço `https://algo.trycloudflare.com`. Para um endereço
-fixo e permanente, crie uma conta gratuita no Cloudflare e siga
-<https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/>.
+Um túnel do Cloudflare (gratuito) publica o painel em
+`https://painel.viasolbrazil.com.br`. O conector `cloudflared` fica instalado
+como serviço do Windows, então volta sozinho. No Zero Trust → Networks →
+Tunnels → painel, a rota deve apontar para `127.0.0.1:3100`.
 
 ## Atualizar o sistema depois
 
-```bash
-git pull
-npm install
-npm run build
-pm2 restart viasol
-```
+Feche a janela do painel e abra `iniciar-painel.cmd` de novo — ele faz o
+`git pull` e prepara a versão nova.
 
 ## Se algo não funcionar
 
 - **Página pede senha e não aceita** — confira `DASHBOARD_PASSWORD` no `.env.local`
 - **Lojas físicas vazias** — confira as quatro variáveis `TOTVS_`
-- **Estoque demorando** — rode `curl http://localhost:3000/api/aquecer` uma vez
-  e aguarde; ele monta a foto completa
+- **Estoque demorando** — feche e abra o painel de novo: um minuto depois
+  de ligar ele monta a foto completa
 - **Medir desempenho** — abra `/api/perf`
