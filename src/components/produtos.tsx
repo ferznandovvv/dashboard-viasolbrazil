@@ -32,6 +32,17 @@ type Aba = "busca" | "vendidos";
 const PERIODOS = ["Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
 const TOPS = [20, 50, 100];
 
+/** Nomes curtos no topo das colunas, para as 8 lojas caberem sem rolar. */
+const CURTO: Record<string, string> = {
+  "Loja de Fábrica": "Fábrica",
+  "Rio de Janeiro": "Rio",
+  "Ribeirão Preto": "Ribeirão",
+  "SP — Itaim": "Itaim",
+  "Belo Horizonte": "BH",
+  "Praia Grande": "P. Grande",
+};
+const curto = (loja: string) => CURTO[loja] ?? loja;
+
 /** Saldo somado das lojas escolhidas (ou de todas, sem escolha). */
 function saldoEm(l: Linha, lojas: string[]): number {
   return lojas.reduce((s, loja) => s + (l.porLoja[loja] ?? 0), 0);
@@ -395,13 +406,13 @@ export function Produtos() {
                       )}
                       {dados.modo === "vendidos" && escolhidas.length > 0 && (
                         <th className="n ord col-sel" onClick={() => ordenar("sel")}>
-                          Estoque {escolhidas.length === 1 ? escolhidas[0] : "nas escolhidas"}
+                          Estoque {escolhidas.length === 1 ? curto(escolhidas[0]) : "escolhidas"}
                           {seta("sel")}
                         </th>
                       )}
                       {colunasLojas.map((loja) => (
-                        <th key={loja} className="n ord" onClick={() => ordenar(`loja:${loja}`)}>
-                          {loja}
+                        <th key={loja} className="n ord" title={loja} onClick={() => ordenar(`loja:${loja}`)}>
+                          {curto(loja)}
                           {seta(`loja:${loja}`)}
                         </th>
                       ))}
