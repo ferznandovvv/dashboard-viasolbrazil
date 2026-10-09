@@ -573,3 +573,28 @@ th.num { text-align: right; }
   text-decoration: none; color: var(--text-primary); font-size: 14px;
 }
 .tl-escolha:hover { background: var(--surface-1); }
+
+/* Grupo Online: total no cabeçalho, um card por canal embaixo */
+.online-grupo {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px; margin-bottom: 14px;
+}
+.online-grupo.sel { outline: 2px solid var(--brand); }
+.online-cab {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; width: 100%;
+  background: none; border: 0; padding: 2px 4px 12px; font: inherit; color: inherit;
+  text-align: left; cursor: pointer;
+}
+.online-cab .meta-mini { margin-top: 0; min-width: 140px; }
+.online-titulo { font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); }
+.online-total { font-family: var(--font-serif); font-size: 24px; font-weight: 600; }
+.online-cab .muted { font-size: 12px; }
+.channels.online { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 0; }
+.channels.online .channel-card { background: var(--page); }
+.channels.online .rev { font-size: 20px; }
+.channel-card .setup a { color: inherit; }
+@media (max-width: 640px) {
+  .online-grupo { padding: 10px; }
+  .online-total { font-size: 18px; }
+  .channels.online { grid-template-columns: 1fr 1fr; }
+}

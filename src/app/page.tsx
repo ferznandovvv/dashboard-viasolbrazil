@@ -203,26 +203,43 @@ export default function Dashboard() {
   const sitePrev = online.reduce((s, c) => s + c.prevRevenue, 0);
   const siteOrders = online.reduce((s, c) => s + c.orders, 0);
   const lojasCh = data?.channels.find((c) => c.channel === "lojas");
+  const totalAds = (data?.ads.spend ?? 0) + (data?.tiktokAds.spend ?? 0);
+  const conectados = ONLINE.filter((id) => data?.channels.find((c) => c.channel === id)?.connected);
+
+  /** Clicar num canal online filtra só ele; clicar de novo volta para tudo. */
+  const filtrarCanal = (id: Canal) => {
+    if (canal === id) {
+      setCanal("");
+      setSel([]);
+      return;
+    }
+    setSel(["Site"]);
+    setCanal(id);
+  };
 
   // Séries do gráfico conforme a unidade em foco
   const serieDaUnidade = (u: string) =>
     u === "Site"
-      ? { key: "site", label: "Site (online)", color: "var(--c-shopify)" }
+      ? { key: "site", label: "Online", color: "var(--c-shopify)" }
       : { key: `loja:${u}`, label: u, color: corDaLoja(u) };
 
   const chartSeries = (() => {
     if (canal)
       return [{ key: canal, label: CHANNEL_META[canal].name, color: CHANNEL_META[canal].cssVar }];
     if (soSite)
-      return ONLINE.map((c) => ({
+      return conectados.map((c) => ({
         key: c,
-        label: CHANNEL_META[c].name,
+        label: c === "shopify" ? "Site" : CHANNEL_META[c].name,
         color: CHANNEL_META[c].cssVar,
       }));
     if (sel.length > 0) return sel.map(serieDaUnidade);
     if (porLoja)
       return [
-        { key: "site", label: "Site (online)", color: "var(--c-shopify)" },
+        ...conectados.map((c) => ({
+          key: c,
+          label: c === "shopify" ? "Site" : CHANNEL_META[c].name,
+          color: CHANNEL_META[c].cssVar,
+        })),
         ...(data?.stores ?? []).map((l) => ({
           key: `loja:${l.name}`,
           label: l.name,
@@ -230,7 +247,7 @@ export default function Dashboard() {
         })),
       ];
     return [
-      { key: "site", label: "Site (online)", color: "var(--c-shopify)" },
+      { key: "site", label: "Online", color: "var(--c-shopify)" },
       { key: "lojas", label: "Lojas físicas", color: "var(--c-lojas)" },
     ];
   })();
@@ -386,7 +403,7 @@ export default function Dashboard() {
         <div style={{ opacity: loading ? 0.6 : 1 }}>
           {sel.length > 0 && (
             <div className="unit-head">
-              <h1>{canal ? CHANNEL_META[canal].name : sel.join(" + ")}</h1>
+              <h1>{canal ? (canal === "shopify" ? "Site (Shopify)" : CHANNEL_META[canal].name) : sel.map((u) => (u === "Site" ? "Online" : u)).join(" + ")}</h1>
               <button
                 className="back"
                 onClick={() => {
@@ -459,25 +476,103 @@ export default function Dashboard() {
             </div>
           ) : null}
 
+          {/* Online: um card por canal, somados no cabeçalho do grupo */}
+          <div className={`online-grupo${soSite && !canal ? " sel" : ""}`}>
+            <button
+              className="online-cab"
+              onClick={() => {
+                if (canal) {
+                  setCanal("");
+                  setSel(["Site"]);
+                } else alternar("Site");
+              }}
+              title={sel.includes("Site") ? "Clique para tirar do filtro" : "Ver todo o online"}
+            >
+              <span className="online-titulo">Online</span>
+              <span className="online-total">
+                {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
+              </span>
+              <span className="muted">
+                {siteOrders.toLocaleString("pt-BR")} pedidos
+                {totalAds > 0 && <> · anúncios {brl.format(totalAds)}</>}
+              </span>
+              {metaDe("Site") > 0 && (
+                <span style={{ ["--ch-color" as string]: "var(--brand)" }}>
+                  <MetaMini feito={data.monthByUnit["Site"] ?? 0} meta={metaDe("Site")} />
+                </span>
+              )}
+            </button>
+            <div className="channels online">
+              {ONLINE.map((id) => {
+                const c = data.channels.find((x) => x.channel === id);
+                if (!c) return null;
+                const meta = CHANNEL_META[id];
+                const ativo = canal === id;
+                const ads = id === "shopify" ? data.ads : id === "tiktok" ? data.tiktokAds : null;
+                return (
+                  <div
+                    key={id}
+                    className={`channel-card clickable${ativo ? " sel" : ""}${
+                      (canal && !ativo) || (sel.length > 0 && !sel.includes("Site")) ? " dim" : ""
+                    }`}
+                    style={{ ["--ch-color" as string]: meta.cssVar }}
+                    onClick={() => filtrarCanal(id)}
+                    title={ativo ? "Clique para tirar do filtro" : `Ver só ${meta.name}`}
+                  >
+                    <div className="head">
+                      <span className="name">
+                        <span className="ch-dot" style={{ background: meta.cssVar }} />
+                        {id === "shopify" ? "Site" : meta.name}
+                      </span>
+                      {ativo ? (
+                        <span className="badge sel-badge">✕</span>
+                      ) : c.error ? (
+                        <span className="badge err">erro</span>
+                      ) : null}
+                    </div>
+                    {c.connected ? (
+                      <>
+                        <div className="rev">
+                          {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
+                        </div>
+                        <div className="meta">
+                          {c.orders.toLocaleString("pt-BR")} pedidos
+                          {c.orders > 0 && <> · ticket {brl.format(c.revenue / c.orders)}</>}
+                        </div>
+                        {ads?.connected && (
+                          <AdsInline
+                            label={id === "shopify" ? "Anúncios Meta" : "Anúncios TikTok"}
+                            ads={ads}
+                          />
+                        )}
+                        {c.error && <div className="err-msg">{c.error}</div>}
+                      </>
+                    ) : (
+                      <div className="setup">
+                        não conectado ·{" "}
+                        <a href="/configurar" onClick={(e) => e.stopPropagation()}>
+                          configurar
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {data.stores.length > 0 && (
           <div className="channels stores">
-            {[
-              {
-                nome: "Site",
-                cor: "var(--c-shopify)",
-                receita: siteRevenue,
-                anterior: sitePrev,
-                pedidos: siteOrders,
-                rotulo: "pedidos",
-              },
-              ...data.stores.map((l) => ({
+            {data.stores
+              .map((l) => ({
                 nome: l.name,
                 cor: corDaLoja(l.name),
                 receita: l.revenue,
                 anterior: l.prevRevenue,
                 pedidos: l.orders,
                 rotulo: "vendas",
-              })),
-            ].map((u) => {
+              }))
+              .map((u) => {
               const ativo = sel.includes(u.nome);
               return (
                 <div
@@ -508,6 +603,7 @@ export default function Dashboard() {
               );
             })}
           </div>
+          )}
 
           <div className="card">
             <div className="goal-head">
@@ -635,71 +731,6 @@ export default function Dashboard() {
                   </>
                 )}
               </div>
-              )}
-
-              {soSite && (
-                <div className="channels">
-                  {ONLINE.map((id) => {
-                    const c = data.channels.find((x) => x.channel === id);
-                    const meta = CHANNEL_META[id];
-                    if (!c) return null;
-                    const ativo = canal === id;
-                    return (
-                      <div
-                        key={id}
-                        className={`channel-card clickable${ativo ? " sel" : ""}${
-                          canal && !ativo ? " dim" : ""
-                        }`}
-                        style={{ ["--ch-color" as string]: meta.cssVar }}
-                        onClick={() => setCanal(ativo ? "" : id)}
-                      >
-                        <div className="head">
-                          <span className="name">
-                            <span className="ch-dot" style={{ background: meta.cssVar }} />
-                            {meta.name}
-                          </span>
-                          {ativo ? (
-                            <span className="badge sel-badge">filtrando ✕</span>
-                          ) : !c.connected ? (
-                            <span className="badge">não conectado</span>
-                          ) : c.error ? (
-                            <span className="badge err">erro</span>
-                          ) : (
-                            <span className="badge on">conectado</span>
-                          )}
-                        </div>
-                        {c.connected ? (
-                          <>
-                            <div className="rev">
-                              {brl.format(c.revenue)}{" "}
-                              <Delta now={c.revenue} before={c.prevRevenue} />
-                            </div>
-                            <div className="meta">
-                              {c.orders.toLocaleString("pt-BR")} pedidos
-                              {c.orders > 0 && <> · ticket {brl.format(c.revenue / c.orders)}</>}
-                            </div>
-                            {id === "shopify" && data.ads.connected && (
-                              <AdsInline label="Anúncios (Meta)" ads={data.ads} />
-                            )}
-                            {id === "tiktok" && data.tiktokAds.connected && (
-                              <AdsInline label="Anúncios (TikTok)" ads={data.tiktokAds} />
-                            )}
-                            {c.error && <div className="err-msg">{c.error}</div>}
-                          </>
-                        ) : (
-                          <div className="setup">
-                            Para conectar, adicione nas variáveis de ambiente:
-                            {meta.envVars.map((v) => (
-                              <div key={v}>
-                                <code>{v}</code>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
               )}
 
               <div className="grid-2">
