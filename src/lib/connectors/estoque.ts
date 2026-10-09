@@ -59,6 +59,16 @@ interface LinhaSaldo {
 let memoria: Guardado | null = null;
 
 /**
+ * Varredura em andamento, compartilhada pelo processo inteiro: o agendador e
+ * as rotas do Next são empacotados separados (cada um com suas variáveis de
+ * módulo), e duas varreduras ao mesmo tempo só dobrariam a fila na TOTVS.
+ */
+const global = globalThis as unknown as { __varreduraEstoque?: Promise<void> | null };
+
+/** Na máquina, foto completa com mais que isso é refeita em segundo plano. */
+const REFAZER_LOCAL_MS = 6 * 60 * 60000;
+
+/**
  * Foto atual do estoque. Se houver uma recente, devolve na hora; se houver
  * uma velha, devolve a velha mesmo assim (melhor um número de ontem em um
  * segundo do que o de agora em quarenta) e só varre de novo quando não há
@@ -67,10 +77,41 @@ let memoria: Guardado | null = null;
 export async function fetchEstoque(forcar = false): Promise<Estoque> {
   if (!totvsConfigured()) return { conectado: false, itens: [] };
 
-  if (!forcar && memoria && Date.now() - memoria.at < VALIDADE_MS) return resposta(memoria);
+  if (!forcar && memoria && !memoria.incompleto && Date.now() - memoria.at < VALIDADE_MS)
+    return resposta(memoria);
 
   const guardado = (await lerBlobs<Guardado>(PREFIXO, [CHAVE])).get(CHAVE);
-  if (guardado) memoria = guardado;
+  // Vale a foto mais nova; da mesma varredura, a que já tem mais produtos
+  if (
+    guardado &&
+    (!memoria ||
+      guardado.at > memoria.at ||
+      (guardado.at === memoria.at && guardado.itens.length >= memoria.itens.length))
+  )
+    memoria = guardado;
+  const atual = memoria;
+
+  if (rodandoLocal()) {
+    // Na máquina própria a varredura roda inteira, em segundo plano: a tela
+    // nunca fica esperando, e vai recebendo a foto conforme ela é montada
+    const precisa =
+      forcar || !atual || atual.incompleto || Date.now() - atual.at > REFAZER_LOCAL_MS;
+    if (precisa) {
+      const varredura = varrerTudo(Boolean(forcar));
+      if (forcar) {
+        await varredura;
+        return memoria ? resposta(memoria) : { conectado: true, itens: [], erro: "Estoque: a TOTVS não respondeu." };
+      }
+    }
+    if (atual) return resposta(atual);
+    return {
+      conectado: true,
+      itens: [],
+      incompleto: true,
+      erro: "O estoque está sendo carregado pela primeira vez (são quase 18 mil produtos). Tente de novo em 2 ou 3 minutos.",
+    };
+  }
+
   if (!forcar && guardado && Date.now() - guardado.at < VALIDADE_MS) return resposta(guardado);
 
   /**
@@ -79,9 +120,6 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
    * quando pedida explicitamente (o cron de madrugada); a tela usa sempre a
    * última foto que existir, mesmo velha ou incompleta, e nunca dispara uma.
    */
-  // Na máquina própria não há limite de plano: sem foto, varre na hora
-  if (!forcar && rodandoLocal() && (!guardado || guardado.incompleto)) forcar = true;
-
   if (!forcar) {
     if (guardado) return resposta(guardado);
     return {
@@ -108,6 +146,46 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
 
   if (guardado) return resposta(guardado);
   return novo;
+}
+
+/**
+ * Varre o catálogo inteiro (máquina própria). Uma foto nova só substitui a
+ * anterior quando fica completa; até lá, quem pede recebe a anterior — ou,
+ * na primeira vez, a parcial que já foi montada.
+ */
+function varrerTudo(refazer: boolean): Promise<void> {
+  if (global.__varreduraEstoque) return global.__varreduraEstoque;
+  const tarefa = (async () => {
+    const base = memoria?.incompleto && !refazer ? memoria : null;
+    let pagina = base?.proximaPagina ?? 1;
+    let itens = base?.itens ?? [];
+    const inicio = base?.at ?? Date.now();
+    for (let rodada = 0; rodada < 20; rodada++) {
+      const novo = await varrer(pagina, itens);
+      if (novo.erro && novo.itens.length === itens.length) {
+        console.error("[estoque]", novo.erro);
+        return;
+      }
+      itens = novo.itens;
+      const parcial: Guardado = {
+        at: inicio,
+        incompleto: Boolean(novo.incompleto),
+        proximaPagina: novo.proximaPagina,
+        itens,
+      };
+      // Sem foto completa ainda, a parcial já serve; com uma, espera fechar
+      if (!parcial.incompleto || !memoria || memoria.incompleto) {
+        memoria = parcial;
+        await gravarBlob(PREFIXO, CHAVE, parcial);
+      }
+      if (!novo.incompleto || novo.proximaPagina === undefined) return;
+      pagina = novo.proximaPagina;
+    }
+  })().finally(() => {
+    global.__varreduraEstoque = null;
+  });
+  global.__varreduraEstoque = tarefa;
+  return tarefa;
 }
 
 function resposta(g: Guardado): Estoque {

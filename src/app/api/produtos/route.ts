@@ -37,6 +37,11 @@ export interface Transferencia {
  * estoque é o saldo de agora — por isso a cobertura é uma projeção, não um
  * número histórico.
  */
+/** "Boné" acha "BONE" e vice-versa: o cadastro nem sempre tem acento. */
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+}
+
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const hoje = todaySpKey();
@@ -59,7 +64,7 @@ export async function GET(req: NextRequest) {
   const categoria = (sp.get("cat") ?? "").trim().toUpperCase();
   const maisVendidos = categoria === "TOP20";
   // Busca por nome atravessa as categorias; a API do saldo filtra por nome
-  const busca = (sp.get("q") ?? "").trim().toUpperCase();
+  const busca = semAcento(sp.get("q") ?? "");
   // ?sem=vendas responde só com o saldo, que é uma consulta só e volta rápido.
   // A venda do período é o que demora, e vem na segunda chamada.
   const semVendas = sp.get("sem") === "vendas" && !maisVendidos;
@@ -77,7 +82,7 @@ export async function GET(req: NextRequest) {
     : await fetchVendasPorProduto(from, to);
 
   const combina = (nome: string) =>
-    busca ? nome.toUpperCase().includes(busca) : maisVendidos || categoriaDe(nome) === categoria;
+    busca ? semAcento(nome).includes(busca) : maisVendidos || categoriaDe(nome) === categoria;
 
   const linhas = new Map<string, LinhaProduto>();
   const nova = (produto: string): LinhaProduto => ({

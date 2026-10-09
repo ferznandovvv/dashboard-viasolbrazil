@@ -371,9 +371,8 @@ export function Produtos({
           )}
           {dados.incompleto && (
             <div className="parcial">
-              A foto do estoque ainda está sendo montada (são quase 18 mil produtos). Ela continua
-              de onde parou a cada consulta — busque de novo em alguns segundos até este aviso
-              sumir.
+              A foto do estoque ainda está sendo montada (são quase 18 mil produtos) — pode faltar
+              produto. Busque de novo em 1 ou 2 minutos, até este aviso sumir.
             </div>
           )}
 
