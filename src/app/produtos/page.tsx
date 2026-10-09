@@ -15,7 +15,9 @@ export default function PaginaProdutos() {
   const [presets] = useState(buildPresets);
   const [period, setPeriod] = useState<Period>(presets[3]); // Mês atual
   const [sel, setSel] = useState<string[]>([]);
-  const [agrup, setAgrup] = useState<Agrup>("modelo");
+  // Para estoque só a variação completa responde a pergunta (qual cor, qual
+  // tamanho falta onde), então não há escolha de agrupamento
+  const agrup: Agrup = "completo";
   const [pronto, setPronto] = useState(false);
   // Estoque é sempre o de agora: período só entra quando se pede a venda
   const [comVendas, setComVendas] = useState(false);
@@ -28,8 +30,6 @@ export default function PaginaProdutos() {
     if (achado) setPeriod(achado);
     const lojas = p.get("lojas");
     if (lojas) setSel(lojas.split(",").filter(Boolean));
-    const a = p.get("agrup") as Agrup | null;
-    if (a) setAgrup(a);
     setPronto(true);
   }, [presets]);
 
@@ -38,11 +38,11 @@ export default function PaginaProdutos() {
     if (!pronto) return;
     const p = new URLSearchParams(window.location.search);
     p.set("periodo", period.key);
-    p.set("agrup", agrup);
+    p.delete("agrup");
     if (sel.length) p.set("lojas", sel.join(","));
     else p.delete("lojas");
     window.history.replaceState(null, "", `?${p.toString()}`);
-  }, [pronto, period, sel, agrup]);
+  }, [pronto, period, sel]);
 
   const alternar = (nome: string) =>
     setSel((atual) => (atual.includes(nome) ? atual.filter((x) => x !== nome) : [...atual, nome]));
@@ -86,7 +86,6 @@ export default function PaginaProdutos() {
         units={sel}
         agrup={agrup}
         aoAlternarLoja={alternar}
-        aoTrocarAgrup={setAgrup}
         comVendas={comVendas}
         aoPedirVendas={() => setComVendas(true)}
       />

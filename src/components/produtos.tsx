@@ -79,7 +79,6 @@ export function Produtos({
   units,
   agrup,
   aoAlternarLoja,
-  aoTrocarAgrup,
   comVendas,
   aoPedirVendas,
 }: {
@@ -88,7 +87,6 @@ export function Produtos({
   units: string[];
   agrup: string;
   aoAlternarLoja: (nome: string) => void;
-  aoTrocarAgrup: (a: "modelo" | "cor" | "tamanho" | "completo") => void;
   comVendas: boolean;
   aoPedirVendas: () => void;
 }) {
@@ -116,8 +114,6 @@ export function Produtos({
     desc: true,
   });
   const pedido = useRef(0);
-  // Enquanto o usuário não escolher o agrupamento, a busca decide por ele
-  const mexeuNoAgrup = useRef(false);
   const guardado = useRef<Map<string, Resposta>>(new Map());
 
   // Categoria e busca também sobrevivem à recarga
@@ -203,11 +199,7 @@ export function Produtos({
       consulta.comVendas !== comVendas);
   const buscar = () => {
     const q = busca.trim();
-    // Procurar "bolsa lari" e ver uma linha só, somando as cores, não responde
-    // a pergunta — por isso a busca abre separada por cor
-    const agrupUsado = q && !mexeuNoAgrup.current ? "cor" : agrup;
-    if (agrupUsado !== agrup) aoTrocarAgrup(agrupUsado as "cor");
-    setConsulta({ q, cat: categoria, from, to, units, agrup: agrupUsado, comVendas });
+    setConsulta({ q, cat: categoria, from, to, units, agrup, comVendas });
   };
 
   const ordenar = (col: Coluna) =>
@@ -310,26 +302,6 @@ export function Produtos({
               </button>
             ))}
           </div>
-          <div className="rank-aviso" style={{ margin: "14px 0 6px" }}>
-            Como somar: <b>Modelo</b> junta todas as cores e tamanhos numa linha;{" "}
-            <b>Cor</b> separa por cor; <b>Tamanho</b> por tamanho; <b>Completo</b> mostra cada
-            variação.
-          </div>
-          <div className="seg" role="group" aria-label="Agrupar">
-            {(["modelo", "cor", "tamanho", "completo"] as const).map((a) => (
-              <button
-                key={a}
-                className={agrup === a ? "on" : ""}
-                onClick={() => {
-                  mexeuNoAgrup.current = true;
-                  aoTrocarAgrup(a);
-                }}
-              >
-                {a === "completo" ? "Completo" : a[0].toUpperCase() + a.slice(1)}
-              </button>
-            ))}
-          </div>
-
           <button className="buscar" onClick={buscar} disabled={carregando || !pendente}>
             {carregando
               ? "Buscando…"
