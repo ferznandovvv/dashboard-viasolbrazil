@@ -119,7 +119,7 @@ export interface DashboardData {
   /** Metas mensais configuradas por unidade */
   metas: Record<string, number>;
   /** Clima diário da unidade em foco */
-  weather: { date: string; tmax: number; tmin: number; chuva: number; codigo: number }[];
+  weather: { date: string; tmax: number; tmin: number; chuva: number; codigo: number; sol?: number }[];
   /** Faturamento por forma de pagamento */
   payments: { name: string; revenue: number; orders: number }[];
   /** Envios sem cobrança do TikTok (amostras para afiliadas) */

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
+import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli";
@@ -44,17 +45,9 @@ function AdsInline({
   );
 }
 
-/** Tempo do dia a partir do código WMO. */
-function tempoIcone(codigo: number): string {
-  if (codigo === 0) return "☀️";
-  if (codigo <= 2) return "🌤️";
-  if (codigo === 3) return "☁️";
-  if (codigo <= 48) return "🌫️";
-  if (codigo <= 67) return "🌧️";
-  if (codigo <= 77) return "🌨️";
-  if (codigo <= 82) return "🌦️";
-  return "⛈️";
-}
+/** Ícone de cada categoria — o mesmo dia, o mesmo grupo embaixo. */
+const ICONE_TEMPO: Record<CategoriaTempo, string> = { sol: "☀️", nublado: "⛅", chuva: "🌧️" };
+
 
 /** Correlação simples (Pearson) entre duas séries. */
 function correlacao(a: number[], b: number[]): number {
@@ -906,9 +899,7 @@ export default function Dashboard() {
                 const dias = data.weather.filter((w) => porData.has(w.date));
                 if (dias.length < 5) return null;
 
-                // Cada dia entra em exatamente uma categoria
-                const categoria = (w: (typeof dias)[0]) =>
-                  w.chuva >= 1 || w.codigo >= 51 ? "chuva" : w.codigo <= 1 ? "sol" : "nublado";
+                const categoria = categoriaTempo;
 
                 // Sábado vende mais que terça: comparamos cada dia com a média
                 // do mesmo dia da semana, para o tempo não levar a culpa/crédito
@@ -950,22 +941,27 @@ export default function Dashboard() {
                 );
                 const sol = grupos.find((g) => g.cat === "sol")!;
                 const chuva = grupos.find((g) => g.cat === "chuva")!;
-                const rotulo = { sol: "☀️ Sol", nublado: "☁️ Nublado", chuva: "🌧️ Chuva" };
+                const rotulo = { sol: "☀️ Sol", nublado: "⛅ Nublado", chuva: "🌧️ Chuva" };
                 const confiavel = sol.dias >= 3 && chuva.dias >= 3;
 
                 return (
                   <div className="card">
                     <h2>Tempo × vendas</h2>
                     <div className="weather-row">
-                      {dias.slice(-28).map((w) => (
+                      {dias.map((w) => (
                         <span
                           key={w.date}
                           className="wday"
                           title={`${fmtDay(w.date)} · ${w.tmax.toFixed(0)}°C · ${w.chuva.toFixed(
                             1
-                          )}mm · ${brl.format(porData.get(w.date) ?? 0)}`}
+                          )} mm${
+                            w.sol !== undefined
+                              ? ` · sol em ${(w.sol * 100).toFixed(0)}% do dia`
+                              : ""
+                          } · ${brl.format(porData.get(w.date) ?? 0)}`}
                         >
-                          <span className="ic">{tempoIcone(w.codigo)}</span>
+                          <span className="wdia">{Number(w.date.slice(8))}</span>
+                          <span className="ic">{ICONE_TEMPO[categoria(w)]}</span>
                           {w.tmax.toFixed(0)}°
                         </span>
                       ))}

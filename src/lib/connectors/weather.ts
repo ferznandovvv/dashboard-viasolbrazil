@@ -10,6 +10,22 @@ export interface DiaClima {
   chuva: number;
   /** Código WMO do tempo predominante */
   codigo: number;
+  /** Parte do dia com sol (0 a 1): horas de sol ÷ horas de claridade */
+  sol?: number;
+}
+
+export type CategoriaTempo = "sol" | "nublado" | "chuva";
+
+/**
+ * Cada dia cai em exatamente uma categoria, pelo que se sentiu na rua: chuva
+ * de verdade (5 mm ou mais) manda; sem ela, conta quanto do dia teve sol.
+ * O código WMO não serve para isso — ele marca o evento mais forte do dia, e
+ * uma garoa de dez minutos transforma um dia de sol em "dia de chuva".
+ */
+export function categoriaTempo(d: DiaClima): CategoriaTempo {
+  if (d.chuva >= 5) return "chuva";
+  if (d.sol !== undefined) return d.sol >= 0.6 ? "sol" : "nublado";
+  return d.codigo <= 1 ? "sol" : "nublado";
 }
 
 /** Coordenadas de cada unidade (lojas físicas + site, ancorado em SP). */
@@ -52,12 +68,17 @@ export async function fetchClima(
   if (hit && Date.now() - hit.at < 30 * 60000) return hit.dias;
 
   const campos =
-    "daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum" +
+    "daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum," +
+    "sunshine_duration,daylight_duration" +
     "&timezone=America%2FSao_Paulo";
   const base = `latitude=${coord.lat}&longitude=${coord.lon}&${campos}`;
 
   const buscar = async (url: string): Promise<DiaClima[]> => {
-    const res = await fetch(url, { cache: "no-store" });
+    let res = await fetch(url, { cache: "no-store" });
+    // Horas de sol são um extra: se a API recusar o campo, segue sem ele
+    if (!res.ok && url.includes("sunshine_duration")) {
+      res = await fetch(url.replace(",sunshine_duration,daylight_duration", ""), { cache: "no-store" });
+    }
     if (!res.ok) return [];
     const json = await res.json();
     const d = json.daily;
@@ -68,6 +89,10 @@ export async function fetchClima(
       tmin: Number(d.temperature_2m_min?.[i] ?? 0),
       chuva: Number(d.precipitation_sum?.[i] ?? 0),
       codigo: Number(d.weather_code?.[i] ?? 0),
+      sol:
+        d.sunshine_duration?.[i] != null && d.daylight_duration?.[i]
+          ? Number(d.sunshine_duration[i]) / Number(d.daylight_duration[i])
+          : undefined,
     }));
   };
 
