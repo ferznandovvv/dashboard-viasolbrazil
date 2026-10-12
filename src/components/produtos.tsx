@@ -55,11 +55,6 @@ function saldoEm(l: Linha, lojas: string[]): number {
  */
 const tom = (v: number) => (v > 0 ? "tem" : v === 0 ? "vazio" : "negativo");
 
-/** Vendeu mais do que tem: precisa repor. */
-function precisaRepor(l: Linha, lojas: string[]): boolean {
-  return saldoEm(l, lojas) < l.vendidas;
-}
-
 /**
  * Produtos e estoque, de dois jeitos:
  *  - Buscar produto: parte do nome → saldo de agora em todas as lojas
@@ -77,7 +72,6 @@ export function Produtos() {
   const [customAte, setCustomAte] = useState("");
   const [lojasSel, setLojasSel] = useState<string[]>([]);
   const [top, setTop] = useState(20);
-  const [soRepor, setSoRepor] = useState(false);
   const [dados, setDados] = useState<Resposta | null>(null);
   const [lojas, setLojas] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(false);
@@ -175,7 +169,6 @@ export function Produtos() {
     pedido.current++; // descarta resposta em voo da outra aba
     setCarregando(false);
     setDados(null);
-    setSoRepor(false);
     setAba(a);
   };
 
@@ -192,9 +185,7 @@ export function Produtos() {
 
   const lista = (() => {
     if (!dados) return [];
-    let itens = dados.itens;
-    if (dados.modo === "vendidos" && soRepor && escolhidas.length)
-      itens = itens.filter((l) => precisaRepor(l, escolhidas));
+    const itens = dados.itens;
     if (!ordem) return itens;
     const valor = (l: Linha): number | string =>
       ordem.col === "produto"
@@ -330,7 +321,10 @@ export function Produtos() {
           </div>
           <div className="seg" role="group" aria-label="Quantos">
             {TOPS.map((t) => (
-              <button key={t} className={top === t ? "on" : ""} onClick={() => setTop(t)}>
+              <button key={t} className={top === t ? "on" : ""} onClick={() => {
+                  setTop(t);
+                  if (dados?.modo === "vendidos") verMaisVendidos(periodo, lojasSel, t);
+                }}>
                 {t} mais vendidos
               </button>
             ))}
@@ -394,13 +388,6 @@ export function Produtos() {
               </div>
             )}
 
-            {dados.modo === "vendidos" && escolhidas.length > 0 && (
-              <label className="so-repor">
-                <input type="checkbox" checked={soRepor} onChange={(e) => setSoRepor(e.target.checked)} />
-                Só o que precisa repor (vendeu mais do que tem em {escolhidas.join(" + ")})
-              </label>
-            )}
-
             {lista.length === 0 ? (
               <div className="empty">
                 {dados.modo === "busca" ? "Nenhum produto com estoque com esse nome." : "Nada para mostrar."}
@@ -435,7 +422,6 @@ export function Produtos() {
                   <tbody>
                     {lista.map((l) => {
                       const saldoSel = saldoEm(l, escolhidas);
-                      const repor = dados.modo === "vendidos" && escolhidas.length > 0 && saldoSel < l.vendidas;
                       return (
                         <tr key={l.produto}>
                           <td>
@@ -447,7 +433,6 @@ export function Produtos() {
                           {dados.modo === "vendidos" && <td className="n">{l.vendidas}</td>}
                           {dados.modo === "vendidos" && escolhidas.length > 0 && (
                             <td className={`n col-sel ${tom(saldoSel)}`}>
-                              {repor && <span className="repor-tag">repor</span>}
                               {saldoSel}
                             </td>
                           )}
@@ -490,7 +475,7 @@ export function Produtos() {
                 </>
               )}
               {dados.modo === "vendidos" &&
-                "Vendidas = peças vendidas no período nas lojas escolhidas. \"repor\" = tem menos do que vendeu."}
+                "Vendidas = peças vendidas no período nas lojas escolhidas."}
               {" "}Clique no nome de uma coluna para ordenar.
             </div>
           </div>
