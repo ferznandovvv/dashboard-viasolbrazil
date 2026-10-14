@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { type SwaggerDoc, contrato } from "@/lib/swagger";
 
 export const dynamic = "force-dynamic";
 
@@ -20,56 +21,6 @@ pre{background:#f0efec;border:1px solid #e1e0d9;border-radius:8px;padding:10px;f
 .ep{font-weight:600;font-size:13px}
 </style></head><body><div class="card"><h1>Conexão TOTVS Moda</h1>${inner}</div></body></html>`;
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
-}
-
-type Esquema = {
-  $ref?: string;
-  type?: string;
-  format?: string;
-  items?: Esquema;
-  properties?: Record<string, Esquema>;
-  required?: string[];
-};
-type Operacao = {
-  requestBody?: { content?: Record<string, { schema?: Esquema }> };
-  responses?: Record<string, { content?: Record<string, { schema?: Esquema }> }>;
-};
-type SwaggerDoc = {
-  paths?: Record<string, Record<string, Operacao>>;
-  components?: { schemas?: Record<string, Esquema> };
-  definitions?: Record<string, Esquema>;
-};
-
-/** Descreve um schema do Swagger em texto indentado, resolvendo os $ref. */
-function descrever(doc: SwaggerDoc, s: Esquema | undefined, nivel = 0, vistos: Set<string> = new Set()): string {
-  if (!s || nivel > 3) return "";
-  if (s.$ref) {
-    const nome = s.$ref.split("/").pop() ?? "";
-    if (vistos.has(nome)) return `${"  ".repeat(nivel)}(→ ${nome}, recursivo)`;
-    vistos.add(nome);
-    const alvo = doc.components?.schemas?.[nome] ?? doc.definitions?.[nome];
-    return descrever(doc, alvo, nivel, vistos);
-  }
-  if (s.type === "array") return descrever(doc, s.items, nivel, vistos);
-  if (!s.properties) return `${"  ".repeat(nivel)}(${s.type ?? "?"})`;
-  const obrigatorios = new Set(s.required ?? []);
-  return Object.entries(s.properties)
-    .map(([nome, prop]) => {
-      const tipo = prop.$ref ? "objeto" : prop.type === "array" ? "lista" : (prop.type ?? "?");
-      const linha = `${"  ".repeat(nivel + 1)}${nome}: ${tipo}${obrigatorios.has(nome) ? "  *obrigatório*" : ""}`;
-      const filhos = prop.$ref || prop.type === "array" ? descrever(doc, prop, nivel + 1, new Set(vistos)) : "";
-      return filhos ? `${linha}\n${filhos}` : linha;
-    })
-    .join("\n");
-}
-
-/** Corpo aceito por um caminho do Swagger, em texto. */
-function contrato(doc: SwaggerDoc, caminho: string): string {
-  const ops = doc.paths?.[caminho];
-  if (!ops) return `${caminho}\n  (não existe neste swagger)`;
-  const verbo = Object.keys(ops)[0];
-  const req = ops[verbo].requestBody?.content?.["application/json"]?.schema;
-  return `${verbo.toUpperCase()} ${caminho}\nFILTROS ACEITOS:\n${descrever(doc, req) || "  (sem corpo)"}`;
 }
 
 /**
