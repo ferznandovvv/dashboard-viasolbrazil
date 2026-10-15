@@ -52,17 +52,18 @@ export async function situacaoPrecos(): Promise<string> {
   return `${foto}\nvarredura: ${global.__varreduraPrecos ? "rodando agora" : (global.__situacaoPrecos ?? "ainda não varreu nesta execução")}`;
 }
 
-/** Site, Franca, RP, E-com — na ordem em que aparecem na tela. */
+/** Site, Franca, RP — na ordem em que aparecem na tela. */
 function rotular(nome: string, codigo: number): string {
   const n = nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
   // Na TOTVS da Via Sol: 1 VENDA FRANCA, 2 VENDA RIBEIRAO, 3 VENDA SITE, 10 VENDA E-COMMERCE
-  if (n.includes("E-COMMERCE") || n.includes("ECOMMERCE")) return "E-com";
   if (n.includes("SITE")) return "Site";
   if (n.includes("FRANCA")) return "Franca";
   if (n.includes("RIBEIRAO") || /\bRP\b/.test(n)) return "RP";
   return nome.trim() || `Tabela ${codigo}`;
 }
-const ORDEM = ["Site", "Franca", "RP", "E-com"];
+const ORDEM = ["Site", "Franca", "RP"];
+/** Tabelas que a Via Sol não usa: ficam fora da tela (pedido do Fernando) */
+const IGNORAR = /E-?COMMERCE/i;
 const ordenar = (t: Tabela[]) =>
   [...t].sort(
     (a, b) =>
@@ -150,7 +151,7 @@ function varrer(): Promise<void> {
     const usados = new Set(Object.values(porProduto).flatMap((p) => Object.keys(p).map(Number)));
     const tabelas = ordenar(
       codigos
-        .filter((c) => usados.has(c))
+        .filter((c) => usados.has(c) && !IGNORAR.test(nomes.get(c) ?? ""))
         .map((c) => ({ codigo: c, nome: nomes.get(c) ?? "", rotulo: rotular(nomes.get(c) ?? "", c) }))
     );
     global.__situacaoPrecos = `${Object.keys(porProduto).length} produtos com preço em ${paginas} páginas; tabelas: ${

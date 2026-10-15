@@ -47,6 +47,13 @@ const CURTO: Record<string, string> = {
 };
 const curto = (loja: string) => CURTO[loja] ?? loja;
 
+/** Em que lojas vale cada tabela de preço. */
+const LOJAS_DA_TABELA: Record<string, string> = {
+  Site: "SP, BH, PG e RJ",
+  Franca: "Centro e Fábrica",
+  RP: "RP e Fiusa",
+};
+
 /** Preço sem "R$", para as colunas caberem. */
 const preco = (v?: number) =>
   v ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -424,7 +431,7 @@ export function Produtos() {
                         <th
                           key={t}
                           className={`n ord preco${i === tabelas.length - 1 ? " fim-preco" : ""}`}
-                          title={`Preço de venda — tabela ${t}`}
+                          title={`Tabela ${t}${LOJAS_DA_TABELA[t] ? ` — vale em ${LOJAS_DA_TABELA[t]}` : ""}`}
                           onClick={() => ordenar(`preco:${t}`)}
                         >
                           {t}
