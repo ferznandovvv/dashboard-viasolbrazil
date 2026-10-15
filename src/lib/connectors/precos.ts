@@ -34,8 +34,23 @@ export interface Precos {
   porProduto: Record<string, Record<string, number>>;
 }
 
-const global = globalThis as unknown as { __varreduraPrecos?: Promise<void> | null };
+// Compartilhado pelo processo: cada rota do Next tem suas próprias variáveis de módulo
+const global = globalThis as unknown as {
+  __varreduraPrecos?: Promise<void> | null;
+  __situacaoPrecos?: string;
+};
 let memoria: Precos | null = null;
+
+/** Estado da foto de preços, para diagnóstico. */
+export async function situacaoPrecos(): Promise<string> {
+  const p = await fetchPrecos();
+  const foto = p
+    ? `foto de ${new Date(p.at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}: ${
+        Object.keys(p.porProduto).length
+      } produtos, tabelas ${p.tabelas.map((t) => `${t.codigo}→${t.rotulo}`).join(", ") || "nenhuma"}`
+    : "nenhuma foto de preços guardada";
+  return `${foto}\nvarredura: ${global.__varreduraPrecos ? "rodando agora" : (global.__situacaoPrecos ?? "ainda não varreu nesta execução")}`;
+}
 
 /** Site, Franca, RP — na ordem em que aparecem na tela. */
 function rotular(nome: string, codigo: number): string {
@@ -89,11 +104,15 @@ function varrer(): Promise<void> {
         Array.from(primeira.text.matchAll(/Price (\d+) not found/g), (m) => Number(m[1]))
       );
       codigos = codigos.filter((c) => !faltam.has(c));
-      if (codigos.length === 0) return;
+      if (codigos.length === 0) {
+        global.__situacaoPrecos = "nenhum código de preço de 1 a 20 existe";
+        return;
+      }
       primeira = await totvsFetch(PRECOS, corpo(1));
     }
     if (primeira.status !== 200) {
-      console.error("[precos]", primeira.status, primeira.text.slice(0, 200));
+      global.__situacaoPrecos = `erro HTTP ${primeira.status}: ${primeira.text.slice(0, 300)}`;
+      console.error("[precos]", global.__situacaoPrecos);
       return;
     }
 
@@ -114,23 +133,35 @@ function varrer(): Promise<void> {
     };
     coletar(primeira.json);
 
-    const paginas = Math.min(Math.ceil(Number(primeira.json?.count ?? primeira.json?.totalItems ?? 0) / PAGE) || 1, 400);
+    const j = primeira.json ?? {};
+    const paginas = Math.min(
+      Number(j.totalPages) || Math.ceil(Number(j.totalItems ?? j.count ?? 0) / PAGE) || 1,
+      600
+    );
     for (let pagina = 2; pagina <= paginas; pagina += 10) {
       const lote = [];
       for (let p = pagina; p < pagina + 10 && p <= paginas; p++) lote.push(totvsFetch(PRECOS, corpo(p)));
       for (const r of await Promise.all(lote)) if (r.status === 200) coletar(r.json);
     }
 
+    // Só entram as tabelas que vieram com preço em algum produto
+    const usados = new Set(Object.values(porProduto).flatMap((p) => Object.keys(p).map(Number)));
     const tabelas = ordenar(
       codigos
-        .filter((c) => nomes.has(c))
+        .filter((c) => usados.has(c))
         .map((c) => ({ codigo: c, nome: nomes.get(c) ?? "", rotulo: rotular(nomes.get(c) ?? "", c) }))
     );
+    global.__situacaoPrecos = `${Object.keys(porProduto).length} produtos com preço em ${paginas} páginas; tabelas: ${
+      tabelas.map((t) => `${t.codigo}=${t.nome || "(sem nome)"}`).join(", ") || "nenhuma"
+    }`;
     if (Object.keys(porProduto).length === 0) return;
     memoria = { at: Date.now(), tabelas, porProduto };
     await gravarBlob(PREFIXO, CHAVE, memoria);
   })()
-    .catch((e) => console.error("[precos]", e instanceof Error ? e.message : e))
+    .catch((e) => {
+      global.__situacaoPrecos = `falhou: ${e instanceof Error ? e.message : e}`;
+      console.error("[precos]", global.__situacaoPrecos);
+    })
     .finally(() => {
       global.__varreduraPrecos = null;
     });

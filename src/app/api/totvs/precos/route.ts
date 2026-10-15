@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { LOJAS, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 import { type SwaggerDoc, descrever } from "@/lib/swagger";
+import { situacaoPrecos } from "@/lib/connectors/precos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,6 +24,7 @@ export async function GET() {
   if (!totvsConfigured()) linhas.push("TOTVS não configurada.");
   else {
     try {
+      linhas.push("FOTO DOS PREÇOS USADA NA TELA:", await situacaoPrecos(), "");
       // 1. Contrato: só o "option" e a resposta, que é o que falta saber
       const sw = await totvsFetch(SWAGGER);
       const doc = JSON.parse(sw.text) as SwaggerDoc;
