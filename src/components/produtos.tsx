@@ -107,6 +107,14 @@ export function Produtos() {
     }
   };
 
+  /** Mudou uma data do personalizado: vale na hora, sem botão de aplicar. */
+  const trocarDatas = (de: string, ate: string) => {
+    setCustomDe(de);
+    setCustomAte(ate);
+    if (de && ate && de <= ate) setPeriodo({ key: "custom", from: de, to: ate });
+  };
+  const customValido = periodo.key !== "custom" || !customDe || !customAte || customDe <= customAte;
+
   const verMaisVendidos = (p = periodo, ls = lojasSel, t = top) => {
     setAba("vendidos");
     consultar(
@@ -136,6 +144,10 @@ export function Produtos() {
     if (lsUrl.length) setLojasSel(lsUrl);
     setTop(tUrl);
     if (perUrl) setPeriodo(perUrl);
+    if (perUrl?.key === "custom") {
+      setCustomDe(perUrl.from);
+      setCustomAte(perUrl.to);
+    }
     if (p.get("aba") === "vendidos") verMaisVendidos(perUrl ?? periodo, lsUrl, tUrl);
     else if (p.get("q")) setQ(p.get("q") ?? "");
     setPronto(true);
@@ -303,26 +315,25 @@ export function Produtos() {
             ))}
             <button
               className={periodo.key === "custom" ? "active" : ""}
-              onClick={() => setCustomAberto((v) => !v)}
+              onClick={() => {
+                // Já sai marcado e com as datas do período atual, para só ajustar
+                const de = customDe || periodo.from;
+                const ate = customAte || periodo.to;
+                setCustomDe(de);
+                setCustomAte(ate);
+                setCustomAberto(true);
+                setPeriodo({ key: "custom", from: de, to: ate });
+              }}
             >
               Personalizado
             </button>
           </div>
-          {customAberto && (
+          {(customAberto || periodo.key === "custom") && (
             <div className="custom-range">
-              <input type="date" value={customDe} max={spToday()} onChange={(e) => setCustomDe(e.target.value)} />
+              <input type="date" value={customDe} max={spToday()} onChange={(e) => trocarDatas(e.target.value, customAte)} />
               <span className="muted">até</span>
-              <input type="date" value={customAte} max={spToday()} onChange={(e) => setCustomAte(e.target.value)} />
-              <button
-                className="apply"
-                disabled={!customDe || !customAte || customDe > customAte}
-                onClick={() => {
-                  setPeriodo({ key: "custom", from: customDe, to: customAte });
-                  setCustomAberto(false);
-                }}
-              >
-                Aplicar
-              </button>
+              <input type="date" value={customAte} max={spToday()} onChange={(e) => trocarDatas(customDe, e.target.value)} />
+              {!customValido && <span className="err-msg">a data inicial precisa ser antes da final</span>}
             </div>
           )}
 
@@ -340,7 +351,7 @@ export function Produtos() {
             ))}
           </div>
 
-          <button className="buscar" onClick={() => verMaisVendidos()} disabled={carregando}>
+          <button className="buscar" onClick={() => verMaisVendidos()} disabled={carregando || !customValido}>
             {carregando ? "Buscando as vendas…" : "Ver os mais vendidos"}
           </button>
           {carregando && (
