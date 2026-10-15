@@ -52,15 +52,17 @@ export async function situacaoPrecos(): Promise<string> {
   return `${foto}\nvarredura: ${global.__varreduraPrecos ? "rodando agora" : (global.__situacaoPrecos ?? "ainda não varreu nesta execução")}`;
 }
 
-/** Site, Franca, RP — na ordem em que aparecem na tela. */
+/** Site, Franca, RP, E-com — na ordem em que aparecem na tela. */
 function rotular(nome: string, codigo: number): string {
   const n = nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
-  if (n.includes("SITE") || n.includes("ECOMM") || n.includes("ONLINE")) return "Site";
+  // Na TOTVS da Via Sol: 1 VENDA FRANCA, 2 VENDA RIBEIRAO, 3 VENDA SITE, 10 VENDA E-COMMERCE
+  if (n.includes("E-COMMERCE") || n.includes("ECOMMERCE")) return "E-com";
+  if (n.includes("SITE")) return "Site";
   if (n.includes("FRANCA")) return "Franca";
   if (n.includes("RIBEIRAO") || /\bRP\b/.test(n)) return "RP";
   return nome.trim() || `Tabela ${codigo}`;
 }
-const ORDEM = ["Site", "Franca", "RP"];
+const ORDEM = ["Site", "Franca", "RP", "E-com"];
 const ordenar = (t: Tabela[]) =>
   [...t].sort(
     (a, b) =>
