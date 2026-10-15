@@ -29,6 +29,8 @@ export interface SaldoProduto {
   tamanho: string;
   /** Saldo por nome de loja */
   porLoja: Record<string, number>;
+  /** Código do produto na TOTVS — é por ele que o preço é cruzado */
+  codigo?: number;
 }
 
 export interface Estoque {
@@ -50,6 +52,7 @@ interface Guardado {
 }
 
 interface LinhaSaldo {
+  productCode?: number;
   productName?: string;
   colorName?: string;
   sizeName?: string;
@@ -95,7 +98,12 @@ export async function fetchEstoque(forcar = false): Promise<Estoque> {
     // Na máquina própria a varredura roda inteira, em segundo plano: a tela
     // nunca fica esperando, e vai recebendo a foto conforme ela é montada
     const precisa =
-      forcar || !atual || atual.incompleto || Date.now() - atual.at > REFAZER_LOCAL_MS;
+      forcar ||
+      !atual ||
+      atual.incompleto ||
+      Date.now() - atual.at > REFAZER_LOCAL_MS ||
+      // Foto de antes do código do produto entrar: sem ele o preço não cruza
+      (atual.itens.length > 0 && atual.itens[0].codigo === undefined);
     if (precisa) {
       const varredura = varrerTudo(Boolean(forcar));
       if (forcar) {
@@ -233,7 +241,7 @@ async function varrer(
       }
       // Produto zerado em todas as lojas só ocuparia espaço
       if (Object.keys(porLoja).length === 0) continue;
-      itens.push({ nome, cor: l.colorName ?? "", tamanho: l.sizeName ?? "", porLoja });
+      itens.push({ nome, cor: l.colorName ?? "", tamanho: l.sizeName ?? "", porLoja, codigo: l.productCode });
     }
   };
 

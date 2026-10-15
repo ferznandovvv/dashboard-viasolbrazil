@@ -1,4 +1,5 @@
 import { fetchEstoque } from "./connectors/estoque";
+import { fetchPrecos } from "./connectors/precos";
 import { fetchTotvsSales, fetchVendasPorProduto } from "./connectors/totvs";
 import { todaySpKey } from "./types";
 
@@ -15,6 +16,7 @@ export async function aquecer() {
     fetchTotvsSales(inicioMes, hoje),
     fetchVendasPorProduto(inicioMes, hoje, 40000),
     fetchEstoque(true), // varre de novo para a foto ficar fresca
+    fetchPrecos(true),
   ]);
 
   // Mês passado também, para os "mais vendidos" abrirem na hora; depois de

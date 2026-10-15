@@ -59,16 +59,23 @@ export async function GET() {
 
       // 3. Preço em cada loja, com todos os códigos de 1 a 30
       if (codigo) {
-        const codigos = Array.from({ length: 30 }, (_, i) => i + 1);
-        const corpo = {
+        let codigos = Array.from({ length: 30 }, (_, i) => i + 1);
+        const corpo = () => ({
           filter: { productCodeList: [codigo] },
           option: {
             prices: Object.keys(LOJAS).map((f) => ({ branchCode: Number(f), priceCodeList: codigos })),
           },
           page: 1,
           pageSize: 5,
-        };
-        const r = await totvsFetch(PRECOS, corpo);
+        });
+        let r = await totvsFetch(PRECOS, corpo());
+        // Tira os códigos que não existem e pergunta de novo
+        if (r.status === 400) {
+          const faltam = new Set(Array.from(r.text.matchAll(/Price (\d+) not found/g), (m) => Number(m[1])));
+          codigos = codigos.filter((c) => !faltam.has(c));
+          linhas.push(`Códigos de preço que existem: ${codigos.join(", ") || "nenhum"}`);
+          if (codigos.length) r = await totvsFetch(PRECOS, corpo());
+        }
         linhas.push(`CHAMADA prices/search: HTTP ${r.status}`);
         const itens = (r.json?.items as Record<string, unknown>[] | undefined) ?? [];
         if (itens.length) {

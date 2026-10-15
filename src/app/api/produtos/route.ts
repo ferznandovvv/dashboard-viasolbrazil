@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { fetchEstoque } from "@/lib/connectors/estoque";
+import { fetchPrecos } from "@/lib/connectors/precos";
 import { rodandoLocal } from "@/lib/credenciais";
 import { todaySpKey } from "@/lib/types";
 
@@ -16,6 +17,8 @@ export interface LinhaProduto {
   vendasPorLoja: Record<string, number>;
   /** Saldo de agora, por loja — sempre de todas as lojas */
   porLoja: Record<string, number>;
+  /** Preço de venda por tabela (Site, Franca, RP) */
+  precos: Record<string, number>;
 }
 
 /**
@@ -47,10 +50,18 @@ export async function GET(req: NextRequest) {
   const todasLojas = Object.values(LOJAS);
 
   // Uma foto só do estoque, filtrada aqui: a API não filtra por parte do nome
-  const estoque = await fetchEstoque();
+  const [estoque, precos] = await Promise.all([fetchEstoque(), fetchPrecos()]);
+  const tabelas = precos?.tabelas ?? [];
+  /** Preço do produto em cada tabela, pelo código da TOTVS */
+  const anexarPreco = (l: LinhaProduto, codigo?: number) => {
+    const p = codigo !== undefined ? precos?.porProduto[String(codigo)] : undefined;
+    if (!p) return;
+    for (const t of tabelas) if (p[t.codigo] && !l.precos[t.rotulo]) l.precos[t.rotulo] = p[t.codigo];
+  };
   const base = {
     modo,
     lojas: todasLojas,
+    tabelas: tabelas.map((t) => t.rotulo),
     estoqueEm: estoque.em ?? "",
     estoqueIncompleto: Boolean(estoque.incompleto),
     erro: estoque.erro,
@@ -67,8 +78,9 @@ export async function GET(req: NextRequest) {
       const nome = nomeCompleto(s.nome, s.cor, s.tamanho);
       const alvo = normalizar(nome);
       if (!palavras.every((p) => alvo.includes(p)) || ignorado(alvo)) continue;
-      const e = linhas.get(alvo) ?? { produto: nome, vendidas: 0, vendasPorLoja: {}, porLoja: {} };
+      const e = linhas.get(alvo) ?? { produto: nome, vendidas: 0, vendasPorLoja: {}, porLoja: {}, precos: {} };
       somarSaldo(e, s.porLoja);
+      anexarPreco(e, s.codigo);
       linhas.set(alvo, e);
     }
     const itens = Array.from(linhas.values()).sort((a, b) => a.produto.localeCompare(b.produto, "pt-BR"));
@@ -104,7 +116,7 @@ export async function GET(req: NextRequest) {
       ignorados.set(v.nome.trim(), (ignorados.get(v.nome.trim()) ?? 0) + v.qtd);
       continue;
     }
-    const e = linhas.get(chave) ?? { produto: v.nome.trim(), vendidas: 0, vendasPorLoja: {}, porLoja: {} };
+    const e = linhas.get(chave) ?? { produto: v.nome.trim(), vendidas: 0, vendasPorLoja: {}, porLoja: {}, precos: {} };
     e.vendidas += v.qtd;
     if (v.loja) e.vendasPorLoja[v.loja] = (e.vendasPorLoja[v.loja] ?? 0) + v.qtd;
     linhas.set(chave, e);
@@ -128,7 +140,10 @@ export async function GET(req: NextRequest) {
       : escolhidos.has(curto)
         ? curto
         : chaves.find((k) => alvo.startsWith(k) || k.startsWith(alvo));
-    if (chave) somarSaldo(escolhidos.get(chave)!, s.porLoja);
+    if (chave) {
+      somarSaldo(escolhidos.get(chave)!, s.porLoja);
+      anexarPreco(escolhidos.get(chave)!, s.codigo);
+    }
   }
 
   return NextResponse.json({
