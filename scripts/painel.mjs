@@ -152,8 +152,8 @@ async function atualizarPara(commit) {
     }
     await derrubar();
     subir(livre);
-    salvarEstado({ pasta: livre, montado: commit, atualizadoEm: new Date().toISOString(), falhou: undefined });
     const msg = (await git("log", "-1", "--format=%s")).saida;
+    salvarEstado({ pasta: livre, montado: commit, mensagem: msg, atualizadoEm: new Date().toISOString(), falhou: undefined });
     log(`Atualizado: ${msg}`);
   } finally {
     trocando = false;

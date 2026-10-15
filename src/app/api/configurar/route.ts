@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /** Estado do atualizador automático (scripts/painel.mjs), quando ele está em uso. */
-async function atualizador(): Promise<{ verificadoEm?: string; atualizadoEm?: string; falhou?: string } | null> {
+async function atualizador(): Promise<{ verificadoEm?: string; atualizadoEm?: string; falhou?: string; mensagem?: string } | null> {
   try {
     const pasta = process.env.DADOS_DIR ?? join(process.cwd(), "dados");
     return JSON.parse(await readFile(join(pasta, "painel-estado.json"), "utf8"));

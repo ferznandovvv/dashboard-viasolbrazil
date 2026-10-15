@@ -8,7 +8,7 @@ interface Estado {
   local: boolean;
   situacao: Record<string, boolean>;
   integracoes: Integracao[];
-  atualizador?: { verificadoEm?: string; atualizadoEm?: string; falhou?: string } | null;
+  atualizador?: { verificadoEm?: string; atualizadoEm?: string; falhou?: string; mensagem?: string } | null;
 }
 
 /**
@@ -109,6 +109,12 @@ export default function Configurar() {
               Atualização automática ligada: versão no ar desde{" "}
               <b>{quando(estado.atualizador.atualizadoEm)}</b> · última conferência no GitHub{" "}
               {quando(estado.atualizador.verificadoEm)}
+              {estado.atualizador.mensagem && (
+                <>
+                  {" "}
+                  · última mudança: <b>{estado.atualizador.mensagem}</b>
+                </>
+              )}
               {estado.atualizador.falhou && " · a última versão baixada não montou — a anterior segue no ar"}
             </>
           ) : (
