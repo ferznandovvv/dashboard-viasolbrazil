@@ -6,3 +6,5 @@ node_modules/
 *.tsbuildinfo
 next-env.d.ts
 dados/
+.next-a/
+.next-b/
