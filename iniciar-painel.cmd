@@ -6,6 +6,8 @@ title Painel Via Sol
 cd /d "%~dp0"
 
 echo Buscando atualizacoes...
+rem Arquivos que o npm e o Next reescrevem sozinhos travariam o git pull
+call git checkout -- tsconfig.json package-lock.json package.json
 call git pull --ff-only
 call npm install --no-audit --no-fund
 

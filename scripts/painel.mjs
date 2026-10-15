@@ -123,6 +123,9 @@ async function verificar() {
   if (temNovo && estado.falhou !== remoto) {
     log("Versão nova no GitHub. Baixando…");
     const antes = (await git("rev-parse", "HEAD:package-lock.json")).saida;
+    // Arquivos que o próprio npm/Next reescrevem na máquina: alterados, eles
+    // travariam o git pull. Ninguém edita código aqui, então volta ao do GitHub
+    await git("checkout", "--", "tsconfig.json", "package-lock.json", "package.json");
     const pull = await git("pull", "--ff-only", "origin", ramo);
     if (!pull.ok) {
       log(`Não consegui baixar: ${pull.saida.slice(0, 300)}`);
