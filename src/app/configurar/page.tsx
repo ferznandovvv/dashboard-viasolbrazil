@@ -8,12 +8,24 @@ interface Estado {
   local: boolean;
   situacao: Record<string, boolean>;
   integracoes: Integracao[];
+  atualizador?: { verificadoEm?: string; atualizadoEm?: string; falhou?: string } | null;
 }
 
 /**
  * Configuração das integrações pelo navegador, para quem roda o sistema
  * numa máquina própria: cola as chaves, salva, e vale na hora.
  */
+const quando = (iso?: string) =>
+  iso
+    ? new Date(iso).toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "America/Sao_Paulo",
+      })
+    : "—";
+
 export default function Configurar() {
   const [estado, setEstado] = useState<Estado | null>(null);
   const [valores, setValores] = useState<Record<string, string>>({});
@@ -89,6 +101,21 @@ export default function Configurar() {
       )}
 
       {aviso && <div className="parcial">{aviso}</div>}
+
+      {estado.local && (
+        <div className="rank-aviso" style={{ margin: "0 0 12px" }}>
+          {estado.atualizador ? (
+            <>
+              Atualização automática ligada: versão no ar desde{" "}
+              <b>{quando(estado.atualizador.atualizadoEm)}</b> · última conferência no GitHub{" "}
+              {quando(estado.atualizador.verificadoEm)}
+              {estado.atualizador.falhou && " · a última versão baixada não montou — a anterior segue no ar"}
+            </>
+          ) : (
+            <>Atualização automática desligada — abra o sistema pelo iniciar-painel.cmd para ela funcionar.</>
+          )}
+        </div>
+      )}
 
       <div className="rank-aviso" style={{ margin: "0 0 16px" }}>
         Cole as chaves e salve — vale na hora, sem reiniciar. O que você salva nunca volta a
