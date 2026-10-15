@@ -616,3 +616,71 @@ th.num { text-align: right; }
 }
 /* Colunas de número no tamanho do conteúdo; o nome do produto fica com o resto */
 .prod-tbl th.n, .prod-tbl td.n { width: 1%; }
+
+/* ——— Financeiro ——— */
+.fin-entrar { max-width: 420px; margin: 24px auto; }
+.fin-resumo .tile { text-align: left; font: inherit; color: inherit; }
+.fin-resumo button.tile { cursor: pointer; }
+.fin-resumo .tile .value { font-size: 22px; }
+.fin-resumo .tile.alerta .value { color: var(--critical); }
+.fin-resumo .tile .muted { font-size: 12px; }
+.fin-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.fin-mes { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.fin-mes span { min-width: 120px; text-align: center; font-weight: 600; }
+.fin-select, .config-campo select {
+  padding: 8px 12px; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 10px; font-size: 13px; font-family: inherit;
+}
+.config-campo select { width: 100%; background: var(--page); font-size: 13.5px; }
+.fin-busca { flex: 1; min-width: 180px; width: auto; margin: 0; padding: 8px 12px; font-size: 13px; }
+.fin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.fin-largo { grid-column: span 2; }
+@media (max-width: 640px) { .fin-largo { grid-column: auto; } }
+.fin-tbl td { vertical-align: middle; }
+.fin-tbl tr.paga td { opacity: 0.55; }
+.fin-tbl td.vencida { color: var(--critical); font-weight: 600; }
+.fin-desc { font-weight: 600; color: var(--text-primary); }
+.fin-sub { font-size: 11.5px; color: var(--text-muted); }
+.fin-parcela {
+  margin-left: 6px; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 10.5px; font-weight: 600; color: var(--text-secondary);
+}
+.fin-status { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.fin-status.vencida { color: var(--critical); font-weight: 600; }
+.fin-status.hoje { color: var(--c-meli); font-weight: 600; }
+.fin-status.paga { color: var(--good); }
+.fin-acoes { white-space: nowrap; text-align: right; }
+.fin-acoes .link { margin-left: 10px; font-size: 12px; }
+.fin-excluir { color: var(--critical) !important; }
+.fin-pagar { display: inline-flex; gap: 6px; align-items: center; }
+.fin-pagar input {
+  padding: 4px 8px; background: var(--page); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; font-size: 12px; width: 120px; font-family: inherit;
+}
+.fin-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.fin-edit { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 14px; }
+.fin-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0 10px; color: var(--text-secondary); }
+.fin-grupo { padding: 10px 0; border-top: 1px solid var(--border); }
+.fin-grupo-nome { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.fin-chip {
+  display: inline-block; margin: 0 6px 6px 0; padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: 999px; font-size: 12.5px; cursor: pointer; color: var(--text-secondary);
+}
+.fin-chip:hover { color: var(--text-primary); background: var(--page); }
+.fin-chip.inativa { opacity: 0.45; text-decoration: line-through; }
+/* DRE */
+.fin-dre td, .fin-dre th { white-space: nowrap; }
+.fin-dre td.total { font-weight: 600; border-left: 1px solid var(--border); }
+.fin-dre td.neg { color: var(--critical); }
+.fin-dre tr.dre-receita td, .fin-dre tr.dre-subtotal td { color: var(--text-primary); font-weight: 600; }
+.fin-dre tr.dre-subtotal td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.fin-dre tr.dre-grupo td { color: var(--text-secondary); }
+.fin-dre tr.dre-categoria td { color: var(--text-muted); font-size: 12px; }
+.fin-dre tr.dre-categoria td:first-child { padding-left: 28px; }
+.fin-dre tr.dre-margem td { color: var(--text-muted); font-size: 11.5px; font-style: italic; border-top: none; }
+.dre-abrir { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.dre-abrir:disabled { cursor: default; }
+.dre-seta { display: inline-block; width: 14px; }
+.fin-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.fin-cab h2 { margin: 0; }
+.updated a { color: inherit; }

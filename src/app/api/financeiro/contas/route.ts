@@ -1,0 +1,145 @@
+import { NextRequest, NextResponse } from "next/server";
+import { exigir } from "@/lib/financeiro/auth";
+import { alterarBase, novoId } from "@/lib/financeiro/base";
+import { type Conta, somarMeses } from "@/lib/financeiro/tipos";
+import { todaySpKey } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Contas a pagar. Filtros: ?mes=YYYY-MM (vencimento), ?empresa=id,
+ * ?status=abertas|pagas|vencidas|todas, ?q=texto. O resumo de cima ignora os
+ * filtros de mês e status: vencidas são vencidas em qualquer mês.
+ */
+export async function GET(req: NextRequest) {
+  const atual = await exigir(req);
+  if (atual instanceof NextResponse) return atual;
+  const { base } = atual;
+  const sp = req.nextUrl.searchParams;
+  const mes = sp.get("mes") ?? "";
+  const empresa = sp.get("empresa") ?? "";
+  const status = sp.get("status") ?? "abertas";
+  const q = (sp.get("q") ?? "").trim().toLowerCase();
+  const hoje = todaySpKey();
+  const daqui7 = somarDias(hoje, 7);
+
+  const daEmpresa = base.contas.filter((c) => !empresa || c.empresaId === empresa);
+  const abertas = daEmpresa.filter((c) => c.status === "aberta");
+  const soma = (cs: Conta[]) => cs.reduce((s, c) => s + c.valor, 0);
+  const vencidas = abertas.filter((c) => c.vencimento < hoje);
+  const venceHoje = abertas.filter((c) => c.vencimento === hoje);
+  const proximas = abertas.filter((c) => c.vencimento > hoje && c.vencimento <= daqui7);
+  const pagasMes = daEmpresa.filter((c) => c.status === "paga" && (c.pagoEm ?? "").startsWith(hoje.slice(0, 7)));
+
+  const busca = (c: Conta) => {
+    if (!q) return true;
+    const cat = base.categorias.find((x) => x.id === c.categoriaId)?.nome ?? "";
+    return `${c.descricao} ${c.fornecedor} ${c.observacao} ${cat}`.toLowerCase().includes(q);
+  };
+  const lista = daEmpresa
+    .filter((c) =>
+      status === "vencidas"
+        ? c.status === "aberta" && c.vencimento < hoje
+        : status === "abertas"
+          ? c.status === "aberta"
+          : status === "pagas"
+            ? c.status === "paga"
+            : true
+    )
+    // Vencidas aparecem sempre, mesmo de outro mês: não podem sumir da vista
+    .filter((c) => !mes || c.vencimento.startsWith(mes) || (status !== "pagas" && c.status === "aberta" && c.vencimento < hoje))
+    .filter(busca)
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento) || a.descricao.localeCompare(b.descricao));
+
+  const nomes = new Map(base.usuarios.map((u) => [u.id, u.nome]));
+  return NextResponse.json({
+    hoje,
+    resumo: {
+      vencidas: { qtd: vencidas.length, total: soma(vencidas) },
+      hoje: { qtd: venceHoje.length, total: soma(venceHoje) },
+      proximos7: { qtd: proximas.length, total: soma(proximas) },
+      pagasMes: { qtd: pagasMes.length, total: pagasMes.reduce((s, c) => s + (c.valorPago ?? c.valor), 0) },
+    },
+    contas: lista.map((c) => ({
+      ...c,
+      criadoPorNome: nomes.get(c.criadoPor) ?? "",
+      pagoPorNome: c.pagoPor ? nomes.get(c.pagoPor) ?? "" : "",
+    })),
+    totalLista: soma(lista),
+  });
+}
+
+interface NovaConta {
+  descricao: string;
+  fornecedor?: string;
+  empresaId: string;
+  categoriaId: string;
+  valor: number;
+  vencimento: string;
+  competencia?: string;
+  forma?: string;
+  observacao?: string;
+  /** Quantas vezes lançar, mês a mês */
+  vezes?: number;
+  /** parcelado = "1/3, 2/3…"; mensal = conta fixa que se repete */
+  repetir?: "parcelado" | "mensal";
+}
+
+/** Lança uma conta — ou várias, quando parcelada ou mensal. */
+export async function POST(req: NextRequest) {
+  const atual = await exigir(req);
+  if (atual instanceof NextResponse) return atual;
+  const { usuario } = atual;
+  const n = (await req.json().catch(() => ({}))) as NovaConta;
+  const erro = validar(n);
+  if (erro) return NextResponse.json({ erro }, { status: 400 });
+
+  const vezes = Math.min(Math.max(Math.round(n.vezes ?? 1), 1), 60);
+  const lote = vezes > 1 ? novoId() : undefined;
+  const competencia = n.competencia && /^\d{4}-\d{2}$/.test(n.competencia) ? n.competencia : n.vencimento.slice(0, 7);
+  const agora = new Date().toISOString();
+
+  try {
+    const criadas = await alterarBase((base) => {
+      if (!base.empresas.some((e) => e.id === n.empresaId)) throw new Error("Empresa não encontrada.");
+      if (!base.categorias.some((c) => c.id === n.categoriaId)) throw new Error("Categoria não encontrada.");
+      const novas: Conta[] = Array.from({ length: vezes }, (_, i) => ({
+        id: novoId(),
+        descricao: n.descricao.trim(),
+        fornecedor: (n.fornecedor ?? "").trim(),
+        empresaId: n.empresaId,
+        categoriaId: n.categoriaId,
+        valor: Math.round(n.valor * 100) / 100,
+        vencimento: somarMeses(n.vencimento, i),
+        competencia: somarMeses(competencia, i),
+        forma: n.forma ?? "",
+        parcela: vezes > 1 && n.repetir !== "mensal" ? `${i + 1}/${vezes}` : undefined,
+        lote,
+        observacao: (n.observacao ?? "").trim(),
+        status: "aberta",
+        criadoPor: usuario.id,
+        criadoEm: agora,
+      }));
+      base.contas.push(...novas);
+      return novas.length;
+    });
+    return NextResponse.json({ ok: true, criadas });
+  } catch (e) {
+    return NextResponse.json({ erro: e instanceof Error ? e.message : "Erro" }, { status: 400 });
+  }
+}
+
+function validar(n: Partial<NovaConta>): string | null {
+  if (!n.descricao?.trim()) return "Escreva uma descrição.";
+  if (!n.empresaId) return "Escolha a empresa.";
+  if (!n.categoriaId) return "Escolha a categoria.";
+  if (!(Number(n.valor) > 0)) return "Valor precisa ser maior que zero.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(n.vencimento ?? "")) return "Escolha o vencimento.";
+  return null;
+}
+
+function somarDias(dia: string, n: number): string {
+  const d = new Date(`${dia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}

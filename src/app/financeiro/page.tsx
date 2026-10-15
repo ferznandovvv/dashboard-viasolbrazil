@@ -1,0 +1,104 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import type { UsuarioPublico } from "@/lib/financeiro/tipos";
+import { type Cadastros as DadosCadastros, api } from "@/components/financeiro/comum";
+import { Entrar } from "@/components/financeiro/Entrar";
+import { Contas } from "@/components/financeiro/Contas";
+import { Dre } from "@/components/financeiro/Dre";
+import { Cadastros } from "@/components/financeiro/Cadastros";
+
+type Aba = "contas" | "dre" | "cadastros";
+
+interface Sessao {
+  local: boolean;
+  precisaSetup?: boolean;
+  usuario?: UsuarioPublico | null;
+}
+
+/** Financeiro: contas a pagar, DRE e cadastros, com login por pessoa. */
+export default function Financeiro() {
+  const [sessao, setSessao] = useState<Sessao | null>(null);
+  const [cad, setCad] = useState<DadosCadastros | null>(null);
+  const [aba, setAba] = useState<Aba>("contas");
+
+  const carregarCadastros = useCallback(async () => {
+    setCad(await api<DadosCadastros>("/api/financeiro/cadastros"));
+  }, []);
+
+  const carregar = useCallback(async () => {
+    const s = await api<Sessao>("/api/financeiro/sessao");
+    setSessao(s);
+    if (s.usuario) await carregarCadastros();
+  }, [carregarCadastros]);
+
+  useEffect(() => {
+    carregar().catch(() => setSessao({ local: true, usuario: null }));
+  }, [carregar]);
+
+  const sair = async () => {
+    await api("/api/financeiro/sessao", { method: "DELETE" });
+    setCad(null);
+    setAba("contas");
+    await carregar();
+  };
+
+  const u = sessao?.usuario;
+  const veDre = u?.papel === "admin" || u?.veDre;
+  return (
+    <main className="wrap">
+      <div className="topbar">
+        <div className="logo">
+          <div>
+            <span className="brand-word" role="img" aria-label="Via Sol" />
+            <span className="tag">financeiro</span>
+          </div>
+        </div>
+        <span className="updated">
+          {u && (
+            <>
+              {u.nome} ·{" "}
+              <button className="link" onClick={sair}>
+                sair
+              </button>{" "}
+              ·{" "}
+            </>
+          )}
+          <Link href="/">← vendas</Link>
+        </span>
+      </div>
+
+      {!sessao ? (
+        <div className="empty">Carregando…</div>
+      ) : !sessao.local ? (
+        <div className="card">O financeiro guarda os lançamentos no computador da empresa, então só funciona no sistema rodando lá.</div>
+      ) : !u ? (
+        <Entrar primeiro={!!sessao.precisaSetup} aoEntrar={carregar} />
+      ) : !cad ? (
+        <div className="empty">Carregando…</div>
+      ) : (
+        <>
+          <div className="seg abas-prod" role="tablist">
+            <button className={aba === "contas" ? "on" : ""} onClick={() => setAba("contas")}>
+              Contas a pagar
+            </button>
+            {veDre && (
+              <button className={aba === "dre" ? "on" : ""} onClick={() => setAba("dre")}>
+                DRE
+              </button>
+            )}
+            {u.papel === "admin" && (
+              <button className={aba === "cadastros" ? "on" : ""} onClick={() => setAba("cadastros")}>
+                Cadastros
+              </button>
+            )}
+          </div>
+          {aba === "contas" && <Contas cad={cad} usuario={u} />}
+          {aba === "dre" && veDre && <Dre cad={cad} />}
+          {aba === "cadastros" && u.papel === "admin" && <Cadastros cad={cad} aoMudar={carregarCadastros} />}
+        </>
+      )}
+    </main>
+  );
+}
