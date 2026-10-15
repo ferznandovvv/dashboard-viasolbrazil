@@ -77,8 +77,11 @@ Tunnels → painel, a rota deve apontar para `127.0.0.1:3100`.
 
 ## Atualizar o sistema depois
 
-Feche a janela do painel e abra `iniciar-painel.cmd` de novo — ele faz o
-`git pull` e prepara a versão nova.
+Sozinho. Aberto pelo `iniciar-painel.cmd`, o painel confere o GitHub a cada 5
+minutos; quando há versão nova, baixa, monta ao lado (`.next-a` / `.next-b`)
+enquanto a atual continua no ar e troca em poucos segundos. Se a versão nova
+não montar, a anterior segue rodando. O histórico fica em `dados/painel.log`,
+e a tela de configuração mostra quando foi a última atualização.
 
 ## Se algo não funcionar
 
