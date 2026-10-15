@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { fetchEstoque } from "@/lib/connectors/estoque";
-import { fetchPrecos } from "@/lib/connectors/precos";
+import { fetchPrecos, tabelasVisiveis } from "@/lib/connectors/precos";
 import { rodandoLocal } from "@/lib/credenciais";
 import { todaySpKey } from "@/lib/types";
 
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   // Uma foto só do estoque, filtrada aqui: a API não filtra por parte do nome
   const [estoque, precos] = await Promise.all([fetchEstoque(), fetchPrecos()]);
-  const tabelas = precos?.tabelas ?? [];
+  const tabelas = tabelasVisiveis(precos);
   /** Preço do produto em cada tabela, pelo código da TOTVS */
   const anexarPreco = (l: LinhaProduto, codigo?: number) => {
     const p = codigo !== undefined ? precos?.porProduto[String(codigo)] : undefined;

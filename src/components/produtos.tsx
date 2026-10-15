@@ -58,11 +58,6 @@ const LOJAS_DA_TABELA: Record<string, string> = {
 const preco = (v?: number) =>
   v ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
 
-/** Saldo somado das lojas escolhidas (ou de todas, sem escolha). */
-function saldoEm(l: Linha, lojas: string[]): number {
-  return lojas.reduce((s, loja) => s + (l.porLoja[loja] ?? 0), 0);
-}
-
 /**
  * Destaque pelo que importa: quem TEM peça aparece forte; zero e negativo
  * (divergência de inventário) ficam apagados, para não roubar a atenção.
@@ -207,9 +202,7 @@ export function Produtos() {
         ? l.produto
         : ordem.col === "vendidas"
           ? l.vendidas
-          : ordem.col === "sel"
-            ? saldoEm(l, escolhidas)
-            : ordem.col.startsWith("preco:")
+          : ordem.col.startsWith("preco:")
               ? l.precos?.[ordem.col.slice(6)] ?? 0
               : l.porLoja[ordem.col.slice(5)] ?? 0;
     return [...itens].sort((a, b) => {
@@ -228,7 +221,6 @@ export function Produtos() {
       "Produto",
       ...tabelas.map((t) => `Preço ${t}`),
       ...(vend ? ["Vendidas"] : []),
-      ...(vend && escolhidas.length ? [`Estoque ${escolhidas.join(" + ")}`] : []),
       ...colunasLojas,
     ];
     const corpo = lista.map((l) => [
@@ -236,7 +228,6 @@ export function Produtos() {
       `"${l.produto.replace(/"/g, '""')}"`,
       ...tabelas.map((t) => (l.precos?.[t] ? l.precos[t].toFixed(2).replace(".", ",") : "")),
       ...(vend ? [String(l.vendidas)] : []),
-      ...(vend && escolhidas.length ? [String(saldoEm(l, escolhidas))] : []),
       ...colunasLojas.map((loja) => String(l.porLoja[loja] ?? 0)),
     ]);
     const csv = [cab, ...corpo].map((r) => r.join(";")).join("\n");
@@ -419,7 +410,7 @@ export function Produtos() {
                       <tr className="grupo">
                         <th />
                         <th colSpan={tabelas.length} className="fim-preco">Preço</th>
-                        {dados.modo === "vendidos" && <th colSpan={escolhidas.length > 0 ? 2 : 1} />}
+                        {dados.modo === "vendidos" && <th />}
                         <th colSpan={colunasLojas.length}>Estoque</th>
                       </tr>
                     )}
@@ -443,14 +434,13 @@ export function Produtos() {
                           Vendidas{seta("vendidas")}
                         </th>
                       )}
-                      {dados.modo === "vendidos" && escolhidas.length > 0 && (
-                        <th className="n ord col-sel" onClick={() => ordenar("sel")}>
-                          Estoque {escolhidas.length === 1 ? curto(escolhidas[0]) : "escolhidas"}
-                          {seta("sel")}
-                        </th>
-                      )}
                       {colunasLojas.map((loja) => (
-                        <th key={loja} className="n ord" title={loja} onClick={() => ordenar(`loja:${loja}`)}>
+                        <th
+                          key={loja}
+                          className={`n ord${escolhidas.includes(loja) ? " loja-sel" : ""}`}
+                          title={loja}
+                          onClick={() => ordenar(`loja:${loja}`)}
+                        >
                           {curto(loja)}
                           {seta(`loja:${loja}`)}
                         </th>
@@ -459,7 +449,6 @@ export function Produtos() {
                   </thead>
                   <tbody>
                     {lista.map((l) => {
-                      const saldoSel = saldoEm(l, escolhidas);
                       return (
                         <tr key={l.produto}>
                           <td>
@@ -470,30 +459,19 @@ export function Produtos() {
                           </td>
                           {tabelas.map((t, i) => {
                             const v = l.precos?.[t];
-                            // Destaca a tabela que foge das outras (site mais caro, por ex.)
-                            const valores = tabelas.map((x) => l.precos?.[x]).filter(Boolean);
-                            const diferente = !!v && valores.some((x) => x !== v) && valores.filter((x) => x === v).length === 1;
                             return (
-                              <td
-                                key={t}
-                                className={`n preco${diferente ? " diferente" : ""}${i === tabelas.length - 1 ? " fim-preco" : ""}`}
-                              >
+                              <td key={t} className={`n preco${i === tabelas.length - 1 ? " fim-preco" : ""}`}>
                                 {preco(v)}
                               </td>
                             );
                           })}
                           {dados.modo === "vendidos" && <td className="n">{l.vendidas}</td>}
-                          {dados.modo === "vendidos" && escolhidas.length > 0 && (
-                            <td className={`n col-sel ${tom(saldoSel)}`}>
-                              {saldoSel}
-                            </td>
-                          )}
                           {colunasLojas.map((loja) => {
                             const v = l.porLoja[loja] ?? 0;
                             return (
                               <td
                                 key={loja}
-                                className={`n ${tom(v)}`}
+                                className={`n ${tom(v)}${escolhidas.includes(loja) ? " loja-sel" : ""}`}
                               >
                                 {v}
                               </td>

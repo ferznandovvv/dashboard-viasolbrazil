@@ -64,6 +64,11 @@ function rotular(nome: string, codigo: number): string {
 const ORDEM = ["Site", "Franca", "RP"];
 /** Tabelas que a Via Sol não usa: ficam fora da tela (pedido do Fernando) */
 const IGNORAR = /E-?COMMERCE/i;
+
+/** Tabelas que vão para a tela — vale também para fotos tiradas antes do filtro. */
+export function tabelasVisiveis(p: Precos | null): Tabela[] {
+  return (p?.tabelas ?? []).filter((t) => !IGNORAR.test(t.nome));
+}
 const ordenar = (t: Tabela[]) =>
   [...t].sort(
     (a, b) =>
