@@ -7,8 +7,9 @@ import { type Cadastros as Dados, api } from "./comum";
 type Secao = "empresas" | "categorias" | "usuarios" | "backup";
 
 /** Cadastros do financeiro — só o administrador vê esta aba. */
-export function Cadastros({ cad, aoMudar }: { cad: Dados; aoMudar: () => Promise<void> }) {
-  const [secao, setSecao] = useState<Secao>("empresas");
+export function Cadastros({ cad, admin, aoMudar }: { cad: Dados; admin: boolean; aoMudar: () => Promise<void> }) {
+  // A equipe só cadastra categorias; o resto é do administrador
+  const [secao, setSecao] = useState<Secao>(admin ? "empresas" : "categorias");
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const salvando = useRef(false);
@@ -37,7 +38,8 @@ export function Cadastros({ cad, aoMudar }: { cad: Dados; aoMudar: () => Promise
 
   return (
     <div>
-      <div className="seg" role="group" style={{ marginBottom: 14 }}>
+      {admin && (
+        <div className="seg" role="group" style={{ marginBottom: 14 }}>
         {(
           [
             ["empresas", "Empresas"],
@@ -50,14 +52,15 @@ export function Cadastros({ cad, aoMudar }: { cad: Dados; aoMudar: () => Promise
             {nome}
           </button>
         ))}
-      </div>
+        </div>
+      )}
       {erro && <div className="card err-msg">{erro}</div>}
       {aviso && <div className="parcial">{aviso}</div>}
 
-      {secao === "empresas" && <Empresas cad={cad} salvar={salvar} />}
+      {admin && secao === "empresas" && <Empresas cad={cad} salvar={salvar} />}
       {secao === "categorias" && <Categorias cad={cad} salvar={salvar} />}
-      {secao === "usuarios" && <Usuarios cad={cad} salvar={salvar} />}
-      {secao === "backup" && <Backup cad={cad} salvar={salvar} />}
+      {admin && secao === "usuarios" && <Usuarios cad={cad} salvar={salvar} />}
+      {admin && secao === "backup" && <Backup cad={cad} salvar={salvar} />}
     </div>
   );
 }
@@ -247,8 +250,8 @@ function Usuarios({ cad, salvar }: { cad: Dados; salvar: Salvar }) {
         </button>
       </div>
       <p className="muted" style={{ fontSize: 12.5, margin: "0 0 12px" }}>
-        Administrador cadastra empresas, categorias e usuários, exclui qualquer conta e vê o DRE. Equipe lança e dá
-        baixa; vê o DRE só se você liberar.
+        Administrador cadastra empresas e usuários, exclui qualquer conta e vê o DRE. Equipe lança, dá baixa e
+        cadastra categorias; vê o DRE só se você liberar.
       </p>
       <div className="tbl-wrap">
         <table className="prod-tbl">

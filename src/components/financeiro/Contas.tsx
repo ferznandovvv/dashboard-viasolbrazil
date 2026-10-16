@@ -22,6 +22,7 @@ interface Resposta {
 type Status = "abertas" | "vencidas" | "pagas" | "todas";
 type Vista = "agenda" | "lista";
 type Janela = "hoje" | "amanha" | "semana";
+const NOVA_CATEGORIA = "__nova";
 
 interface Formulario {
   id?: string;
@@ -92,7 +93,15 @@ const lerVista = (): Vista => {
 };
 
 /** Contas a pagar: agenda do mês, lançar (a pagar ou já pago), dividir entre empresas e dar baixa. */
-export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPublico }) {
+export function Contas({
+  cad,
+  usuario,
+  aoMudarCadastros,
+}: {
+  cad: Cadastros;
+  usuario: UsuarioPublico;
+  aoMudarCadastros: () => Promise<void>;
+}) {
   const empresasAtivas = cad.empresas.filter((e) => e.ativa);
   const categoriasAtivas = cad.categorias.filter((c) => c.ativa);
   const [vista, setVista] = useState<Vista>("agenda");
@@ -110,6 +119,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
   const [reagendando, setReagendando] = useState<{ id: string; data: string } | null>(null);
   const [janela, setJanela] = useState<Janela>("hoje");
   const [copiada, setCopiada] = useState("");
+  const [novaCategoria, setNovaCategoria] = useState<{ nome: string; grupo: string } | null>(null);
   const [sugestoes, setSugestoes] = useState<{ porFornecedor: Sugestao[]; porDescricao: Sugestao[] } | null>(null);
   const [preenchido, setPreenchido] = useState("");
   const anexarEm = useRef<string>("");
@@ -359,6 +369,22 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     await api(`/api/financeiro/anexos/${id}`, { method: "DELETE" }).catch((e) => setErro(e.message));
     setForm((f) => (f ? { ...f, anexos: (f.anexos ?? []).filter((a) => a.id !== id) } : f));
     await carregar();
+  };
+
+  /** Cria a categoria sem sair do lançamento e já deixa escolhida. */
+  const criarCategoria = async () => {
+    if (!novaCategoria) return;
+    try {
+      const r = await api<{ id?: string }>("/api/financeiro/cadastros", {
+        method: "POST",
+        body: JSON.stringify({ tipo: "categoria", nome: novaCategoria.nome, grupo: novaCategoria.grupo }),
+      });
+      await aoMudarCadastros();
+      if (r.id) campo("categoriaId", r.id);
+      setNovaCategoria(null);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    }
   };
 
   const copiarChave = async (c: ContaTela) => {
@@ -626,7 +652,14 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
             </label>
             <label className="config-campo">
               <span>Categoria</span>
-              <select value={form.categoriaId} onChange={(e) => campo("categoriaId", e.target.value)}>
+              <select
+                value={form.categoriaId}
+                onChange={(e) =>
+                  e.target.value === NOVA_CATEGORIA
+                    ? setNovaCategoria({ nome: "", grupo: "administrativas" })
+                    : campo("categoriaId", e.target.value)
+                }
+              >
                 <option value="">Escolha…</option>
                 {categoriasPorGrupo.map(({ g, cats }) => (
                   <optgroup key={g.id} label={g.nome}>
@@ -637,8 +670,35 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                     ))}
                   </optgroup>
                 ))}
+                <option value={NOVA_CATEGORIA}>＋ Nova categoria…</option>
               </select>
             </label>
+            {novaCategoria && (
+              <div className="config-campo fin-largo fin-nova-cat">
+                <span>Nova categoria</span>
+                <div className="fin-loja">
+                  <input
+                    autoFocus
+                    placeholder="nome, ex.: Uniformes"
+                    value={novaCategoria.nome}
+                    onChange={(e) => setNovaCategoria({ ...novaCategoria, nome: e.target.value })}
+                  />
+                  <select value={novaCategoria.grupo} onChange={(e) => setNovaCategoria({ ...novaCategoria, grupo: e.target.value })}>
+                    {cad.grupos.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.nome}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="mini" onClick={criarCategoria}>
+                    Criar
+                  </button>
+                  <button type="button" className="mini ghost" onClick={() => setNovaCategoria(null)}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
             <label className="config-campo">
               <span>Valor{form.repetir !== "nao" ? " (de cada uma)" : ""}</span>
               <input inputMode="decimal" value={form.valor} onChange={(e) => trocarValor(e.target.value)} placeholder="0,00" />

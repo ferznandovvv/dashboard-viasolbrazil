@@ -85,15 +85,13 @@ export default function Financeiro() {
                 DRE
               </button>
             )}
-            {u.papel === "admin" && (
-              <button className={aba === "cadastros" ? "on" : ""} onClick={() => setAba("cadastros")}>
-                Cadastros
-              </button>
-            )}
+            <button className={aba === "cadastros" ? "on" : ""} onClick={() => setAba("cadastros")}>
+              {u.papel === "admin" ? "Cadastros" : "Categorias"}
+            </button>
           </div>
-          {aba === "contas" && <Contas cad={cad} usuario={u} />}
+          {aba === "contas" && <Contas cad={cad} usuario={u} aoMudarCadastros={carregarCadastros} />}
           {aba === "dre" && veDre && <Dre cad={cad} />}
-          {aba === "cadastros" && u.papel === "admin" && <Cadastros cad={cad} aoMudar={carregarCadastros} />}
+          {aba === "cadastros" && <Cadastros cad={cad} admin={u.papel === "admin"} aoMudar={carregarCadastros} />}
         </>
       )}
     </main>

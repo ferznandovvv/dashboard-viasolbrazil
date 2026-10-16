@@ -850,3 +850,5 @@ th.num { text-align: right; }
 .fin-dividir:hover { background: color-mix(in srgb, var(--brand) 12%, transparent); }
 .fin-rateio .fin-dividir { margin-left: 8px; padding: 3px 10px; font-size: 11.5px; }
 .fin-dividir-largo { width: 100%; padding: 9px 12px; font-size: 13px; }
+.fin-nova-cat .fin-loja input { flex: 1; min-width: 0; padding: 9px 12px; background: var(--page); color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px; font-size: 13.5px; }
+.fin-nova-cat .fin-loja select { flex: 0 1 220px; }

@@ -38,11 +38,16 @@ type Pedido =
   | { tipo: "backup"; pasta: string }
   | { tipo: "excluir-empresa"; id: string };
 
-/** Cria ou altera um cadastro (só o administrador). */
+/**
+ * Cria ou altera um cadastro. Categorias, a equipe também cadastra; empresas,
+ * usuários e backup, só o administrador.
+ */
 export async function POST(req: NextRequest) {
-  const atual = await exigir(req, { admin: true });
+  const atual = await exigir(req);
   if (atual instanceof NextResponse) return atual;
   const p = (await req.json().catch(() => ({}))) as Pedido;
+  if (p.tipo !== "categoria" && atual.usuario.papel !== "admin")
+    return NextResponse.json({ erro: "Só o administrador pode fazer isso." }, { status: 403 });
 
   try {
     const r = await alterarBase((base) => {
@@ -66,8 +71,12 @@ export async function POST(req: NextRequest) {
         const c = base.categorias.find((x) => x.id === p.id);
         const dados = { nome: p.nome.trim(), grupo: p.grupo, ativa: p.ativa ?? true };
         if (c) Object.assign(c, dados);
-        else base.categorias.push({ id: novoId(), ...dados });
-        return "ok";
+        else {
+          if (base.categorias.some((x) => x.nome.trim().toLowerCase() === dados.nome.toLowerCase()))
+            throw new Error("Já existe uma categoria com esse nome.");
+          base.categorias.push({ id: novoId(), ...dados });
+        }
+        return `categoria:${c?.id ?? base.categorias[base.categorias.length - 1].id}`;
       }
       if (p.tipo === "usuario") {
         const login = (p.login ?? "").trim().toLowerCase();
@@ -113,7 +122,8 @@ export async function POST(req: NextRequest) {
       const resultado = await copiaDeSeguranca(await lerBase(), true);
       return NextResponse.json({ ok: true, backup: resultado });
     }
-    return NextResponse.json({ ok: true });
+    // Categoria nova devolve o id, para o lançamento já usar
+    return NextResponse.json({ ok: true, id: r.startsWith("categoria:") ? r.slice(10) : undefined });
   } catch (e) {
     return NextResponse.json({ erro: e instanceof Error ? e.message : "Erro" }, { status: 400 });
   }
