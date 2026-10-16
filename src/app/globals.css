@@ -819,3 +819,33 @@ th.num { text-align: right; }
 .fin-hoje-conta .fin-rapidas { flex-direction: column; align-items: stretch; gap: 2px; text-align: center; }
 .fin-hoje-conta .fin-pagar { flex-wrap: wrap; justify-content: flex-end; max-width: 260px; }
 @media (max-width: 640px) { .fin-hoje-empresas { grid-template-columns: 1fr; } }
+/* Botões principais de lançamento */
+.fin-lancar { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.fin-lancar-btn {
+  display: flex; align-items: center; gap: 14px; padding: 16px 20px; cursor: pointer; text-align: left;
+  border-radius: 14px; border: 2px solid var(--brand); background: var(--surface-1); color: var(--text-primary); font: inherit;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.fin-lancar-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+.fin-lancar-btn.principal { background: var(--brand); color: #fbf4e8; }
+.fin-lancar-btn b { display: block; font-size: 16px; }
+.fin-lancar-btn small { display: block; font-size: 12px; opacity: 0.8; margin-top: 2px; }
+.fin-lancar-icone {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 50%; font-size: 20px; font-weight: 700;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+@media (max-width: 640px) { .fin-lancar { grid-template-columns: 1fr; } }
+/* Loja no formulário */
+.fin-loja { display: flex; gap: 8px; align-items: stretch; }
+.fin-loja select { flex: 1; min-width: 0; }
+.fin-loja-fixa {
+  flex: 1; display: flex; align-items: center; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface-1); font-size: 13.5px; color: var(--text-secondary);
+}
+.fin-dividir {
+  flex: none; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--brand); background: transparent;
+  color: var(--brand); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.fin-dividir:hover { background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.fin-rateio .fin-dividir { margin-left: 8px; padding: 3px 10px; font-size: 11.5px; }

@@ -488,7 +488,6 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       return { ...f, partes };
     });
 
-  const r = dados?.resumo;
   // Painel do dia: hoje (com as atrasadas), amanhã ou os próximos 7 dias
   const proximos = dados?.proximos ?? [];
   const hojeDia = dados?.hoje ?? "";
@@ -532,215 +531,38 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
         onChange={(e) => aoEscolherArquivo(e.target.files?.[0])}
       />
 
-      {dados && (
-        <div className={`card fin-hoje${hojeTotal > 0 ? "" : " livre"}`}>
-          <div className="fin-hoje-cab">
-            <div>
-              <div className="seg fin-hoje-abas" role="tablist">
-                {(
-                  [
-                    ["hoje", "Pagar hoje"],
-                    ["amanha", "Amanhã"],
-                    ["semana", "Próximos 7 dias"],
-                  ] as [Janela, string][]
-                ).map(([j, nome]) => (
-                  <button key={j} className={janela === j ? "on" : ""} onClick={() => setJanela(j)}>
-                    {nome}
-                    {j !== janela && somaDe(daJanela(j)) > 0 && <span className="fin-hoje-aba-valor"> {brl.format(somaDe(daJanela(j)))}</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="fin-sub" style={{ marginTop: 6 }}>
-                {janela === "hoje"
-                  ? diaExtenso(dados.hoje)
-                  : janela === "amanha"
-                    ? diaExtenso(dados.amanha)
-                    : `de ${dataBr(dados.amanha)} até ${dataBr(somarDia(dados.hoje, 7))}`}
-              </div>
-            </div>
-            <div className="fin-hoje-total">
-              {hojeTotal > 0
-                ? brl.format(hojeTotal)
-                : janela === "hoje"
-                  ? "Nada para pagar hoje ✓"
-                  : janela === "amanha"
-                    ? "Nada para amanhã ✓"
-                    : "Nada nos próximos 7 dias ✓"}
-              {hojeAtrasado > 0 && <span className="fin-hoje-atraso">inclui {brl.format(hojeAtrasado)} atrasado</span>}
-              {hojeTotal === 0 && janela === "hoje" && dados.proxima && (
-                <span className="fin-sub">
-                  próximo: {dataBr(dados.proxima.vencimento)} · {brl.format(dados.proxima.total)}
-                </span>
-              )}
-            </div>
-          </div>
-          {hojeTotal > 0 && (
-            <div className="fin-hoje-empresas">
-              {hojePorEmpresa.map((g) => (
-                <div key={g.id} className="fin-hoje-empresa">
-                  <div className="fin-hoje-empresa-cab">
-                    <span>{g.nome}</span>
-                    <b>{brl.format(g.total)}</b>
-                  </div>
-                  {g.contas.map((c) => {
-                    const atrasada = c.vencimento < dados.hoje;
-                    return (
-                      <div key={c.id} className="fin-hoje-conta">
-                        <div className="fin-hoje-conta-info">
-                          <span className="fin-desc">
-                            {janela === "semana" && <span className="fin-hoje-data">{diaCurto(c.vencimento)}</span>}
-                            {c.descricao}
-                            {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
-                            {(c.anexos ?? []).map((a) => (
-                              <a key={a.id} className="fin-clipe" href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer" title={a.nome}>
-                                📎
-                              </a>
-                            ))}
-                          </span>
-                          <span className="fin-sub">
-                            {[c.fornecedor, c.forma].filter(Boolean).join(" · ")}
-                            {atrasada && <b className="fin-atrasada"> · venceu {dataBr(c.vencimento)}</b>}
-                            {reagendadoTexto(c)}
-                          </span>
-                          {c.chavePix && <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />}
-                          {c.observacao && <span className="fin-sub fin-obs">{c.observacao}</span>}
-                        </div>
-                        <span className="fin-hoje-valor">{brl.format(c.valor)}</span>
-                        {acoesRapidas(c)}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {r && (
-        <div className="tiles fin-resumo">
-          <button className={`tile${r.vencidas.qtd ? " alerta" : ""}`} onClick={() => setStatus("vencidas")}>
-            <div className="label">Vencidas</div>
-            <div className="value">{brl.format(r.vencidas.total)}</div>
-            <span className="muted">{r.vencidas.qtd} {r.vencidas.qtd === 1 ? "conta" : "contas"}</span>
-          </button>
-          <div className="tile">
-            <div className="label">Vence hoje</div>
-            <div className="value">{brl.format(r.hoje.total)}</div>
-            <span className="muted">{r.hoje.qtd} {r.hoje.qtd === 1 ? "conta" : "contas"}</span>
-          </div>
-          <div className="tile">
-            <div className="label">Próximos 7 dias</div>
-            <div className="value">{brl.format(r.proximos7.total)}</div>
-            <span className="muted">{r.proximos7.qtd} {r.proximos7.qtd === 1 ? "conta" : "contas"}</span>
-          </div>
-          <div className="tile">
-            <div className="label">Pago este mês</div>
-            <div className="value">{brl.format(r.pagasMes.total)}</div>
-            <span className="muted">{r.pagasMes.qtd} {r.pagasMes.qtd === 1 ? "conta" : "contas"}</span>
-          </div>
-        </div>
-      )}
-
-      {dados && dados.porEmpresa.length > 0 && (
-        <div className="fin-empresas">
-          <div className="fin-empresas-titulo">No mês, por empresa</div>
-          {dados.porEmpresa.map((e) => (
-            <button
-              key={e.empresaId}
-              className={`fin-empresa${empresa === e.empresaId ? " sel" : ""}`}
-              onClick={() => setEmpresa(empresa === e.empresaId ? "" : e.empresaId)}
-              title={empresa === e.empresaId ? "Clique para ver todas" : `Ver só ${e.nome}`}
-            >
-              <span className="fin-empresa-nome">{e.nome}</span>
-              <span className="fin-empresa-valor">{brl.format(e.aPagar)}</span>
-              <span className="fin-sub">
-                a pagar em {nomeMesLongo(mes || mesAtual()).split(" ")[0]}
-                {e.qtd ? ` · ${e.qtd} ${e.qtd === 1 ? "conta" : "contas"}` : ""}
-              </span>
-              {e.vencido > 0 && <span className="fin-empresa-vencido">{brl.format(e.vencido)} vencido</span>}
-              {e.pago > 0 && <span className="fin-sub">pago no mês {brl.format(e.pago)}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="fin-barra">
-        <div className="seg" role="group" aria-label="Ver como">
-          <button className={vista === "agenda" ? "on" : ""} onClick={() => trocarVista("agenda")}>
-            Agenda
-          </button>
-          <button className={vista === "lista" ? "on" : ""} onClick={() => trocarVista("lista")}>
-            Lista
-          </button>
-        </div>
-        <div className="seg" role="group" aria-label="Situação">
-          {(["abertas", "vencidas", "pagas", "todas"] as Status[]).map((s) => (
-            <button key={s} className={status === s ? "on" : ""} onClick={() => setStatus(s)}>
-              {s[0].toUpperCase() + s.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="fin-mes">
+      {!form && (
+        <div className="fin-lancar">
           <button
-            className="mini ghost"
+            className="fin-lancar-btn principal"
             onClick={() => {
-              setDia("");
-              setMes(somarMes(mes || mesAtual(), -1));
+              setArquivo(null);
+              setPreenchido("");
+              setForm(novo("conta"));
             }}
-            aria-label="Mês anterior"
           >
-            ‹
+            <span className="fin-lancar-icone">＋</span>
+            <span>
+              <b>Lançar conta a pagar</b>
+              <small>boleto, aluguel, fornecedor — vai para a agenda</small>
+            </span>
           </button>
-          <span>{mes ? nomeMesLongo(mes) : "todos os meses"}</span>
           <button
-            className="mini ghost"
+            className="fin-lancar-btn"
             onClick={() => {
-              setDia("");
-              setMes(somarMes(mes || mesAtual(), 1));
+              setArquivo(null);
+              setPreenchido("");
+              setForm(novo("pago"));
             }}
-            aria-label="Próximo mês"
           >
-            ›
+            <span className="fin-lancar-icone">✓</span>
+            <span>
+              <b>Lançar pagamento já feito</b>
+              <small>comprovante de PIX, cartão — entra como pago</small>
+            </span>
           </button>
-          {vista === "lista" && (
-            <button className="link" onClick={() => setMes(mes ? "" : mesAtual())}>
-              {mes ? "ver todos" : "só este mês"}
-            </button>
-          )}
         </div>
-        {empresasAtivas.length > 1 && (
-          <select className="fin-select" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
-            <option value="">Todas as empresas</option>
-            {empresasAtivas.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.nome}
-              </option>
-            ))}
-          </select>
-        )}
-        <input className="busca fin-busca" placeholder="Buscar (descrição, fornecedor…)" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button
-          className="mini"
-          onClick={() => {
-            setArquivo(null);
-            setPreenchido("");
-            setForm(novo("conta"));
-          }}
-        >
-          + Conta a pagar
-        </button>
-        <button
-          className="mini ghost"
-          onClick={() => {
-            setArquivo(null);
-            setPreenchido("");
-            setForm(novo("pago"));
-          }}
-        >
-          + Pagamento já feito
-        </button>
-      </div>
+      )}
 
       {erro && <div className="card err-msg">{erro}</div>}
 
@@ -866,41 +688,38 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 <input inputMode="numeric" value={form.vezes} onChange={(e) => campo("vezes", e.target.value)} />
               </label>
             )}
-            {form.loja !== RATEAR && lojasDaEmpresa.length >= 2 && (
-              <label className="config-campo">
+            {form.loja !== RATEAR && (
+              <div className="config-campo">
                 <span>Loja</span>
-                <select value={form.loja} onChange={(e) => campo("loja", e.target.value)}>
-                  <option value="">Toda a empresa</option>
-                  {lojasDaEmpresa.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                  <option value={RATEAR}>Dividir entre lojas…</option>
-                </select>
-              </label>
+                <div className="fin-loja">
+                  {lojasDaEmpresa.length >= 2 ? (
+                    <select value={form.loja} onChange={(e) => campo("loja", e.target.value)}>
+                      <option value="">Toda a empresa</option>
+                      {lojasDaEmpresa.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="fin-loja-fixa">
+                      {lojasDaEmpresa.length === 1 ? lojasDaEmpresa[0] : form.empresaId ? "sem loja" : "escolha a empresa"}
+                    </span>
+                  )}
+                  <button type="button" className="fin-dividir" onClick={() => campo("loja", RATEAR)}>
+                    ⇆ Dividir entre lojas
+                  </button>
+                </div>
+              </div>
             )}
           </div>
-
-          {form.loja !== RATEAR && lojasDaEmpresa.length < 2 && (
-            <div className="fin-sub" style={{ margin: "-4px 0 12px" }}>
-              {lojasDaEmpresa.length === 1 ? (
-                <>
-                  Loja: <b>{lojasDaEmpresa[0]}</b> ·{" "}
-                </>
-              ) : null}
-              <button type="button" className="link" onClick={() => campo("loja", RATEAR)}>
-                dividir esta conta entre lojas (rateio)
-              </button>
-            </div>
-          )}
 
           {form.loja === RATEAR && (
             <div className="fin-rateio">
               <div className="fin-sub" style={{ marginBottom: 6 }}>
-                Marque as lojas que dividem esta conta e quanto cada uma paga ·{" "}
-                <button type="button" className="link" onClick={() => setForm({ ...form, loja: "", partes: {} })}>
-                  não dividir
+                Marque as lojas que dividem esta conta e quanto cada uma paga{" "}
+                <button type="button" className="fin-dividir" onClick={() => setForm({ ...form, loja: "", partes: {} })}>
+                  ✕ Não dividir
                 </button>
               </div>
               <div className="filters" style={{ marginBottom: 8 }}>
@@ -979,6 +798,171 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
           </div>
         </form>
       )}
+
+      {dados && (
+        <div className={`card fin-hoje${hojeTotal > 0 ? "" : " livre"}`}>
+          <div className="fin-hoje-cab">
+            <div>
+              <div className="seg fin-hoje-abas" role="tablist">
+                {(
+                  [
+                    ["hoje", "Pagar hoje"],
+                    ["amanha", "Amanhã"],
+                    ["semana", "Próximos 7 dias"],
+                  ] as [Janela, string][]
+                ).map(([j, nome]) => (
+                  <button key={j} className={janela === j ? "on" : ""} onClick={() => setJanela(j)}>
+                    {nome}
+                    {j !== janela && somaDe(daJanela(j)) > 0 && <span className="fin-hoje-aba-valor"> {brl.format(somaDe(daJanela(j)))}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="fin-sub" style={{ marginTop: 6 }}>
+                {janela === "hoje"
+                  ? diaExtenso(dados.hoje)
+                  : janela === "amanha"
+                    ? diaExtenso(dados.amanha)
+                    : `de ${dataBr(dados.amanha)} até ${dataBr(somarDia(dados.hoje, 7))}`}
+              </div>
+            </div>
+            <div className="fin-hoje-total">
+              {hojeTotal > 0
+                ? brl.format(hojeTotal)
+                : janela === "hoje"
+                  ? "Nada para pagar hoje ✓"
+                  : janela === "amanha"
+                    ? "Nada para amanhã ✓"
+                    : "Nada nos próximos 7 dias ✓"}
+              {hojeAtrasado > 0 && <span className="fin-hoje-atraso">inclui {brl.format(hojeAtrasado)} atrasado</span>}
+              {hojeTotal === 0 && janela === "hoje" && dados.proxima && (
+                <span className="fin-sub">
+                  próximo: {dataBr(dados.proxima.vencimento)} · {brl.format(dados.proxima.total)}
+                </span>
+              )}
+            </div>
+          </div>
+          {hojeTotal > 0 && (
+            <div className="fin-hoje-empresas">
+              {hojePorEmpresa.map((g) => (
+                <div key={g.id} className="fin-hoje-empresa">
+                  <div className="fin-hoje-empresa-cab">
+                    <span>{g.nome}</span>
+                    <b>{brl.format(g.total)}</b>
+                  </div>
+                  {g.contas.map((c) => {
+                    const atrasada = c.vencimento < dados.hoje;
+                    return (
+                      <div key={c.id} className="fin-hoje-conta">
+                        <div className="fin-hoje-conta-info">
+                          <span className="fin-desc">
+                            {janela === "semana" && <span className="fin-hoje-data">{diaCurto(c.vencimento)}</span>}
+                            {c.descricao}
+                            {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
+                            {(c.anexos ?? []).map((a) => (
+                              <a key={a.id} className="fin-clipe" href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer" title={a.nome}>
+                                📎
+                              </a>
+                            ))}
+                          </span>
+                          <span className="fin-sub">
+                            {[c.fornecedor, c.forma].filter(Boolean).join(" · ")}
+                            {atrasada && <b className="fin-atrasada"> · venceu {dataBr(c.vencimento)}</b>}
+                            {reagendadoTexto(c)}
+                          </span>
+                          {c.chavePix && <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />}
+                          {c.observacao && <span className="fin-sub fin-obs">{c.observacao}</span>}
+                        </div>
+                        <span className="fin-hoje-valor">{brl.format(c.valor)}</span>
+                        {acoesRapidas(c)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {dados && dados.porEmpresa.length > 0 && (
+        <div className="fin-empresas">
+          <div className="fin-empresas-titulo">No mês, por empresa</div>
+          {dados.porEmpresa.map((e) => (
+            <button
+              key={e.empresaId}
+              className={`fin-empresa${empresa === e.empresaId ? " sel" : ""}`}
+              onClick={() => setEmpresa(empresa === e.empresaId ? "" : e.empresaId)}
+              title={empresa === e.empresaId ? "Clique para ver todas" : `Ver só ${e.nome}`}
+            >
+              <span className="fin-empresa-nome">{e.nome}</span>
+              <span className="fin-empresa-valor">{brl.format(e.aPagar)}</span>
+              <span className="fin-sub">
+                a pagar em {nomeMesLongo(mes || mesAtual()).split(" ")[0]}
+                {e.qtd ? ` · ${e.qtd} ${e.qtd === 1 ? "conta" : "contas"}` : ""}
+              </span>
+              {e.vencido > 0 && <span className="fin-empresa-vencido">{brl.format(e.vencido)} vencido</span>}
+              {e.pago > 0 && <span className="fin-sub">pago no mês {brl.format(e.pago)}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="fin-barra">
+        <div className="seg" role="group" aria-label="Ver como">
+          <button className={vista === "agenda" ? "on" : ""} onClick={() => trocarVista("agenda")}>
+            Agenda
+          </button>
+          <button className={vista === "lista" ? "on" : ""} onClick={() => trocarVista("lista")}>
+            Lista
+          </button>
+        </div>
+        <div className="seg" role="group" aria-label="Situação">
+          {(["abertas", "vencidas", "pagas", "todas"] as Status[]).map((s) => (
+            <button key={s} className={status === s ? "on" : ""} onClick={() => setStatus(s)}>
+              {s[0].toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="fin-mes">
+          <button
+            className="mini ghost"
+            onClick={() => {
+              setDia("");
+              setMes(somarMes(mes || mesAtual(), -1));
+            }}
+            aria-label="Mês anterior"
+          >
+            ‹
+          </button>
+          <span>{mes ? nomeMesLongo(mes) : "todos os meses"}</span>
+          <button
+            className="mini ghost"
+            onClick={() => {
+              setDia("");
+              setMes(somarMes(mes || mesAtual(), 1));
+            }}
+            aria-label="Próximo mês"
+          >
+            ›
+          </button>
+          {vista === "lista" && (
+            <button className="link" onClick={() => setMes(mes ? "" : mesAtual())}>
+              {mes ? "ver todos" : "só este mês"}
+            </button>
+          )}
+        </div>
+        {empresasAtivas.length > 1 && (
+          <select className="fin-select" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+            <option value="">Todas as empresas</option>
+            {empresasAtivas.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nome}
+              </option>
+            ))}
+          </select>
+        )}
+        <input className="busca fin-busca" placeholder="Buscar (descrição, fornecedor…)" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
 
       {vista === "agenda" && dados && mes && (
         <div className="card">
