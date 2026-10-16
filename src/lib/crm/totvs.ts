@@ -63,7 +63,12 @@ interface PessoaLida {
   nascimento?: string;
   telefone?: string;
   email?: string;
+  /** Marcado como cliente no TOTVS (e não só fornecedor, funcionária, representante) */
+  ehCliente: boolean;
 }
+
+/** Cadastro genérico do PDV ("CONSUMIDOR FINAL" e afins): não é uma pessoa, não entra. */
+export const NOME_GENERICO = /CONSUMIDOR|N[AÃ]O IDENTIFICAD|CLIENTE (PADR|BALC|DIVERSOS|AVULSO)|VENDA (BALC|AVULSA)|^CLIENTE$|^TESTE/i;
 
 /** Lê uma pessoa da API, tentando os nomes de campo prováveis. */
 function lerPessoa(p: Obj): PessoaLida {
@@ -82,6 +87,9 @@ function lerPessoa(p: Obj): PessoaLida {
   let email = str(p, "email", "mainEmail");
   const emails = (p.emails ?? p.emailAddresses) as Obj[] | undefined;
   if (!email && Array.isArray(emails)) email = str(emails[0] ?? {}, "email", "address", "value");
+  // Só é cliente quem o TOTVS marca como cliente. Fornecedor, funcionária,
+  // representante ou transportadora que não compram ficam de fora.
+  const ehCliente = p.isCustomer === true || (p.isCustomer == null && !p.isSupplier && !p.isEmployee && !p.isRepresentative && !p.isShippingCompany);
   return {
     codigo: str(p, "code", "personCode", "customerCode", "id"),
     nome: str(p, "name", "personName", "fullName"),
@@ -89,40 +97,59 @@ function lerPessoa(p: Obj): PessoaLida {
     nascimento: str(p, "birthDate", "birthday", "dateOfBirth")?.slice(0, 10),
     telefone,
     email,
+    ehCliente,
   };
 }
 
-/** Busca pessoas por lista de códigos (lotes de 50), tentando o nome de filtro que a API aceitar. */
+const pessoaValida = (p: PessoaLida) => Boolean(p.nome) && p.ehCliente && !NOME_GENERICO.test(p.nome!);
+
+/** O que pedir junto do cadastro: telefones e e-mails vêm null sem isto. */
+let expandPessoa: string | null | undefined; // undefined = ainda não sabemos o que a API aceita
+const EXPANDS = ["phones,emails", "phones", null];
+
+/** Consulta pessoas, descobrindo na primeira chamada qual `expand` a API aceita. */
+async function consultarPessoas(filter: Record<string, unknown>, pagina = 1): Promise<{ status: number; json: Record<string, unknown> | null; text: string }> {
+  const opcoes = expandPessoa === undefined ? EXPANDS : [expandPessoa];
+  let ultimo = { status: 0, json: null as Record<string, unknown> | null, text: "" };
+  for (const e of opcoes) {
+    const r = await totvsFetch(PESSOAS, { filter, ...(e ? { expand: e } : {}), page: pagina, pageSize: 100 });
+    ultimo = r;
+    if (r.status === 200) {
+      expandPessoa = e;
+      return r;
+    }
+    if (r.status !== 400) break; // 401/500: não é o expand, não adianta insistir
+  }
+  return ultimo;
+}
+
+/** Busca pessoas por lista de códigos (lotes de 50). `personCodeList` confirmado no diagnóstico. */
 async function buscarPessoasPorCodigo(codigos: string[]): Promise<PessoaLida[]> {
   const out: PessoaLida[] = [];
-  const filtros = ["personCodeList", "codeList", "customerCodeList"];
-  let filtroOk: string | undefined;
   for (let i = 0; i < codigos.length; i += 50) {
     const lote = codigos.slice(i, i + 50).map(Number).filter((n) => !Number.isNaN(n));
     if (!lote.length) continue;
-    const tentar = filtroOk ? [filtroOk] : filtros;
-    for (const f of tentar) {
-      const r = await totvsFetch(PESSOAS, { filter: { [f]: lote }, page: 1, pageSize: 100 });
-      if (r.status === 200 && Array.isArray(r.json?.items)) {
-        filtroOk = f;
-        for (const p of r.json!.items as Obj[]) out.push(lerPessoa(p));
-        break;
-      }
-    }
+    const r = await consultarPessoas({ personCodeList: lote });
+    if (r.status === 200 && Array.isArray(r.json?.items)) for (const p of r.json!.items as Obj[]) out.push(lerPessoa(p));
   }
   return out;
 }
 
-/** Pessoas alteradas num período (cadastros novos e atualizados), paginado. */
-async function buscarPessoasAlteradas(de: string, ate: string, limitePaginas = 100): Promise<PessoaLida[]> {
+/**
+ * Pessoas alteradas num período. A API exige dizer o que conta como
+ * alteração; se recusar o formato, devolve vazio em vez de derrubar a
+ * sincronização (as clientes que importam já vêm pelas notas).
+ */
+async function buscarPessoasAlteradas(de: string, ate: string, limitePaginas = 50): Promise<PessoaLida[]> {
   const out: PessoaLida[] = [];
-  const corpo = (pagina: number) => ({
-    filter: { change: { startDate: `${de}T00:00:00`, endDate: `${ate}T23:59:59` } },
-    page: pagina,
-    pageSize: 100,
-  });
-  const primeira = await totvsFetch(PESSOAS, corpo(1));
-  if (primeira.status !== 200) throw new Error(`Cadastro de pessoas: HTTP ${primeira.status} — ${primeira.text.slice(0, 200)}`);
+  const filtro = {
+    change: { startDate: `${de}T00:00:00`, endDate: `${ate}T23:59:59`, inPerson: true, inAddress: true, inPhone: true, inEmail: true, inCustomer: true },
+  };
+  const primeira = await consultarPessoas(filtro, 1);
+  if (primeira.status !== 200) {
+    console.warn("[crm] cadastro alterado no período não disponível:", primeira.text.slice(0, 160));
+    return out;
+  }
   const colher = (itens: unknown) => {
     if (Array.isArray(itens)) for (const p of itens as Obj[]) out.push(lerPessoa(p));
   };
@@ -130,7 +157,7 @@ async function buscarPessoasAlteradas(de: string, ate: string, limitePaginas = 1
   const total = Number(primeira.json?.count ?? 0);
   const paginas = Math.min(Math.ceil(total / 100), limitePaginas);
   for (let p = 2; p <= paginas; p++) {
-    const r = await totvsFetch(PESSOAS, corpo(p));
+    const r = await consultarPessoas(filtro, p);
     if (r.status === 200) colher(r.json?.items);
   }
   return out;
@@ -164,16 +191,19 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promi
       const loja = LOJAS[filial] ?? `Filial ${filial}`;
       const codigoCliente = str(inv, "personCode", "customerCode", "personId");
       const pessoa = inv.person as Obj | undefined;
+      const nomeNota = str(inv, "personName", "customerName") ?? (pessoa ? str(pessoa, "name") : undefined);
+      // Nota em nome do "consumidor final" não tem cliente: entra sem ligação, nunca gera cashback
+      const generica = !nomeNota || NOME_GENERICO.test(nomeNota);
       out.push({
-        codigoCliente: codigoCliente ?? (pessoa ? str(pessoa, "code", "personCode") : undefined),
+        codigoCliente: generica ? undefined : (codigoCliente ?? (pessoa ? str(pessoa, "code", "personCode") : undefined)),
         venda: {
           id: `${filial}-${inv.invoiceSequence}`,
           loja,
           data: `${data}T${inv.exitTime ?? "12:00:00"}-03:00`,
           valor: Number(inv.totalValue ?? 0),
           pecas: num(inv, "quantity"),
-          nomeNaNota: str(inv, "personName", "customerName") ?? (pessoa ? str(pessoa, "name") : undefined),
-          codigoClienteTotvs: codigoCliente,
+          nomeNaNota: nomeNota,
+          codigoClienteTotvs: generica ? undefined : codigoCliente,
           cpfNaNota: str(inv, "personCpfCnpj", "cpfCnpj", "personDocument", "customerCpf")?.replace(/\D/g, "") || undefined,
           origem: "totvs",
         },
@@ -206,11 +236,31 @@ export async function sincronizar(de: string, ate: string, opcoes: { creditar?: 
     const vendas = await buscarVendas(de, ate);
     progresso.etapa = `lendo cadastro de ${vendas.length} notas`;
 
+    // Um código que aparece em boa parte das notas não é uma pessoa: é o
+    // "consumidor final" com nome próprio. Desliga a ligação para ele.
+    if (vendas.length >= 30) {
+      const freq = new Map<string, number>();
+      for (const v of vendas) if (v.codigoCliente) freq.set(v.codigoCliente, (freq.get(v.codigoCliente) ?? 0) + 1);
+      for (const [cod, n] of freq) {
+        if (n / vendas.length > 0.15) {
+          console.warn(`[crm] código ${cod} em ${n} de ${vendas.length} notas: tratado como consumidor final`);
+          for (const v of vendas) if (v.codigoCliente === cod) (v.codigoCliente = undefined), (v.venda.codigoClienteTotvs = undefined);
+        }
+      }
+    }
+
     const codigos = Array.from(new Set(vendas.map((v) => v.codigoCliente).filter((c): c is string => Boolean(c))));
     const base = await lerBase();
     const conhecidos = new Set(base.clientes.map((c) => c.codigoTotvs).filter(Boolean));
     const faltando = codigos.filter((c) => !conhecidos.has(c));
-    const pessoas = faltando.length ? await buscarPessoasPorCodigo(faltando) : [];
+    // Também revisita, aos poucos, clientes já conhecidas que ficaram sem telefone:
+    // a vendedora pode ter completado o cadastro no TOTVS depois
+    const semTelefone = base.clientes
+      .filter((c) => c.codigoTotvs && !c.telefone)
+      .sort((a, b) => a.atualizadoEm.localeCompare(b.atualizadoEm))
+      .slice(0, 200)
+      .map((c) => c.codigoTotvs!);
+    const pessoas = faltando.length || semTelefone.length ? await buscarPessoasPorCodigo([...faltando, ...semTelefone]) : [];
     if (opcoes.pessoasAlteradas) {
       progresso.etapa = "cadastros alterados no período";
       pessoas.push(...(await buscarPessoasAlteradas(de, ate)));
@@ -220,15 +270,18 @@ export async function sincronizar(de: string, ate: string, opcoes: { creditar?: 
     await alterarBase((b) => {
       const pctAntes = b.config.cashbackPct;
       if (opcoes.creditar === false) b.config.cashbackPct = 0; // carga histórica sem cashback
+      const foraDoPerfil = new Set(pessoas.filter((p) => p.codigo && !pessoaValida(p)).map((p) => p.codigo!));
       for (const p of pessoas) {
-        if (!p.nome) continue;
-        const { nova } = salvarCliente(b, { nome: p.nome, telefone: p.telefone, cpf: p.cpf, email: p.email, nascimento: p.nascimento, codigoTotvs: p.codigo }, "totvs");
+        if (!pessoaValida(p)) continue;
+        const { nova } = salvarCliente(b, { nome: p.nome!, telefone: p.telefone, cpf: p.cpf, email: p.email, nascimento: p.nascimento, codigoTotvs: p.codigo }, "totvs");
         if (nova) progresso.clientesNovos++;
         else progresso.clientesAtualizados++;
       }
       for (const { venda, codigoCliente } of vendas) {
+        // Fornecedor ou cadastro genérico que apareceu numa nota: a venda fica sem cliente
+        if (codigoCliente && foraDoPerfil.has(codigoCliente)) venda.codigoClienteTotvs = undefined;
         const c =
-          (codigoCliente && b.clientes.find((x) => x.codigoTotvs === codigoCliente)) ||
+          (codigoCliente && !foraDoPerfil.has(codigoCliente) && b.clientes.find((x) => x.codigoTotvs === codigoCliente)) ||
           (venda.cpfNaNota && b.clientes.find((x) => x.cpf === venda.cpfNaNota)) ||
           undefined;
         if (c) {
@@ -265,7 +318,7 @@ export async function sincronizarDiaria(): Promise<typeof progresso | null> {
 }
 
 /** Resposta crua de uma nota e de uma pessoa, para conferir os nomes dos campos. */
-export async function diagnostico(): Promise<{ nota: unknown; pessoa: unknown; pessoaPorCodigo?: unknown }> {
+export async function diagnostico(): Promise<Record<string, unknown>> {
   if (!totvsConfigured()) throw new Error("TOTVS não está configurado.");
   const hoje = hojeSp();
   const nota = await totvsFetch(INVOICES, {
@@ -277,21 +330,20 @@ export async function diagnostico(): Promise<{ nota: unknown; pessoa: unknown; p
     page: 1,
     pageSize: 1,
   });
-  const pessoa = await totvsFetch(PESSOAS, {
-    filter: { change: { startDate: `${somarDias(hoje, -30)}T00:00:00`, endDate: `${hoje}T23:59:59` } },
-    page: 1,
-    pageSize: 1,
-  });
   const item = (nota.json?.items as Obj[] | undefined)?.[0];
   const codigo = item ? str(item, "personCode", "customerCode", "personId") : undefined;
   let pessoaPorCodigo: unknown;
   if (codigo) {
-    const r = await totvsFetch(PESSOAS, { filter: { personCodeList: [Number(codigo)] }, page: 1, pageSize: 1 });
-    pessoaPorCodigo = { status: r.status, json: r.json ?? r.text.slice(0, 500) };
+    expandPessoa = undefined; // redescobre o expand a cada diagnóstico
+    const r = await consultarPessoas({ personCodeList: [Number(codigo)] });
+    pessoaPorCodigo = { status: r.status, expandAceito: expandPessoa ?? "(nenhum aceito)", lida: r.json ? lerPessoa(((r.json.items as Obj[]) ?? [])[0] ?? {}) : null, json: r.json ?? r.text.slice(0, 500) };
   }
+  const alteradas = await consultarPessoas({
+    change: { startDate: `${somarDias(hoje, -7)}T00:00:00`, endDate: `${hoje}T23:59:59`, inPerson: true, inAddress: true, inPhone: true, inEmail: true, inCustomer: true },
+  });
   return {
     nota: { status: nota.status, json: nota.json ?? nota.text.slice(0, 500) },
-    pessoa: { status: pessoa.status, json: pessoa.json ?? pessoa.text.slice(0, 500) },
     pessoaPorCodigo,
+    pessoasAlteradas: { status: alteradas.status, count: alteradas.json?.count, erro: alteradas.status !== 200 ? alteradas.text.slice(0, 300) : undefined },
   };
 }

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       }
       if (progresso.rodando) return NextResponse.json({ erro: "Já tem uma sincronização rodando." }, { status: 409 });
       // Não espera terminar: períodos longos levam minutos
-      void sincronizar(de, ate, { creditar: p.creditar ?? false, pessoasAlteradas: p.pessoasAlteradas ?? true }).catch(() => {});
+      void sincronizar(de, ate, { creditar: p.creditar ?? false, pessoasAlteradas: p.pessoasAlteradas ?? false }).catch(() => {});
       await new Promise((r) => setTimeout(r, 300));
       return NextResponse.json(progresso);
     }

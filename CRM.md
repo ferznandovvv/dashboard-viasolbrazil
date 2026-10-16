@@ -36,10 +36,17 @@ Quem manda é a fila, nunca a campanha. É ela que protege os números:
 1. **Subir o painel** com a versão nova (o `iniciar-painel.cmd` atualiza
    sozinho). Abra `/crm`.
 2. **Conferir a API do TOTVS**: aba Importar → "Diagnóstico da API do TOTVS"
-   → Consultar. Olhe se a nota traz `personCode` e se o cadastro traz
-   telefone e `birthDate`. Os nomes de campo da API não estão todos
-   documentados; se vierem com outro nome, me mostre o resultado que eu
-   ajusto o mapeamento em `src/lib/crm/totvs.ts` (função `lerPessoa`).
+   → Consultar. A nota traz `personCode` (confirmado). No cadastro, veja
+   `expandAceito` e se `lida.telefone` veio preenchido: telefones e e-mails
+   só vêm quando pedidos com `expand`. Se vier vazio para uma cliente que
+   tem telefone no TOTVS, me mostre o resultado que eu ajusto `lerPessoa`
+   em `src/lib/crm/totvs.ts`.
+
+   Quem entra como cliente: só quem aparece numa nota de venda **e** está
+   marcado como cliente no TOTVS (`isCustomer`). Fornecedor, funcionária,
+   representante e transportadora ficam de fora, assim como cadastros
+   genéricos tipo "CONSUMIDOR FINAL" (e qualquer código que apareça em mais
+   de 15% das notas de uma carga).
 3. **Carga histórica**: Visão geral → card TOTVS → "carga histórica…". Um ano
    é um bom começo. Não gera cashback do passado, só preenche quem é cliente
    e quanto gastou. Leva alguns minutos; a tela mostra o andamento.
