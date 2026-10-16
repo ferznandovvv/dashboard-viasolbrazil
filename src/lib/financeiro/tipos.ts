@@ -101,6 +101,10 @@ export interface Conta {
   rateio?: ParteRateio[];
   /** Boleto, nota, comprovante de pagamento */
   anexos?: Anexo[];
+  /** Para pagar por PIX: a chave de quem recebe */
+  chavePix?: string;
+  /** Mudanças de vencimento (reagendado), da mais antiga à mais nova */
+  reagendamentos?: { de: string; para: string; em: string; por: string }[];
   status: "aberta" | "paga";
   pagoEm?: string;
   valorPago?: number;
@@ -119,6 +123,7 @@ export interface Sugestao {
   forma: string;
   valor: number;
   rateio?: ParteRateio[];
+  chavePix?: string;
   /** Vencimento do último lançamento assim */
   em: string;
   /** Quantas vezes já foi lançado */

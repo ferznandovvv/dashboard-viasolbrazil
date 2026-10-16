@@ -94,12 +94,13 @@ export async function GET(req: NextRequest) {
     })),
     totalLista: soma(lista),
     porEmpresa,
-    // O que tem de sair hoje: vence hoje ou já venceu e segue em aberto
-    // (vale qualquer filtro — é o painel do dia)
-    paraHoje: base.contas
-      .filter((c) => c.status === "aberta" && c.vencimento <= hoje)
+    // Painel do dia: em aberto vencendo até daqui a 7 dias (inclui as já
+    // vencidas). Vale qualquer filtro — mostra todas as empresas
+    proximos: todasAbertas
+      .filter((c) => c.vencimento <= daqui7)
       .sort((a, b) => a.vencimento.localeCompare(b.vencimento) || b.valor - a.valor)
       .map((c) => ({ ...c, criadoPorNome: nomes.get(c.criadoPor) ?? "", pagoPorNome: "" })),
+    amanha: somarDias(hoje, 1),
     proxima: proximaData ? { vencimento: proximaData, total: soma(todasAbertas.filter((c) => c.vencimento === proximaData)) } : null,
   });
 }
@@ -125,6 +126,7 @@ interface NovaConta {
    * como paga. Parcelado, cada parcela fica paga na data dela.
    */
   jaPago?: boolean;
+  chavePix?: string;
 }
 
 /** Lança uma conta — ou várias, quando parcelada ou mensal. */
@@ -164,6 +166,7 @@ export async function POST(req: NextRequest) {
           lote,
           observacao: (n.observacao ?? "").trim(),
           rateio: r.rateio?.map((p) => ({ ...p })),
+          chavePix: (n.chavePix ?? "").trim().slice(0, 140) || undefined,
           criadoPor: usuario.id,
           criadoEm: agora,
           ...(n.jaPago

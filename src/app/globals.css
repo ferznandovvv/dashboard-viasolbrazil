@@ -795,3 +795,27 @@ th.num { text-align: right; }
   .fin-hoje-total { font-size: 22px; align-items: flex-start; }
   .fin-hoje-conta { flex-wrap: wrap; }
 }
+/* Abas do painel, chave PIX, reagendado */
+.fin-hoje-abas button { font-size: 13.5px; padding: 7px 14px; }
+.fin-hoje-abas button.on { font-family: var(--font-serif); font-size: 15px; }
+.fin-hoje-aba-valor { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.fin-hoje-data {
+  display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px;
+  background: var(--surface-1); border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--text-secondary);
+}
+.fin-pix { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+.fin-pix code {
+  padding: 1px 6px; border-radius: 6px; background: var(--surface-1); border: 1px solid var(--border);
+  font-size: 11.5px; color: var(--text-primary); user-select: all;
+}
+.fin-pix .link { font-size: 11.5px; }
+.fin-reagendado { color: var(--c-meli); }
+.fin-obs { font-style: italic; }
+.fin-rapidas { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.fin-rapidas .link { font-size: 12px; }
+/* Mais espaço para o nome da conta no painel */
+.fin-hoje-empresas { grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); }
+.fin-hoje-data { white-space: nowrap; }
+.fin-hoje-conta .fin-rapidas { flex-direction: column; align-items: stretch; gap: 2px; text-align: center; }
+.fin-hoje-conta .fin-pagar { flex-wrap: wrap; justify-content: flex-end; max-width: 260px; }
+@media (max-width: 640px) { .fin-hoje-empresas { grid-template-columns: 1fr; } }

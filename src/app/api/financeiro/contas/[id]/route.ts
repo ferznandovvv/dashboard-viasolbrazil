@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 type Pedido =
   | { acao: "pagar"; pagoEm?: string; valorPago?: number }
   | { acao: "reabrir" }
+  | { acao: "reagendar"; vencimento: string }
   | {
       acao: "editar";
       descricao: string;
@@ -22,6 +23,7 @@ type Pedido =
       forma?: string;
       observacao?: string;
       rateio?: ParteRateio[];
+      chavePix?: string;
     };
 
 /** Dar baixa, desfazer a baixa ou editar uma conta. */
@@ -47,6 +49,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         c.pagoEm = undefined;
         c.valorPago = undefined;
         c.pagoPor = undefined;
+      } else if (p.acao === "reagendar") {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento ?? "")) throw new Error("Escolha a nova data.");
+        if (p.vencimento !== c.vencimento) {
+          c.reagendamentos = [...(c.reagendamentos ?? []), { de: c.vencimento, para: p.vencimento, em: agora, por: usuario.id }];
+          c.vencimento = p.vencimento;
+        }
       } else if (p.acao === "editar") {
         if (!p.descricao?.trim() || !(Number(p.valor) > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento ?? ""))
           throw new Error("Confira descrição, valor e vencimento.");
@@ -66,6 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           competencia: /^\d{4}-\d{2}$/.test(p.competencia ?? "") ? p.competencia : p.vencimento.slice(0, 7),
           forma: p.forma ?? "",
           observacao: (p.observacao ?? "").trim(),
+          chavePix: (p.chavePix ?? "").trim().slice(0, 140) || undefined,
         });
       } else throw new Error("Pedido desconhecido.");
       c.alteradoEm = agora;

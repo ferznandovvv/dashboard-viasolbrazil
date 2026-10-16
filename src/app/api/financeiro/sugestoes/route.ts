@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
       const ja = m.get(k);
       if (ja) {
         ja.vezes += 1;
+        // A chave PIX pode estar só num lançamento mais antigo
+        if (!ja.chavePix && c.chavePix) ja.chavePix = c.chavePix;
         continue;
       }
       m.set(k, {
@@ -31,6 +33,7 @@ export async function GET(req: NextRequest) {
         forma: c.forma,
         valor: c.valor,
         rateio: c.rateio,
+        chavePix: c.chavePix,
         em: c.vencimento,
         vezes: 1,
       });

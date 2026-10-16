@@ -13,12 +13,15 @@ interface Resposta {
   contas: ContaTela[];
   totalLista: number;
   porEmpresa: { empresaId: string; nome: string; aPagar: number; qtd: number; vencido: number; pago: number }[];
-  paraHoje: ContaTela[];
+  /** Em aberto vencendo até daqui a 7 dias (inclui as vencidas) */
+  proximos: ContaTela[];
+  amanha: string;
   proxima: { vencimento: string; total: number } | null;
 }
 
 type Status = "abertas" | "vencidas" | "pagas" | "todas";
 type Vista = "agenda" | "lista";
+type Janela = "hoje" | "amanha" | "semana";
 const RATEAR = "__ratear";
 
 interface Formulario {
@@ -41,9 +44,30 @@ interface Formulario {
   /** No rateio: loja → valor digitado */
   partes: Record<string, string>;
   anexos: Conta["anexos"];
+  chavePix: string;
 }
 
 const mesAtual = () => hojeSp().slice(0, 7);
+const diaCurto = (d: string) =>
+  new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).replace(".", "");
+const somarDia = (d: string, n: number) => {
+  const x = new Date(`${d}T12:00:00Z`);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x.toISOString().slice(0, 10);
+};
+
+/** Chave PIX com botão de copiar — é o que se cola no app do banco. */
+function ChavePix({ chave, copiada, aoCopiar }: { chave: string; copiada: boolean; aoCopiar: () => void }) {
+  return (
+    <span className="fin-pix">
+      PIX: <code>{chave}</code>
+      <button type="button" className="link" onClick={aoCopiar}>
+        {copiada ? "copiada ✓" : "copiar"}
+      </button>
+    </span>
+  );
+}
+
 const diaExtenso = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 const somarMes = (ym: string, n: number) => {
@@ -75,6 +99,9 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [pagando, setPagando] = useState<{ id: string; pagoEm: string; valor: string } | null>(null);
+  const [reagendando, setReagendando] = useState<{ id: string; data: string } | null>(null);
+  const [janela, setJanela] = useState<Janela>("hoje");
+  const [copiada, setCopiada] = useState("");
   const [sugestoes, setSugestoes] = useState<{ porFornecedor: Sugestao[]; porDescricao: Sugestao[] } | null>(null);
   const [preenchido, setPreenchido] = useState("");
   const anexarEm = useRef<string>("");
@@ -144,6 +171,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       valor: novo.valor || valorParaCampo(s.valor),
       loja: rateio.length > 1 ? RATEAR : rateio[0]?.unidade ?? "",
       partes: rateio.length > 1 ? Object.fromEntries(rateio.map((p) => [p.unidade, valorParaCampo(p.valor)])) : {},
+      chavePix: form.chavePix || s.chavePix || "",
     });
   };
 
@@ -161,6 +189,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       forma: c.forma,
       loja: !c.rateio?.length ? "" : c.rateio.length === 1 ? c.rateio[0].unidade : RATEAR,
       partes: Object.fromEntries((c.rateio ?? []).map((p) => [p.unidade, valorParaCampo(p.valor)])),
+      chavePix: c.chavePix ?? "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -185,6 +214,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     loja: "",
     partes: {},
     anexos: [],
+    chavePix: "",
   });
 
   const editar = (c: ContaTela) => {
@@ -208,6 +238,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
       partes,
       anexos: c.anexos ?? [],
+      chavePix: c.chavePix ?? "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -251,6 +282,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       vezes: form.repetir === "nao" ? 1 : Number(form.vezes) || 1,
       repetir: form.repetir === "nao" ? undefined : form.repetir,
       jaPago: form.modo === "pago",
+      chavePix: form.forma === "PIX" ? form.chavePix : "",
     };
     try {
       let contaId = form.id;
@@ -333,6 +365,76 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     await carregar();
   };
 
+  const copiarChave = async (c: ContaTela) => {
+    try {
+      await navigator.clipboard.writeText(c.chavePix ?? "");
+    } catch {
+      // Sem permissão de área de transferência (http): deixa selecionar à mão
+      prompt("Copie a chave PIX:", c.chavePix ?? "");
+    }
+    setCopiada(c.id);
+    setTimeout(() => setCopiada((x) => (x === c.id ? "" : x)), 2500);
+  };
+
+  const reagendar = async () => {
+    if (!reagendando) return;
+    try {
+      await api(`/api/financeiro/contas/${reagendando.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ acao: "reagendar", vencimento: reagendando.data }),
+      });
+      setReagendando(null);
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    }
+  };
+
+  const reagendadoTexto = (c: ContaTela) => {
+    const r = c.reagendamentos ?? [];
+    if (!r.length) return null;
+    return (
+      <span className="fin-reagendado" title={r.map((x) => `${dataBr(x.de)} → ${dataBr(x.para)}`).join("\n")}>
+        {" "}
+        · reagendado{r.length > 1 ? ` ${r.length}x` : ""} (era {dataBr(r[0].de)})
+      </span>
+    );
+  };
+
+  /** Pagar e reagendar, com os campos abrindo no lugar do botão. */
+  const acoesRapidas = (c: ContaTela) =>
+    pagando?.id === c.id ? (
+      <span className="fin-pagar">
+        <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
+        <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
+        <button className="mini" onClick={pagar}>
+          Confirmar
+        </button>
+        <button className="mini ghost" onClick={() => setPagando(null)}>
+          ✕
+        </button>
+      </span>
+    ) : reagendando?.id === c.id ? (
+      <span className="fin-pagar">
+        <input type="date" value={reagendando.data} onChange={(e) => setReagendando({ ...reagendando, data: e.target.value })} />
+        <button className="mini" onClick={reagendar}>
+          Reagendar
+        </button>
+        <button className="mini ghost" onClick={() => setReagendando(null)}>
+          ✕
+        </button>
+      </span>
+    ) : (
+      <span className="fin-rapidas">
+        <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
+          Pagar
+        </button>
+        <button className="link" onClick={() => setReagendando({ id: c.id, data: c.vencimento })}>
+          reagendar
+        </button>
+      </span>
+    );
+
   const podeExcluir = (c: ContaTela) => usuario.papel === "admin" || c.criadoPor === usuario.id;
   const categoriasPorGrupo = cad.grupos
     .map((g) => ({ g, cats: categoriasAtivas.filter((c) => c.grupo === g.id) }))
@@ -387,13 +489,21 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     });
 
   const r = dados?.resumo;
-  const paraHoje = dados?.paraHoje ?? [];
-  const hojeTotal = paraHoje.reduce((s, c) => s + c.valor, 0);
-  const hojeAtrasado = paraHoje.filter((c) => dados && c.vencimento < dados.hoje).reduce((s, c) => s + c.valor, 0);
+  // Painel do dia: hoje (com as atrasadas), amanhã ou os próximos 7 dias
+  const proximos = dados?.proximos ?? [];
+  const hojeDia = dados?.hoje ?? "";
+  const daJanela = (j: Janela) =>
+    proximos.filter((c) =>
+      j === "hoje" ? c.vencimento <= hojeDia : j === "amanha" ? c.vencimento === dados?.amanha : c.vencimento > hojeDia
+    );
+  const somaDe = (cs: ContaTela[]) => cs.reduce((s, c) => s + c.valor, 0);
+  const doPainel = daJanela(janela);
+  const hojeTotal = somaDe(doPainel);
+  const hojeAtrasado = janela === "hoje" ? somaDe(doPainel.filter((c) => c.vencimento < hojeDia)) : 0;
   const hojePorEmpresa = cad.empresas
     .map((e) => {
-      const contas = paraHoje.filter((c) => c.empresaId === e.id);
-      return { id: e.id, nome: e.nome, contas, total: contas.reduce((s, c) => s + c.valor, 0) };
+      const contas = doPainel.filter((c) => c.empresaId === e.id);
+      return { id: e.id, nome: e.nome, contas, total: somaDe(contas) };
     })
     .filter((g) => g.contas.length)
     .sort((a, b) => b.total - a.total);
@@ -426,13 +536,38 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
         <div className={`card fin-hoje${hojeTotal > 0 ? "" : " livre"}`}>
           <div className="fin-hoje-cab">
             <div>
-              <div className="fin-hoje-titulo">Pagar hoje</div>
-              <div className="fin-sub">{diaExtenso(dados.hoje)}</div>
+              <div className="seg fin-hoje-abas" role="tablist">
+                {(
+                  [
+                    ["hoje", "Pagar hoje"],
+                    ["amanha", "Amanhã"],
+                    ["semana", "Próximos 7 dias"],
+                  ] as [Janela, string][]
+                ).map(([j, nome]) => (
+                  <button key={j} className={janela === j ? "on" : ""} onClick={() => setJanela(j)}>
+                    {nome}
+                    {j !== janela && somaDe(daJanela(j)) > 0 && <span className="fin-hoje-aba-valor"> {brl.format(somaDe(daJanela(j)))}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="fin-sub" style={{ marginTop: 6 }}>
+                {janela === "hoje"
+                  ? diaExtenso(dados.hoje)
+                  : janela === "amanha"
+                    ? diaExtenso(dados.amanha)
+                    : `de ${dataBr(dados.amanha)} até ${dataBr(somarDia(dados.hoje, 7))}`}
+              </div>
             </div>
             <div className="fin-hoje-total">
-              {hojeTotal > 0 ? brl.format(hojeTotal) : "Nada para pagar hoje ✓"}
+              {hojeTotal > 0
+                ? brl.format(hojeTotal)
+                : janela === "hoje"
+                  ? "Nada para pagar hoje ✓"
+                  : janela === "amanha"
+                    ? "Nada para amanhã ✓"
+                    : "Nada nos próximos 7 dias ✓"}
               {hojeAtrasado > 0 && <span className="fin-hoje-atraso">inclui {brl.format(hojeAtrasado)} atrasado</span>}
-              {hojeTotal === 0 && dados.proxima && (
+              {hojeTotal === 0 && janela === "hoje" && dados.proxima && (
                 <span className="fin-sub">
                   próximo: {dataBr(dados.proxima.vencimento)} · {brl.format(dados.proxima.total)}
                 </span>
@@ -453,6 +588,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                       <div key={c.id} className="fin-hoje-conta">
                         <div className="fin-hoje-conta-info">
                           <span className="fin-desc">
+                            {janela === "semana" && <span className="fin-hoje-data">{diaCurto(c.vencimento)}</span>}
                             {c.descricao}
                             {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
                             {(c.anexos ?? []).map((a) => (
@@ -464,25 +600,13 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                           <span className="fin-sub">
                             {[c.fornecedor, c.forma].filter(Boolean).join(" · ")}
                             {atrasada && <b className="fin-atrasada"> · venceu {dataBr(c.vencimento)}</b>}
+                            {reagendadoTexto(c)}
                           </span>
+                          {c.chavePix && <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />}
+                          {c.observacao && <span className="fin-sub fin-obs">{c.observacao}</span>}
                         </div>
                         <span className="fin-hoje-valor">{brl.format(c.valor)}</span>
-                        {pagando?.id === c.id ? (
-                          <span className="fin-pagar">
-                            <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
-                            <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
-                            <button className="mini" onClick={pagar}>
-                              Confirmar
-                            </button>
-                            <button className="mini ghost" onClick={() => setPagando(null)}>
-                              ✕
-                            </button>
-                          </span>
-                        ) : (
-                          <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
-                            Pagar
-                          </button>
-                        )}
+                        {acoesRapidas(c)}
                       </div>
                     );
                   })}
@@ -720,6 +844,12 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 ))}
               </select>
             </label>
+            {form.forma === "PIX" && (
+              <label className="config-campo">
+                <span>Chave PIX de quem recebe</span>
+                <input value={form.chavePix} onChange={(e) => campo("chavePix", e.target.value)} placeholder="CPF, CNPJ, telefone, e-mail…" />
+              </label>
+            )}
             {!form.id && (
               <label className="config-campo">
                 <span>Repetir</span>
@@ -924,8 +1054,14 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                                 </a>
                               ))}
                             </div>
-                            {(c.fornecedor || c.forma || rateio) && (
-                              <div className="fin-sub">{[c.fornecedor, c.forma, rateio].filter(Boolean).join(" · ")}</div>
+                            {(c.fornecedor || c.forma || rateio || (c.reagendamentos?.length ?? 0) > 0) && (
+                              <div className="fin-sub">
+                                {[c.fornecedor, c.forma, rateio].filter(Boolean).join(" · ")}
+                                {reagendadoTexto(c)}
+                              </div>
+                            )}
+                            {c.chavePix && c.status === "aberta" && (
+                              <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />
                             )}
                           </td>
                           {colunaEmpresa && <td className="fin-sub">{nomeEmpresa(c.empresaId)}</td>}
@@ -947,23 +1083,12 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                             )}
                           </td>
                           <td className="fin-acoes">
-                            {pagando?.id === c.id ? (
-                              <span className="fin-pagar">
-                                <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
-                                <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
-                                <button className="mini" onClick={pagar}>
-                                  Confirmar
-                                </button>
-                                <button className="mini ghost" onClick={() => setPagando(null)}>
-                                  ✕
-                                </button>
-                              </span>
+                            {pagando?.id === c.id || reagendando?.id === c.id ? (
+                              acoesRapidas(c)
                             ) : (
                               <>
                                 {c.status === "aberta" ? (
-                                  <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
-                                    Pagar
-                                  </button>
+                                  acoesRapidas(c)
                                 ) : (
                                   <button className="mini ghost" onClick={() => reabrir(c)}>
                                     Desfazer
