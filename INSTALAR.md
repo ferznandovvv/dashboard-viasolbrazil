@@ -90,3 +90,9 @@ e a tela de configuração mostra quando foi a última atualização.
 - **Estoque demorando** — feche e abra o painel de novo: um minuto depois
   de ligar ele monta a foto completa
 - **Medir desempenho** — abra `/api/perf`
+
+## CRM das lojas
+
+A aba **CRM** (clientes, cashback e WhatsApp) também guarda tudo em
+`dados/crm/`. O passo a passo de configuração, incluindo a WA-AKG na mesma
+máquina, está em [CRM.md](CRM.md).

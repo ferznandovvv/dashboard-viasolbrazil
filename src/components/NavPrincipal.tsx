@@ -4,10 +4,13 @@ const ITENS = [
   { href: "/", nome: "Vendas" },
   { href: "/produtos", nome: "Produtos" },
   { href: "/financeiro", nome: "Financeiro" },
-];
+  { href: "/crm", nome: "CRM" },
+] as const;
 
-/** Os três módulos do sistema, no topo de cada tela. */
-export function NavPrincipal({ atual }: { atual: "/" | "/produtos" | "/financeiro" }) {
+export type Modulo = (typeof ITENS)[number]["href"];
+
+/** Os módulos do sistema, no topo de cada tela. */
+export function NavPrincipal({ atual }: { atual: Modulo }) {
   return (
     <nav className="nav-principal" aria-label="Módulos">
       {ITENS.map((i) => (

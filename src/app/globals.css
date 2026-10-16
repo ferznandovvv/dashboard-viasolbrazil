@@ -852,3 +852,90 @@ th.num { text-align: right; }
 .fin-dividir-largo { width: 100%; padding: 9px 12px; font-size: 13px; }
 .fin-nova-cat .fin-loja input { flex: 1; min-width: 0; padding: 9px 12px; background: var(--page); color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px; font-size: 13.5px; }
 .fin-nova-cat .fin-loja select { flex: 0 1 220px; }
+
+/* ——— CRM das lojas ——— */
+.crm-grid { align-items: start; }
+@media (max-width: 760px) { .crm-grid { grid-template-columns: 1fr; } }
+.crm-tile { text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.crm-tile:hover { border-color: var(--brand); }
+.tile.alerta .value { color: var(--critical); }
+.crm-seg-linha {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 0; border: none; border-top: 1px solid var(--border); background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.crm-seg-linha:first-of-type { border-top: none; }
+.crm-seg-linha:hover b { color: var(--brand); }
+.crm-seg-linha small { display: block; font-size: 11.5px; }
+.crm-seg-total { font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
+.crm-numero { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.crm-numero:first-of-type { border-top: none; }
+.crm-numero small { display: block; font-size: 11.5px; }
+.crm-numero-dir { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.crm-aviso { padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--good) 10%, var(--surface-1)); border: 1px solid var(--border); font-size: 13px; margin: 10px 0; }
+.crm-inline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crm-inline input[type="date"], .crm-input {
+  padding: 6px 10px; background: var(--page); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit;
+}
+.crm-textarea {
+  width: 100%; padding: 9px 12px; background: var(--page); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 10px; font-size: 13.5px; font-family: inherit; resize: vertical;
+}
+.crm-form { padding: 14px; background: var(--page); }
+.crm-h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 16px 0 8px; }
+.crm-mapa { width: 100%; margin-top: 4px; padding: 4px 6px; font-size: 12px; }
+.crm-pre { margin-top: 10px; padding: 12px; background: var(--page); border: 1px solid var(--border); border-radius: 10px; font-size: 11.5px; max-height: 420px; overflow: auto; white-space: pre-wrap; }
+.crm-variacao { padding: 6px 0 6px 12px; border-left: 2px solid var(--border); margin: 4px 0; font-size: 13px; color: var(--text-secondary); }
+.crm-texto-msg { max-width: 420px; font-size: 12px; color: var(--text-secondary); }
+.crm-ficha-topo { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.crm-ficha-acoes { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; white-space: nowrap; }
+.crm-conversa { display: flex; flex-direction: column; gap: 8px; }
+.crm-balao { padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 92%; }
+.crm-balao.nossa { align-self: flex-end; background: color-mix(in srgb, var(--brand) 12%, var(--surface-1)); border: 1px solid var(--border); }
+.crm-balao.nossa.fila, .crm-balao.nossa.enviando { opacity: .6; border-style: dashed; }
+.crm-balao.nossa.erro { border-color: var(--critical); }
+.crm-balao.dela { align-self: flex-start; background: var(--page); border: 1px solid var(--border); }
+
+/* Janela sobre a tela (ficha da cliente) */
+.crm-fundo { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; z-index: 50; }
+.crm-janela { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 20px; width: 100%; max-width: 560px; margin-bottom: 40px; }
+.crm-janela.larga { max-width: 920px; }
+.crm-janela .fin-cab h2 { font-family: var(--font-serif); color: var(--brand); font-size: 18px; }
+
+/* Tela do caixa (celular da loja) */
+.crm-caixa { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
+.crm-caixa-cab { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
+.crm-caixa-titulo { font-family: var(--font-serif); font-size: 28px; color: var(--brand); margin: 0 0 12px; }
+.crm-caixa-busca {
+  width: 100%; padding: 14px 16px; font-size: 18px; border-radius: 14px; font-family: inherit;
+  background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+}
+.crm-caixa-lojas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.crm-caixa-lista { margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.crm-caixa-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  width: 100%; padding: 12px 14px; border-radius: 12px; text-align: left;
+  background: var(--surface-1); border: 1px solid var(--border); color: inherit; font: inherit; cursor: pointer;
+}
+.crm-caixa-item small { display: block; color: var(--text-muted); font-size: 12px; }
+.crm-caixa-saldo { font-weight: 700; color: var(--good); white-space: nowrap; }
+.crm-caixa-ficha { margin-top: 12px; padding: 18px; border-radius: 16px; background: var(--surface-1); border: 1px solid var(--border); }
+.crm-caixa-nome { font-size: 20px; font-weight: 600; }
+.crm-caixa-grande { font-family: var(--font-serif); font-size: 44px; font-weight: 600; color: var(--brand); margin: 10px 0 2px; line-height: 1; }
+.crm-caixa-acoes { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.crm-btn {
+  flex: 1; min-width: 140px; padding: 14px 16px; border-radius: 12px; font-size: 16px; font-weight: 600; font-family: inherit;
+  background: var(--brand); color: #fbf4e8; border: none; cursor: pointer;
+}
+.crm-btn.grande { width: 100%; margin-top: 12px; }
+.crm-btn.ghost { background: transparent; color: var(--brand); border: 1px solid var(--border); }
+.crm-btn:disabled { opacity: .45; cursor: default; }
+.crm-campo { display: block; margin: 10px 0; }
+.crm-campo span { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+.crm-campo input {
+  width: 100%; padding: 12px 14px; font-size: 17px; border-radius: 12px; font-family: inherit;
+  background: var(--page); color: var(--text-primary); border: 1px solid var(--border);
+}
+.crm-aceite { align-items: flex-start; line-height: 1.4; }
+.crm-aceite input { margin-top: 3px; }
