@@ -16,10 +16,21 @@ export function middleware(req: NextRequest) {
   // conferido dentro da própria rota.
   if (pathname === "/api/aquecer") return NextResponse.next();
 
-  // Modo TV e tela da loja: rodam sem login no aparelho da loja, mas com um
-  // código na URL —
+  // Webhook do WhatsApp (WA-AKG / Cloud API) chega sem cookie: a rota confere
+  // o segredo que vai na URL.
+  if (pathname === "/api/crm/webhook") return NextResponse.next();
+
+  // Modo TV, tela da loja e caixa do CRM: rodam sem login no aparelho da
+  // loja, mas com um código na URL —
   // senão o faturamento por loja fica aberto para quem tiver o link.
-  if (pathname === "/tv" || pathname === "/api/tv" || pathname === "/loja" || pathname === "/api/loja") {
+  if (
+    pathname === "/tv" ||
+    pathname === "/api/tv" ||
+    pathname === "/loja" ||
+    pathname === "/api/loja" ||
+    pathname === "/crm/loja" ||
+    pathname === "/api/crm/loja"
+  ) {
     const codigo = (env("TV_CODE") || undefined);
     if (codigo && req.nextUrl.searchParams.get("k") === codigo) return NextResponse.next();
   }

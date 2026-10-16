@@ -7,11 +7,17 @@
 
 import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
+import { sincronizarDiaria } from "./crm/totvs";
+import { rodarAutomacoes } from "./crm/automacoes";
+import { processarFila } from "./crm/fila";
+import { lerBase as lerBaseCrm } from "./crm/base";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
 const HORARIOS = [
   { hora: "06:40", tarefa: aquecer, nome: "aquecimento" },
   { hora: "06:58", tarefa: continuarEstoque, nome: "estoque" },
+  // CRM: puxa as vendas de ontem do TOTVS e, em seguida, gera as mensagens do dia
+  { hora: "08:30", tarefa: sincronizarDiaria, nome: "crm sincronização" },
 ];
 
 function horaSp(): { dia: string; hora: string } {
@@ -44,6 +50,17 @@ async function executar(nome: string, tarefa: () => Promise<unknown>) {
   }
 }
 
+/** Tarefas do CRM não disputam a trava do aquecimento, que pode levar minutos. */
+async function executarCrm(nome: string, tarefa: () => Promise<unknown>) {
+  const inicio = Date.now();
+  try {
+    const r = await tarefa();
+    console.log(`[agenda] ${nome} ok em ${Math.round((Date.now() - inicio) / 1000)}s`, JSON.stringify(r));
+  } catch (e) {
+    console.error(`[agenda] ${nome} falhou:`, e instanceof Error ? e.message : e);
+  }
+}
+
 let iniciado = false;
 
 export function iniciarAgendador(): void {
@@ -60,7 +77,28 @@ export function iniciarAgendador(): void {
         void executar(h.nome, h.tarefa);
       }
     }
+    // Automações do CRM no horário configurado na própria tela do CRM
+    const chaveCrm = `${dia}|crm-automacoes`;
+    if (!feitos.has(chaveCrm)) {
+      lerBaseCrm()
+        .then((b) => {
+          if (hora >= b.config.horaAutomacoes && !feitos.has(chaveCrm)) {
+            feitos.add(chaveCrm);
+            void executarCrm("crm automações", () => rodarAutomacoes());
+          }
+        })
+        .catch(() => {});
+    }
   }, 30_000);
+
+  // Fila de envio do CRM: um passo a cada 20 s, independente do aquecimento
+  setInterval(() => {
+    processarFila()
+      .then((r) => {
+        if (r.enviadas || r.erros) console.log(`[crm] fila: ${r.enviadas} enviadas, ${r.erros} erros`);
+      })
+      .catch((e) => console.error("[crm] fila falhou:", e instanceof Error ? e.message : e));
+  }, 20_000);
 
   // Depois de ligar o computador, deixa tudo pronto sem esperar a madrugada
   setTimeout(() => void executar("aquecimento ao ligar", aquecer), 60_000);
