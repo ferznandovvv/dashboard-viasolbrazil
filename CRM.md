@@ -54,41 +54,57 @@ Quem manda é a fila, nunca a campanha. É ela que protege os números:
    resgatar e teto por compra.
 5. **WhatsApp**: veja abaixo.
 
-## WA-AKG na mesma máquina
+## WA-AKG na mesma máquina (Windows)
 
 A WA-AKG (<https://github.com/mrifqidaffaaditya/WA-AKG>) é um gateway não
 oficial em cima do Baileys. Funciona como o WhatsApp Web: o servidor vira um
 dispositivo pareado do número da loja; o celular continua funcionando normal.
+Ela também tem uma tela de conversas de todas as sessões, que é onde você
+acompanha o atendimento das lojas.
 
-```bash
-git clone https://github.com/mrifqidaffaaditya/WA-AKG.git
-cd WA-AKG
-npm install
-copy .env.example .env     # DATABASE_URL (MySQL ou Postgres local), AUTH_SECRET, PORT=3000
-npm run db:push
-npm run make-admin seu@email.com uma-senha
-npm run build
-pm2 start ecosystem.config.js && pm2 save
-```
+Na pasta do painel há dois arquivos:
 
-Depois, em <http://localhost:3000>:
+1. **`instalar-whatsapp.cmd`** (uma vez, botão direito → Executar como
+   administrador). Instala o MariaDB em silêncio, baixa a WA-AKG para a
+   pasta `WA-AKG` ao lado do painel, cria o `.env` (porta 3200, fuso de
+   São Paulo), monta o banco, compila e pede um e-mail e senha para o seu
+   usuário. Leva uns 10 minutos.
+2. **`iniciar-whatsapp.cmd`**: sobe a WA-AKG em <http://localhost:3200> e a
+   mantém no ar (se cair, volta sozinha). Ponha um atalho dele em
+   `shell:startup`, igual ao do painel.
 
-1. Crie uma **sessão por loja** (ex.: `centro`, `fiusa`) e escaneie o QR no
-   celular da loja em *Dispositivos conectados*.
-2. Pegue a **API Key** do usuário.
-3. Em **Webhooks**, cadastre a URL que aparece em CRM → Configurar → Envio
-   (pode usar `http://localhost:3100/api/crm/webhook?t=...` já que está na
-   mesma máquina), eventos `message.received` e `message.status`.
+Depois, em <http://localhost:3200>:
 
-No painel, Configurar → Envio: provedor WA-AKG, endereço
-`http://localhost:3000`, API Key. Em Números, cole o `sessionId` de cada
+1. **Sessions** → criar uma sessão por loja (nome curto, ex.: `centro`,
+   `fiusa`) e escanear o QR no celular da loja em *Dispositivos conectados*.
+   Comece com uma loja só.
+2. **API Key**: no seu usuário, copie a chave.
+3. **Webhooks**: cadastre `http://localhost:3100/api/crm/webhook?t=...` (a URL
+   exata aparece em CRM → Configurar → Envio) com os eventos
+   `message.received`, `message.sent` e `message.status`. É isso que alimenta
+   a aba Atendimento e marca as respostas das clientes.
+
+No painel, CRM → Configurar → Envio: provedor WA-AKG, endereço
+`http://localhost:3200`, API Key. Em Números, cole o nome da sessão de cada
 loja, ligue e teste ("situação" e "mandar teste" para o seu celular).
+
+Para acessar a tela de conversas de fora de casa, crie no túnel do Cloudflare
+uma segunda rota (ex.: `whats.viasolbrazil.com.br` → `127.0.0.1:3200`) e
+troque `BASE_URL`/`NEXTAUTH_URL` no `WA-AKG\.env` para esse endereço.
 
 Comece com uma ou duas lojas e teto baixo. Se der problema de conexão
 repetido, o adaptador da Cloud API (oficial) está pronto em
 `src/lib/crm/envio/cloudApi.ts`: é trocar o provedor e colar o token e os
 `phone_number_id`. Lembre que fora da janela de 24h a oficial só aceita
 template aprovado, então as campanhas precisariam ser cadastradas na Meta.
+
+## Atendimento das lojas
+
+A aba **Atendimento** mede, por loja, quantas clientes escreveram, quantas
+foram respondidas, a mediana do tempo até a primeira resposta (só dentro do
+horário de atendimento, sem domingo) e quem está esperando agora. Conta tanto
+resposta digitada no celular da loja quanto mandada pela API. Para ler as
+conversas em si, o botão "Abrir conversas" leva à WA-AKG.
 
 ## Shopify (site)
 

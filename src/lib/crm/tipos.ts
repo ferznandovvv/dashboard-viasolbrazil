@@ -137,6 +137,18 @@ export interface Recebida {
   recebidoEm: string;
 }
 
+/** Uma mensagem trocada entre uma loja e uma cliente, para medir o atendimento. */
+export interface Atendimento {
+  loja: string;
+  telefone: string;
+  /** Quem mandou */
+  de: "cliente" | "loja";
+  /** ISO */
+  em: string;
+  /** Só das clientes, para a lista de pendentes */
+  texto?: string;
+}
+
 /** Variações de texto de uma campanha. {nome}, {valor}, {loja}, {validade}, {codigo}, {primeiro} */
 export interface Modelo {
   campanha: TipoCampanha;
@@ -224,6 +236,7 @@ export interface BaseCrm {
   codigos: CodigoResgate[];
   mensagens: Mensagem[];
   recebidas: Recebida[];
+  atendimento: Atendimento[];
   modelos: Modelo[];
   config: ConfigCrm;
 }

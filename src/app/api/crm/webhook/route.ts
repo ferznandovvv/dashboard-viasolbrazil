@@ -47,16 +47,19 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
   if (typeof c.event === "string" && c.data && typeof c.data === "object") {
     const d = c.data as Record<string, unknown>;
     const sessao = String(c.sessionId ?? "");
-    if (c.event === "message.received") {
+    if (c.event === "message.received" || c.event === "message.sent") {
       const key = (d.key ?? {}) as Record<string, unknown>;
       if (d.isGroup || String(d.chatType ?? "PERSONAL") !== "PERSONAL") return out;
-      const tel = telefoneDoJid(d.from ?? key.remoteJid);
+      const fromMe = c.event === "message.sent" || Boolean(key.fromMe);
+      // remoteJid é sempre a conversa (a cliente), mesmo quando a loja mandou pelo celular;
+      // no evento message.sent (API) a outra parte vem em receiver
+      const tel = telefoneDoJid(c.event === "message.sent" ? (d.receiver ?? key.remoteJid) : (key.remoteJid ?? d.from));
       if (!tel || tel.length < 10) return out;
       out.push({
         tipo: "mensagem",
         sessao,
         telefone: tel,
-        fromMe: Boolean(key.fromMe),
+        fromMe,
         texto: typeof d.content === "string" ? d.content : typeof d.caption === "string" ? d.caption : `[${String(d.type ?? "mídia").toLowerCase()}]`,
         idExterno: typeof key.id === "string" ? key.id : undefined,
       });

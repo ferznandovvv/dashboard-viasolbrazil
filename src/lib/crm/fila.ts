@@ -158,10 +158,25 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     return `status ${novo}`;
   }
 
-  if (ev.tipo !== "mensagem" || ev.fromMe) return "ignorado";
+  if (ev.tipo !== "mensagem") return "ignorado";
   const texto = (ev.texto ?? "").trim();
+
+  // Resposta da loja (digitada no celular ou mandada pela API): só conta no atendimento
+  if (ev.fromMe) {
+    await alterarBase((b) => {
+      if (!loja) return;
+      b.atendimento.push({ loja, telefone: ev.telefone, de: "loja", em: new Date().toISOString() });
+      if (b.atendimento.length > 30000) b.atendimento.splice(0, b.atendimento.length - 30000);
+    });
+    return loja ? "resposta da loja" : "ignorado";
+  }
+
   let feito = "recebida";
   await alterarBase((b) => {
+    if (loja) {
+      b.atendimento.push({ loja, telefone: ev.telefone, de: "cliente", em: new Date().toISOString(), texto: texto.slice(0, 120) });
+      if (b.atendimento.length > 30000) b.atendimento.splice(0, b.atendimento.length - 30000);
+    }
     const cliente = b.clientes.find((c) => c.telefone === ev.telefone);
     b.recebidas.push({
       id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,

@@ -106,7 +106,7 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
             )}
           </div>
           <div className="config-campo">
-            <span>Webhook (cole na WA-AKG em Webhooks, eventos message.received e message.status; ou na Meta como callback)</span>
+            <span>Webhook (cole na WA-AKG em Webhooks, eventos message.received, message.sent e message.status; ou na Meta como callback)</span>
             <input readOnly value={d.webhookUrl} onFocus={(e) => e.target.select()} />
             <small>Se a WA-AKG roda na mesma máquina, pode usar http://localhost:3100 no lugar do domínio.</small>
           </div>

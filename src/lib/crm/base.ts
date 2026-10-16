@@ -26,6 +26,7 @@ function inicial(): BaseCrm {
     codigos: [],
     mensagens: [],
     recebidas: [],
+    atendimento: [],
     modelos: structuredClone(MODELOS_PADRAO),
     config: { ...CONFIG_PADRAO, webhookSegredo: randomBytes(12).toString("hex") },
   };
@@ -54,6 +55,7 @@ async function gravar(base: BaseCrm): Promise<void> {
 
 /** Ajustes que entram com versões novas e precisam valer para a base que já existe. */
 const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
+  { id: "atendimento", aplicar: (b) => void (b.atendimento ??= []) },
   {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
@@ -61,6 +63,7 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
       b.config = { ...CONFIG_PADRAO, ...b.config };
       b.recebidas ??= [];
       b.codigos ??= [];
+      b.atendimento ??= [];
       for (const m of MODELOS_PADRAO) {
         if (!b.modelos.some((x) => x.campanha === m.campanha)) b.modelos.push(structuredClone(m));
       }
