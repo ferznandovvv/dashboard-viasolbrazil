@@ -7,7 +7,24 @@ import { alterarBase, diasEntre, hojeSp, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
 import { resumir } from "./clientes";
 import { ehMarketing, enfileirar } from "./mensagens";
-import type { BaseCrm } from "./tipos";
+import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
+
+const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+/** Loja na cidade da cliente, se houver (pela cidade do endereço de entrega do site). */
+export function lojaNaCidade(c: Cliente): string | undefined {
+  if (!c.cidade) return undefined;
+  const cid = semAcento(c.cidade);
+  // Em Franca tem três lojas: a cliente é mandada pra Centro
+  for (const [loja, cidade] of Object.entries(LOJA_CIDADE)) if (semAcento(cidade) === cid) return loja;
+  return undefined;
+}
+
+/** Oferta da reativação pelo total gasto: vale a maior faixa atingida. */
+export function ofertaReativacao(b: BaseCrm, totalGasto: number): string | undefined {
+  const faixas = [...(b.config.reativacaoFaixas ?? [])].sort((x, y) => y.minimo - x.minimo);
+  return faixas.find((f) => totalGasto >= f.minimo)?.oferta;
+}
 
 /** Reativações por loja por dia: evita encher a fila de uma vez. */
 const REATIVACOES_POR_LOJA_DIA = 10;
@@ -61,29 +78,44 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
     if (mov.tipo !== "credito" || mov.criadoEm.slice(0, 10) < desde) continue;
     const c = porId.get(mov.clienteId);
     if (!c) continue;
+    if (mov.loja === "Site") {
+      // Compra no site: avisa que tem loja na cidade dela, quando tiver
+      const perto = lojaNaCidade(c);
+      const campanha = perto ? "cashback_site_perto" : "cashback_site_longe";
+      tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor: mov.valor, validade: mov.validade, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined }, chave: `cb-credito-${mov.id}` }));
+      continue;
+    }
     tentar(
       "cashback_creditado",
       enfileirar(b, { cliente: c, campanha: "cashback_creditado", loja: mov.loja, variaveis: { valor: mov.valor, validade: mov.validade }, chave: `cb-credito-${mov.id}` })
     );
   }
 
-  // Cashback vencendo
-  const ate = somarDias(hoje, b.config.avisoVencimentoDias);
+  // Cashback vencendo: um aviso com folga e um último, com urgência
+  const avisos: { campanha: "cashback_vencendo" | "cashback_vencendo_urgente"; dias: number }[] = [
+    { campanha: "cashback_vencendo", dias: b.config.avisoVencimentoDias },
+    { campanha: "cashback_vencendo_urgente", dias: b.config.avisoVencimentoUrgenteDias },
+  ];
   for (const c of b.clientes) {
-    const v = vencendoAte(b, c.id, ate, hoje);
-    if (v.valor <= 0 || !v.em) continue;
-    const credito = creditosAbertos(b, c.id, hoje).find((x) => x.validade === v.em);
-    tentar(
-      "cashback_vencendo",
-      enfileirar(b, { cliente: c, campanha: "cashback_vencendo", loja: c.lojaOrigem, variaveis: { valor: v.valor, validade: v.em }, chave: `cb-venc-${c.id}-${credito?.movimentoId ?? v.em}` })
-    );
+    for (const av of avisos) {
+      const v = vencendoAte(b, c.id, somarDias(hoje, av.dias), hoje);
+      if (v.valor <= 0 || !v.em) continue;
+      // Já na janela de urgência, só o último aviso sai
+      if (av.campanha === "cashback_vencendo" && v.em <= somarDias(hoje, b.config.avisoVencimentoUrgenteDias)) continue;
+      const credito = creditosAbertos(b, c.id, hoje).find((x) => x.validade === v.em);
+      const lojaDela = c.lojaOrigem === "Site" ? lojaNaCidade(c) : c.lojaOrigem;
+      tentar(
+        av.campanha,
+        enfileirar(b, { cliente: c, campanha: av.campanha, loja: lojaDela, variaveis: { valor: v.valor, validade: v.em }, chave: `${av.campanha}-${c.id}-${credito?.movimentoId ?? v.em}` })
+      );
+    }
   }
 
   // Aniversário do dia
   const mmdd = hoje.slice(5);
   for (const c of b.clientes) {
     if (!c.nascimento || c.nascimento.slice(5) !== mmdd || !participa(c.id)) continue;
-    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
+    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem === "Site" ? lojaNaCidade(c) : c.lojaOrigem, variaveis: { oferta: b.config.aniversarioOferta }, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
   }
 
   // Pós-venda
@@ -110,7 +142,9 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   for (const x of candidatas) {
     const loja = x.ultimaLoja ?? x.lojaOrigem ?? "";
     if ((porLoja.get(loja) ?? 0) >= REATIVACOES_POR_LOJA_DIA) continue;
-    const res = enfileirar(b, { cliente: x, campanha: "reativacao", loja, chave: `reat-${x.id}-${hoje}` });
+    const oferta = ofertaReativacao(b, x.totalGasto);
+    if (!oferta) continue; // sem faixa, sem gancho: não manda
+    const res = enfileirar(b, { cliente: x, campanha: "reativacao", loja, variaveis: { oferta }, chave: `reat-${x.id}-${hoje}` });
     tentar("reativacao", res);
     if (res.mensagem) porLoja.set(loja, (porLoja.get(loja) ?? 0) + 1);
   }

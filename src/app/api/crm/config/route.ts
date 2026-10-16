@@ -62,7 +62,15 @@ export async function POST(req: NextRequest) {
           cashbackSite: c.cashbackSite !== undefined ? Boolean(c.cashbackSite) : atual.cashbackSite,
           siteNasAutomacoes: c.siteNasAutomacoes !== undefined ? Boolean(c.siteNasAutomacoes) : atual.siteNasAutomacoes,
           cashbackMaxPctDaCompra: num(c.cashbackMaxPctDaCompra, atual.cashbackMaxPctDaCompra, 0, 100),
+          cashbackMultiploCompra: num(c.cashbackMultiploCompra, atual.cashbackMultiploCompra, 0, 20),
           avisoVencimentoDias: num(c.avisoVencimentoDias, atual.avisoVencimentoDias, 1, 60),
+          avisoVencimentoUrgenteDias: num(c.avisoVencimentoUrgenteDias, atual.avisoVencimentoUrgenteDias, 0, 30),
+          aniversarioOferta: typeof c.aniversarioOferta === "string" ? c.aniversarioOferta.trim() : atual.aniversarioOferta,
+          reativacaoFaixas: Array.isArray(c.reativacaoFaixas)
+            ? c.reativacaoFaixas
+                .map((f) => ({ minimo: num(f?.minimo, 0), oferta: String(f?.oferta ?? "").trim() }))
+                .filter((f) => f.oferta && f.minimo >= 0)
+            : atual.reativacaoFaixas,
           posVendaDias: num(c.posVendaDias, atual.posVendaDias, 1, 60),
           reativacaoDias: num(c.reativacaoDias, atual.reativacaoDias, 7, 3650),
           reativacaoTicketMinimo: num(c.reativacaoTicketMinimo, atual.reativacaoTicketMinimo),

@@ -34,6 +34,7 @@ function fichaCurta(base: Awaited<ReturnType<typeof lerBase>>, id: string) {
     creditos: creditosAbertos(base, c.id).map((x) => ({ valor: x.restante, validade: x.validade })),
     resgateMinimo: base.config.cashbackResgateMinimo,
     maxPctDaCompra: base.config.cashbackMaxPctDaCompra,
+    multiploCompra: base.config.cashbackMultiploCompra,
   };
 }
 

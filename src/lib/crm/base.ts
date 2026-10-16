@@ -58,6 +58,27 @@ async function gravar(base: BaseCrm): Promise<void> {
 const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
   { id: "atendimento", aplicar: (b) => void (b.atendimento ??= []) },
   {
+    // Regras combinadas em 16/10: 15% com compra de 3x, 90 dias, dois lembretes,
+    // site gera cashback, textos novos, boas-vindas desligada
+    id: "regras-v2",
+    aplicar: (b) => {
+      Object.assign(b.config, {
+        cashbackPct: 15,
+        cashbackValidadeDias: 90,
+        cashbackResgateMinimo: 0,
+        cashbackMaxPctDaCompra: 0,
+        cashbackMultiploCompra: 3,
+        cashbackSite: true,
+        avisoVencimentoDias: 10,
+        avisoVencimentoUrgenteDias: 2,
+        aniversarioOferta: "10% de desconto",
+        reativacaoFaixas: CONFIG_PADRAO.reativacaoFaixas,
+        reativacaoTicketMinimo: 500,
+      });
+      b.modelos = structuredClone(MODELOS_PADRAO);
+    },
+  },
+  {
     // Todo mundo que compra aceita contato: quem entrou antes dessa regra ganha o aceite.
     // Telefone que não é telefone sai. Funcionária identificada pelo nome não recebe mensagem.
     id: "aceite-geral",

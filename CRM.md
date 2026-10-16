@@ -151,12 +151,17 @@ TOTVS). Só colocam mensagens na fila:
 
 | Campanha | Quando | Tipo |
 | --- | --- | --- |
-| Boas-vindas | cadastro novo no caixa com aceite | aviso |
-| Cashback creditado | até 3 dias depois do crédito | aviso |
-| Cashback vencendo | X dias antes de expirar | aviso |
-| Aniversário | no dia | marketing |
-| Pós-venda | X dias depois da compra (desligada por padrão) | aviso |
-| Reativação | sem comprar há X dias e gastou acima de Y; no máximo 10 por loja por dia | marketing |
+| Boas-vindas | desligada: a primeira mensagem já é a do cashback | aviso |
+| Cashback creditado (loja) | até 3 dias depois do crédito | aviso |
+| Cashback creditado (site) | idem; se a cidade de entrega tem loja, avisa qual | aviso |
+| Cashback vencendo | primeiro aviso 10 dias antes, último com urgência 2 dias antes | aviso |
+| Aniversário | no dia, com a oferta configurada (10% por padrão) | marketing |
+| Pós-venda | desligada até ter um formato que não gere problema | aviso |
+| Reativação | desligada até combinar com as gerentes; oferta por faixa de total gasto (R$ 500 → 10%, R$ 1.000 → presente) | marketing |
+
+Regra do cashback combinada: **15%** da compra, válido por **90 dias**, e a
+compra em que ela usa precisa ser **pelo menos 3 vezes** o valor usado (ou
+seja, o cashback paga no máximo um terço). Compra no site também gera.
 
 Os textos têm variações (sorteadas) e aceitam `{primeiro}`, `{nome}`,
 `{loja}`, `{valor}`, `{validade}`, `{codigo}`. Edite em Configurar → Textos.

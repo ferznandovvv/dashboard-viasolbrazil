@@ -11,6 +11,12 @@ export interface Variaveis {
   validade?: string;
   codigo?: string;
   loja?: string;
+  /** Oferta da campanha (aniversário, reativação) */
+  oferta?: string;
+  /** Loja na cidade da cliente (cashback do site) */
+  lojaProxima?: string;
+  /** Cidade escrita bonito (a do cadastro pode vir sem acento) */
+  cidade?: string;
 }
 
 export function renderizar(texto: string, cliente: Cliente, loja: string, v: Variaveis = {}): string {
@@ -21,6 +27,9 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{valor\}/g, v.valor !== undefined ? brl(v.valor) : "")
     .replace(/\{validade\}/g, v.validade ? dataBr(v.validade) : "")
     .replace(/\{codigo\}/g, v.codigo ?? "")
+    .replace(/\{oferta\}/g, v.oferta ?? "")
+    .replace(/\{lojaProxima\}/g, v.lojaProxima ?? v.loja ?? loja)
+    .replace(/\{cidade\}/g, v.cidade ?? cliente.cidade ?? "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }

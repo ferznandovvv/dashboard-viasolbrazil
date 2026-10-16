@@ -55,7 +55,7 @@ interface PedidoNode {
     phone: string | null;
     smsMarketingConsent: { marketingState: string } | null;
   } | null;
-  shippingAddress: { phone: string | null; name: string | null } | null;
+  shippingAddress: { phone: string | null; name: string | null; city: string | null; provinceCode: string | null } | null;
   billingAddress: { phone: string | null; name: string | null } | null;
 }
 
@@ -85,7 +85,7 @@ const QUERY = `
         currentTotalPriceSet { shopMoney { amount } }
         lineItems(first: 50) { nodes { quantity } }
         customer { id displayName firstName lastName email phone smsMarketingConsent { marketingState } }
-        shippingAddress { phone name }
+        shippingAddress { phone name city provinceCode }
         billingAddress { phone name }
       }
     }
@@ -102,7 +102,7 @@ export const progressoShopify: { rodando: boolean; etapa: string; vendasNovas: n
 
 interface PedidoLido {
   venda: Venda;
-  cliente?: { nome: string; telefone?: string; email?: string; codigoShopify: string; optIn: boolean };
+  cliente?: { nome: string; telefone?: string; email?: string; codigoShopify: string; optIn: boolean; cidade?: string; uf?: string };
 }
 
 async function buscarPedidos(de: string, ate: string, limitePaginas = 60): Promise<{ pedidos: PedidoLido[]; inelegiveis: Set<string> }> {
@@ -134,7 +134,7 @@ async function buscarPedidos(de: string, ate: string, limitePaginas = 60): Promi
           nomeNaNota: nome || undefined,
           origem: "shopify",
         },
-        cliente: c && nome ? { nome, telefone, email: c.email ?? undefined, codigoShopify: c.id.split("/").pop()!, optIn: c.smsMarketingConsent?.marketingState !== "UNSUBSCRIBED" } : undefined,
+        cliente: c && nome ? { nome, telefone, email: c.email ?? undefined, codigoShopify: c.id.split("/").pop()!, optIn: c.smsMarketingConsent?.marketingState !== "UNSUBSCRIBED", cidade: n.shippingAddress?.city ?? undefined, uf: n.shippingAddress?.provinceCode ?? undefined } : undefined,
       });
     }
     if (!orders.pageInfo.hasNextPage) break;

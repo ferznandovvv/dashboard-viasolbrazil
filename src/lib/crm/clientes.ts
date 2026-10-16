@@ -17,6 +17,8 @@ export interface DadosCliente {
   lojaOrigem?: string;
   codigoTotvs?: string;
   codigoShopify?: string;
+  cidade?: string;
+  uf?: string;
   optIn?: boolean;
   obs?: string;
 }
@@ -73,6 +75,8 @@ export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | 
     c.lojaOrigem ??= limpo(d.lojaOrigem) || undefined;
     c.codigoTotvs ??= limpo(d.codigoTotvs) || undefined;
     c.codigoShopify ??= limpo(d.codigoShopify) || undefined;
+    c.cidade ??= limpo(d.cidade) || undefined;
+    c.uf ??= limpo(d.uf).toUpperCase() || undefined;
     if (d.optIn) c.optIn = true;
     if (limpo(d.obs)) c.obs = limpo(d.obs);
     c.atualizadoEm = agora;
@@ -89,6 +93,8 @@ export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | 
     lojaOrigem: limpo(d.lojaOrigem) || undefined,
     codigoTotvs: limpo(d.codigoTotvs) || undefined,
     codigoShopify: limpo(d.codigoShopify) || undefined,
+    cidade: limpo(d.cidade) || undefined,
+    uf: limpo(d.uf).toUpperCase() || undefined,
     // Quem compra na loja ou no site aceita contato no cadastro; só fica de
     // fora quem pedir (optOut) ou, na Shopify, quem cancelou o SMS
     optIn: d.optIn ?? true,

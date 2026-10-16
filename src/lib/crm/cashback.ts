@@ -105,6 +105,13 @@ export function expirarCreditos(base: BaseCrm, hoje = hojeSp()): number {
   return n;
 }
 
+/** Quanto de cashback cabe numa compra deste valor, pela regra configurada (null = sem teto). */
+export function tetoNaCompra(cfg: BaseCrm["config"], valorCompra: number): number | null {
+  if (cfg.cashbackMultiploCompra > 0) return arred(valorCompra / cfg.cashbackMultiploCompra);
+  if (cfg.cashbackMaxPctDaCompra > 0) return arred((valorCompra * cfg.cashbackMaxPctDaCompra) / 100);
+  return null;
+}
+
 const LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sem 0/O e 1/I
 
 export function gerarCodigo(base: BaseCrm): string {
@@ -146,10 +153,14 @@ export function resgatar(base: BaseCrm, pedido: PedidoResgate): MovimentoCashbac
     throw new Error(`Saldo de R$ ${saldo.toFixed(2)} ainda não atinge o mínimo de R$ ${cfg.cashbackResgateMinimo.toFixed(2)} para resgate.`);
   }
   if (valor > saldo + 0.009) throw new Error(`Saldo disponível é R$ ${saldo.toFixed(2)}.`);
-  if (pedido.valorCompra && cfg.cashbackMaxPctDaCompra > 0) {
-    const teto = arred((pedido.valorCompra * cfg.cashbackMaxPctDaCompra) / 100);
-    if (valor > teto + 0.009) {
-      throw new Error(`Nesta compra dá pra usar no máximo R$ ${teto.toFixed(2)} (${cfg.cashbackMaxPctDaCompra}% do valor).`);
+  if (pedido.valorCompra) {
+    const teto = tetoNaCompra(cfg, pedido.valorCompra);
+    if (teto !== null && valor > teto + 0.009) {
+      throw new Error(
+        cfg.cashbackMultiploCompra > 0
+          ? `A compra precisa ser pelo menos ${cfg.cashbackMultiploCompra}x o cashback usado: nesta dá pra usar no máximo R$ ${teto.toFixed(2)}.`
+          : `Nesta compra dá pra usar no máximo R$ ${teto.toFixed(2)} (${cfg.cashbackMaxPctDaCompra}% do valor).`
+      );
     }
   }
   if (cod) {

@@ -15,6 +15,9 @@ export interface Cliente {
   nascimento?: string;
   /** Loja onde comprou pela primeira vez (ou onde foi cadastrada) */
   lojaOrigem?: string;
+  /** Cidade e UF, quando conhecidas (endereço de entrega do site) */
+  cidade?: string;
+  uf?: string;
   /** Código do cliente no TOTVS, quando veio de lá */
   codigoTotvs?: string;
   /** Id do cliente na Shopify (gid numérico), quando comprou no site */
@@ -84,7 +87,10 @@ export interface CodigoResgate {
 
 export type TipoCampanha =
   | "cashback_creditado"
+  | "cashback_site_perto"
+  | "cashback_site_longe"
   | "cashback_vencendo"
+  | "cashback_vencendo_urgente"
   | "aniversario"
   | "reativacao"
   | "pos_venda"
@@ -93,9 +99,12 @@ export type TipoCampanha =
 
 export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[] = [
   { id: "boas_vindas", nome: "Boas-vindas", dica: "Cadastro novo na loja", marketing: false },
-  { id: "cashback_creditado", nome: "Cashback creditado", dica: "No dia seguinte à compra", marketing: false },
-  { id: "cashback_vencendo", nome: "Cashback vencendo", dica: "Dias antes de expirar", marketing: false },
-  { id: "aniversario", nome: "Aniversário", dica: "No dia do aniversário", marketing: true },
+  { id: "cashback_creditado", nome: "Cashback creditado (loja)", dica: "No dia seguinte à compra na loja", marketing: false },
+  { id: "cashback_site_perto", nome: "Cashback creditado (site, tem loja na cidade)", dica: "Compra no site de quem mora numa cidade com loja", marketing: false },
+  { id: "cashback_site_longe", nome: "Cashback creditado (site, sem loja perto)", dica: "Compra no site de quem mora longe das lojas", marketing: false },
+  { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
+  { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
+  { id: "aniversario", nome: "Aniversário", dica: "No dia, com a oferta configurada", marketing: true },
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
   { id: "avulsa", nome: "Avulsa", dica: "Mandada à mão para um segmento", marketing: true },
@@ -180,10 +189,18 @@ export interface ConfigCrm {
   cashbackSite: boolean;
   /** Clientes que só compraram no site entram nas automações (aniversário, reativação, pós-venda) */
   siteNasAutomacoes: boolean;
-  /** Máximo do valor da compra que pode ser pago com cashback (0 a 100) */
+  /** Máximo do valor da compra que pode ser pago com cashback (0 a 100). Usado só se o múltiplo for 0 */
   cashbackMaxPctDaCompra: number;
-  /** Dias antes do vencimento para avisar */
+  /** A compra precisa ser pelo menos N vezes o cashback usado (3 = cashback paga no máximo 1/3) */
+  cashbackMultiploCompra: number;
+  /** Dias antes do vencimento para o primeiro aviso */
   avisoVencimentoDias: number;
+  /** Dias antes do vencimento para o último aviso, com urgência */
+  avisoVencimentoUrgenteDias: number;
+  /** O que a aniversariante ganha (vai no texto como {oferta}) */
+  aniversarioOferta: string;
+  /** Reativação: pelo total gasto, o que oferecer. Vale a maior faixa atingida */
+  reativacaoFaixas: { minimo: number; oferta: string }[];
   /** Dias depois da compra para o pós-venda */
   posVendaDias: number;
   /** Reativação: sem comprar há X dias e ticket acumulado acima de Y */
@@ -257,69 +274,111 @@ export interface ClienteResumo extends Cliente {
   podeMarketing: boolean;
 }
 
+/** Cidade de cada loja, para avisar a cliente do site que tem loja perto dela. */
+export const LOJA_CIDADE: Record<string, string> = {
+  Centro: "Franca",
+  Fiusa: "Franca",
+  "Loja de Fábrica": "Franca",
+  "Rio de Janeiro": "Rio de Janeiro",
+  "Ribeirão Preto": "Ribeirão Preto",
+  "SP — Itaim": "São Paulo",
+  "Belo Horizonte": "Belo Horizonte",
+  "Praia Grande": "Praia Grande",
+};
+
 export const MODELOS_PADRAO: Modelo[] = [
   {
     campanha: "boas_vindas",
-    ativo: true,
+    ativo: false,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol {loja}! Seu cadastro ficou pronto. A partir de agora toda compra gera cashback pra usar na próxima. Qualquer coisa é só responder aqui.",
-      "{primeiro}, tudo bem? Via Sol {loja} aqui. Cadastro feito! Suas compras agora rendem cashback. Se precisar de algo, me chama por aqui.",
+      "Oi {primeiro}, aqui é da Via Sol {loja}. Seu cadastro ficou pronto, e a partir de agora cada compra sua rende cashback pra próxima. Qualquer coisa, me chama por aqui.",
     ],
   },
   {
     campanha: "cashback_creditado",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}! Obrigada pela compra na Via Sol {loja}. Entrou {valor} de cashback pra você, vale até {validade}. É só mostrar essa mensagem no caixa quando vier usar.",
-      "{primeiro}, sua compra na Via Sol {loja} gerou {valor} de cashback! Fica disponível até {validade}. Quando quiser usar, é só avisar a gente na loja.",
+      "Oi {primeiro}, tudo bem? Aqui é da Via Sol {loja}. Passando pra avisar que sua compra de ontem rendeu {valor} de cashback. Fica guardado no seu nome até {validade}, é só me avisar quando vier usar. Qualquer dúvida, me chama aqui.",
+      "{primeiro}, obrigada pela visita ontem! Ficou {valor} de cashback no seu nome aqui na Via Sol {loja}, pra usar até {validade}. Quando chegar peça nova e você quiser dar uma olhada, me manda mensagem que eu separo.",
+      "Oi {primeiro}! Sua compra na Via Sol {loja} gerou {valor} de cashback pra você. Vale até {validade}, em qualquer loja nossa. Adorei te atender, volta logo.",
+    ],
+  },
+  {
+    campanha: "cashback_site_perto",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}, aqui é da Via Sol {lojaProxima}. Vi que você comprou no nosso site e queria te contar: essa compra rendeu {valor} de cashback pra usar na loja, até {validade}. A gente fica em {cidade}, então quando quiser experimentar as peças ao vivo é só me chamar que eu te recebo.",
+      "{primeiro}, tudo bem? Sou da Via Sol aqui de {cidade}. Sua compra no site gerou {valor} de cashback, válido até {validade}, e você pode usar direto na nossa loja {lojaProxima}. Se quiser que eu separe alguma coisa do seu tamanho pra você provar, me avisa.",
+    ],
+  },
+  {
+    campanha: "cashback_site_longe",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}, aqui é da Via Sol. Sua compra no site rendeu {valor} de cashback, válido até {validade}, pra usar em qualquer uma das nossas lojas (Franca, Ribeirão Preto, São Paulo, Rio de Janeiro, Belo Horizonte e Praia Grande). Se passar por alguma delas, me avisa que eu deixo tudo preparado.",
     ],
   },
   {
     campanha: "cashback_vencendo",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, passando pra lembrar: você tem {valor} de cashback na Via Sol {loja} que vence em {validade}. Dá tempo de usar!",
-      "{primeiro}, seu cashback de {valor} na Via Sol vence dia {validade}. Se quiser, me fala que eu separo alguma coisa pra você na loja {loja}.",
+      "Oi {primeiro}, aqui é da Via Sol {loja}. Lembra do seu cashback de {valor}? Ele vence em {validade}. Chegaram peças novas essa semana, se quiser eu te mando umas fotos pra você escolher com calma.",
+      "{primeiro}, tudo bem? Passando pra lembrar que você tem {valor} de cashback aqui na Via Sol {loja}, válido até {validade}. Quer que eu separe algo do seu tamanho pra você vir ver?",
+    ],
+  },
+  {
+    campanha: "cashback_vencendo_urgente",
+    ativo: true,
+    variacoes: [
+      "{primeiro}, seu cashback de {valor} vence em {validade}, daqui a pouquinho. Não queria que você perdesse. Se não der pra passar na loja, me responde que eu vejo um jeito de te ajudar a usar.",
+      "Oi {primeiro}! Último lembrete: {valor} de cashback no seu nome vencendo dia {validade}. Dá tempo de usar ainda, a loja {loja} está aberta até as 19h. Te espero!",
     ],
   },
   {
     campanha: "aniversario",
     ativo: true,
     variacoes: [
-      "Feliz aniversário, {primeiro}! Aqui é da Via Sol {loja}. Pra comemorar, esse mês você tem um presente esperando na loja. Passa aqui pra gente te entregar.",
-      "{primeiro}, parabéns pelo seu dia! A equipe da Via Sol {loja} te deseja um ano lindo. Tem um mimo de aniversário guardado pra você aqui na loja.",
+      "Feliz aniversário, {primeiro}! Aqui é da Via Sol {loja}. Te desejo um ano cheio de sol e coisa boa. Pra comemorar, esse mês você tem {oferta} em qualquer peça da loja. É só mostrar essa mensagem no caixa.",
+      "{primeiro}, parabéns pelo seu dia! A equipe da Via Sol {loja} te manda um abraço. Durante o mês do seu aniversário você tem {oferta} aqui com a gente. Vem comemorar com uma peça nova.",
     ],
   },
   {
     campanha: "pos_venda",
     ativo: false,
     variacoes: [
-      "Oi {primeiro}, tudo bem? Como foi com as peças da Via Sol {loja}? Se precisar trocar tamanho ou tiver qualquer dúvida, é só me responder aqui.",
+      "Oi {primeiro}, tudo bem? Como ficaram as peças da Via Sol {loja}? Se precisar trocar tamanho ou tiver qualquer dúvida, é só me responder aqui.",
     ],
   },
   {
     campanha: "reativacao",
-    ativo: true,
+    ativo: false,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol {loja}. Faz um tempo que você não aparece e a coleção nova chegou. Separo algumas peças do seu estilo pra você vir ver?",
-      "{primeiro}, saudades! Via Sol {loja} aqui. Chegaram modelos novos que têm a sua cara. Quer que eu mande fotos ou prefere passar na loja?",
+      "Oi {primeiro}, aqui é da Via Sol {loja}. Faz um tempinho que você não aparece e eu lembrei de você porque chegou coleção nova. Como você é cliente nossa de verdade, separei {oferta} pra sua próxima compra. Quer que eu mande fotos ou prefere passar aqui?",
+      "{primeiro}, saudades! Via Sol {loja} aqui. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando. Me avisa quando puder vir.",
     ],
   },
   { campanha: "avulsa", ativo: true, variacoes: [] },
 ];
 
 export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
-  cashbackPct: 5,
-  cashbackValidadeDias: 60,
+  cashbackPct: 15,
+  cashbackValidadeDias: 90,
   cashbackCompraMinima: 0,
-  cashbackResgateMinimo: 20,
-  cashbackSite: false,
+  cashbackResgateMinimo: 0,
+  cashbackSite: true,
   siteNasAutomacoes: false,
-  cashbackMaxPctDaCompra: 30,
-  avisoVencimentoDias: 7,
+  cashbackMaxPctDaCompra: 0,
+  cashbackMultiploCompra: 3,
+  avisoVencimentoDias: 10,
+  avisoVencimentoUrgenteDias: 2,
+  aniversarioOferta: "10% de desconto",
+  reativacaoFaixas: [
+    { minimo: 500, oferta: "10% de desconto" },
+    { minimo: 1000, oferta: "um presente surpresa" },
+  ],
   posVendaDias: 5,
   reativacaoDias: 90,
-  reativacaoTicketMinimo: 1000,
+  reativacaoTicketMinimo: 500,
   reativacaoIntervaloDias: 180,
   provedor: "nenhum",
   numeros: [],

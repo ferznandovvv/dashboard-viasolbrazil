@@ -65,17 +65,33 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
             <label className="config-campo"><span>Percentual sobre a compra (%)</span><input value={cfg.cashbackPct} onChange={n("cashbackPct")} /></label>
             <label className="config-campo"><span>Validade do crédito (dias)</span><input value={cfg.cashbackValidadeDias} onChange={n("cashbackValidadeDias")} /></label>
             <label className="config-campo"><span>Compra mínima para gerar (R$)</span><input value={cfg.cashbackCompraMinima} onChange={n("cashbackCompraMinima")} /></label>
-            <label className="config-campo"><span>Saldo mínimo para resgatar (R$)</span><input value={cfg.cashbackResgateMinimo} onChange={n("cashbackResgateMinimo")} /></label>
-            <label className="config-campo"><span>Máximo da compra pago com cashback (%)</span><input value={cfg.cashbackMaxPctDaCompra} onChange={n("cashbackMaxPctDaCompra")} /><small>0 desliga o teto</small></label>
-            <label className="config-campo"><span>Avisar vencimento com (dias)</span><input value={cfg.avisoVencimentoDias} onChange={n("avisoVencimentoDias")} /></label>
+            <label className="config-campo"><span>Saldo mínimo para resgatar (R$)</span><input value={cfg.cashbackResgateMinimo} onChange={n("cashbackResgateMinimo")} /><small>0 = sem mínimo</small></label>
+            <label className="config-campo"><span>A compra precisa ser N vezes o cashback usado</span><input value={cfg.cashbackMultiploCompra} onChange={n("cashbackMultiploCompra")} /><small>3 = o cashback paga no máximo um terço da compra (33% de desconto). 4 = 25%, 5 = 20%. 0 desliga</small></label>
+            <label className="config-campo"><span>Primeiro aviso de vencimento (dias antes)</span><input value={cfg.avisoVencimentoDias} onChange={n("avisoVencimentoDias")} /></label>
+            <label className="config-campo"><span>Último aviso, com urgência (dias antes)</span><input value={cfg.avisoVencimentoUrgenteDias} onChange={n("avisoVencimentoUrgenteDias")} /></label>
           </div>
           <label className="fin-check"><input type="checkbox" checked={cfg.cashbackSite} onChange={(e) => setCfg({ ...cfg, cashbackSite: e.target.checked })} /> Compras no site (Shopify) também geram cashback para usar nas lojas</label>
           <label className="fin-check"><input type="checkbox" checked={cfg.siteNasAutomacoes} onChange={(e) => setCfg({ ...cfg, siteNasAutomacoes: e.target.checked })} /> Clientes que só compraram no site entram nas automações (desligado enquanto o site estiver no Edrone; mensagens avulsas sempre funcionam)</label>
           <h2 style={{ marginTop: 10 }}>Campanhas automáticas</h2>
           <div className="fin-grid">
+            <label className="config-campo"><span>Aniversário: o que ela ganha</span><input value={cfg.aniversarioOferta} onChange={t("aniversarioOferta")} placeholder="10% de desconto" /><small>Entra no texto como {"{oferta}"}</small></label>
             <label className="config-campo"><span>Pós-venda: dias depois da compra</span><input value={cfg.posVendaDias} onChange={n("posVendaDias")} /></label>
             <label className="config-campo"><span>Reativação: sem comprar há (dias)</span><input value={cfg.reativacaoDias} onChange={n("reativacaoDias")} /></label>
             <label className="config-campo"><span>Reativação: total gasto mínimo (R$)</span><input value={cfg.reativacaoTicketMinimo} onChange={n("reativacaoTicketMinimo")} /></label>
+            <div className="config-campo fin-largo">
+              <span>Reativação: oferta por faixa de total gasto (vale a maior faixa atingida)</span>
+              {(cfg.reativacaoFaixas ?? []).map((f, i) => (
+                <div key={i} className="crm-inline" style={{ marginBottom: 6 }}>
+                  <span className="muted">a partir de R$</span>
+                  <input className="crm-input" style={{ width: 90 }} value={f.minimo} onChange={(e) => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.map((x, j) => (j === i ? { ...x, minimo: Number(e.target.value) || 0 } : x)) })} />
+                  <span className="muted">ganha</span>
+                  <input className="crm-input" style={{ flex: 1, minWidth: 180 }} value={f.oferta} onChange={(e) => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.map((x, j) => (j === i ? { ...x, oferta: e.target.value } : x)) })} />
+                  <button className="link fin-excluir" onClick={() => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.filter((_, j) => j !== i) })}>remover</button>
+                </div>
+              ))}
+              <button className="link" onClick={() => setCfg({ ...cfg, reativacaoFaixas: [...(cfg.reativacaoFaixas ?? []), { minimo: 0, oferta: "" }] })}>+ faixa</button>
+              <small>A campanha de reativação só manda para quem atinge alguma faixa. Ligue a campanha em Textos quando combinar com as gerentes.</small>
+            </div>
             <label className="config-campo"><span>Reativação: intervalo entre tentativas (dias)</span><input value={cfg.reativacaoIntervaloDias} onChange={n("reativacaoIntervaloDias")} /></label>
             <label className="config-campo"><span>Horário em que as automações rodam</span><input type="time" value={cfg.horaAutomacoes} onChange={t("horaAutomacoes")} /><small>Depois da sincronização com o TOTVS (8h30)</small></label>
           </div>
@@ -243,7 +259,7 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
     <div className="card">
       <h2>Textos das campanhas</h2>
       <div className="muted" style={{ marginBottom: 10 }}>
-        Cada campanha tem variações; o sistema sorteia uma por mensagem, para o mesmo número não mandar sempre o texto igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{codigo}"}.
+        Cada campanha tem variações; o sistema sorteia uma por mensagem, para o mesmo número não mandar sempre o texto igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{codigo}"}, {"{oferta}"} (aniversário e reativação), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
       </div>
       {d.campanhas
         .filter((c) => c.id !== "avulsa")

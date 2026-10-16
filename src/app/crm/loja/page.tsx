@@ -16,6 +16,7 @@ interface Ficha {
   creditos: { valor: number; validade: string }[];
   resgateMinimo: number;
   maxPctDaCompra: number;
+  multiploCompra: number;
 }
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -268,7 +269,7 @@ function Resgate({ f, confirmar, cancelar, erro }: { f: Ficha; confirmar: (valor
   const [codigo, setCodigo] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const vCompra = lerValor(compra);
-  const teto = vCompra && f.maxPctDaCompra ? Math.round(vCompra * f.maxPctDaCompra) / 100 : f.saldo;
+  const teto = vCompra ? (f.multiploCompra > 0 ? Math.floor((vCompra / f.multiploCompra) * 100) / 100 : f.maxPctDaCompra ? Math.round(vCompra * f.maxPctDaCompra) / 100 : f.saldo) : f.saldo;
   const maximo = Math.min(f.saldo, teto);
   useEffect(() => {
     if (vCompra) setValor(maximo.toFixed(2).replace(".", ","));
@@ -279,7 +280,7 @@ function Resgate({ f, confirmar, cancelar, erro }: { f: Ficha; confirmar: (valor
       <div className="muted">Saldo {brl.format(f.saldo)}</div>
       <label className="crm-campo"><span>Valor da compra</span><input value={compra} onChange={(e) => setCompra(e.target.value)} inputMode="decimal" placeholder="0,00" autoFocus /></label>
       <label className="crm-campo">
-        <span>Quanto de cashback usar {f.maxPctDaCompra ? `(até ${f.maxPctDaCompra}% da compra)` : ""}</span>
+        <span>Quanto de cashback usar {f.multiploCompra > 0 ? `(a compra precisa ser ${f.multiploCompra}x o valor usado)` : f.maxPctDaCompra ? `(até ${f.maxPctDaCompra}% da compra)` : ""}</span>
         <input value={valor} onChange={(e) => setValor(e.target.value)} inputMode="decimal" />
       </label>
       <label className="crm-campo"><span>Código da cliente (se ela trouxe um)</span><input value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="opcional" /></label>
