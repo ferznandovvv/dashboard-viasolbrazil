@@ -109,7 +109,8 @@ conversas em si, o botão "Abrir conversas" leva à WA-AKG.
 ## Shopify (site)
 
 Só entram pedidos **pagos, não cancelados, sem disputa e sem a análise de
-risco da Shopify mandando investigar ou cancelar**. Como fraude costuma
+risco da Shopify mandando cancelar** (a recomendação "investigar" não barra,
+porque esses pedidos em geral são legítimos e entregues). Como fraude costuma
 entrar como pago e virar estorno dias depois, a sincronização diária olha 45
 dias para trás e remove da base o que deixou de valer, tirando o cashback
 junto se ainda não foi usado.

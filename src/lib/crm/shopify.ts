@@ -60,8 +60,9 @@ interface PedidoNode {
 }
 
 /**
- * Pedido que vale como venda: pago, não cancelado, sem disputa (chargeback)
- * e sem a análise de risco da Shopify mandando investigar ou cancelar.
+ * Pedido que vale como venda: pago, não cancelado e sem disputa (chargeback).
+ * A análise de risco da Shopify só barra quando manda cancelar; "investigar"
+ * tem falso positivo demais e esses pedidos normalmente são entregues.
  * Fraude costuma entrar como "pago" e só virar estorno dias depois, por isso
  * a sincronização diária também remove o que deixou de ser elegível.
  */
@@ -69,8 +70,7 @@ function pedidoElegivel(n: PedidoNode): boolean {
   if (n.cancelledAt) return false;
   if (n.displayFinancialStatus && n.displayFinancialStatus !== "PAID") return false;
   if (n.disputes?.length) return false;
-  const rec = (n.risk?.recommendation ?? "").toUpperCase();
-  if (rec === "CANCEL" || rec === "INVESTIGATE") return false;
+  if ((n.risk?.recommendation ?? "").toUpperCase() === "CANCEL") return false;
   return true;
 }
 
