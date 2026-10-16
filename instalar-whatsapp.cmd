@@ -68,17 +68,23 @@ echo  Banco "%BANCO%" pronto.
 
 echo.
 echo  === 3/6  Baixando a WA-AKG ===
-if exist "%PASTA%\package.json" (
-  cd /d "%PASTA%"
-  git pull --ff-only
-) else (
-  git clone https://github.com/mrifqidaffaaditya/WA-AKG.git "%PASTA%"
-  if errorlevel 1 (
-    echo  Falhou ao baixar a WA-AKG.
-    goto :erro
-  )
-  cd /d "%PASTA%"
+if not exist "%PASTA%" mkdir "%PASTA%"
+cd /d "%PASTA%"
+if not exist "%PASTA%\.git" (
+  git init -q
+  git remote add origin https://github.com/mrifqidaffaaditya/WA-AKG.git
 )
+git fetch --depth 1 origin main
+if errorlevel 1 (
+  echo  Falhou ao baixar a WA-AKG do GitHub. Confira a internet e rode de novo.
+  goto :erro
+)
+git checkout -q -B main origin/main
+if errorlevel 1 (
+  echo  Falhou ao preparar os arquivos da WA-AKG.
+  goto :erro
+)
+echo  WA-AKG baixada.
 
 echo.
 echo  === 4/6  Configuracao .env ===

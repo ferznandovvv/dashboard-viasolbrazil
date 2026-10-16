@@ -5,6 +5,11 @@ title WhatsApp Via Sol (WA-AKG)
 cd /d "%~dp0..\WA-AKG" || (echo Pasta WA-AKG nao encontrada. Rode instalar-whatsapp.cmd primeiro. & pause & exit /b 1)
 net start MariaDB >nul 2>&1
 set NODE_ENV=production
+if not exist "node_modules" (
+  echo A WA-AKG ainda nao foi instalada por completo. Rode instalar-whatsapp.cmd primeiro.
+  pause
+  exit /b 1
+)
 :loop
 echo [%date% %time%] Subindo a WA-AKG em http://localhost:3200
 call npx tsx src/server/index.ts
