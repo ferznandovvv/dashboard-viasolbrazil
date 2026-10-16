@@ -764,3 +764,34 @@ th.num { text-align: right; }
 }
 .fin-grupo-total { float: right; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-secondary); }
 .fin-grupo-total b { color: var(--text-primary); }
+/* Painel "pagar hoje" */
+.fin-hoje { border-left: 4px solid var(--brand); }
+.fin-hoje.livre { border-left-color: var(--good); }
+.fin-hoje-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.fin-hoje-titulo { font-family: var(--font-serif); font-size: 22px; font-weight: 600; color: var(--brand); }
+.fin-hoje.livre .fin-hoje-titulo { color: var(--good); }
+.fin-hoje-total {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  font-family: var(--font-serif); font-size: 28px; font-weight: 600; color: var(--text-primary);
+}
+.fin-hoje.livre .fin-hoje-total { font-size: 18px; color: var(--good); }
+.fin-hoje-atraso { font-family: system-ui, sans-serif; font-size: 12px; font-weight: 600; color: var(--critical); }
+.fin-hoje-total .fin-sub { font-family: system-ui, sans-serif; font-weight: 400; }
+.fin-hoje-empresas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 14px; }
+.fin-hoje-empresa { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--page); }
+.fin-hoje-empresa-cab {
+  display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 6px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary);
+}
+.fin-hoje-empresa-cab b { font-size: 15px; letter-spacing: 0; color: var(--text-primary); }
+.fin-hoje-conta { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px dashed var(--border); }
+.fin-hoje-conta:first-of-type { border-top: none; }
+.fin-hoje-conta-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fin-hoje-valor { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fin-atrasada { color: var(--critical); }
+.fin-empresas-titulo { grid-column: 1 / -1; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+@media (max-width: 640px) {
+  .fin-hoje-empresas { grid-template-columns: 1fr; }
+  .fin-hoje-total { font-size: 22px; align-items: flex-start; }
+  .fin-hoje-conta { flex-wrap: wrap; }
+}

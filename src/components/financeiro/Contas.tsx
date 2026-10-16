@@ -13,6 +13,8 @@ interface Resposta {
   contas: ContaTela[];
   totalLista: number;
   porEmpresa: { empresaId: string; nome: string; aPagar: number; qtd: number; vencido: number; pago: number }[];
+  paraHoje: ContaTela[];
+  proxima: { vencimento: string; total: number } | null;
 }
 
 type Status = "abertas" | "vencidas" | "pagas" | "todas";
@@ -42,6 +44,8 @@ interface Formulario {
 }
 
 const mesAtual = () => hojeSp().slice(0, 7);
+const diaExtenso = (d: string) =>
+  new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 const somarMes = (ym: string, n: number) => {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + n, 1));
@@ -383,6 +387,16 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     });
 
   const r = dados?.resumo;
+  const paraHoje = dados?.paraHoje ?? [];
+  const hojeTotal = paraHoje.reduce((s, c) => s + c.valor, 0);
+  const hojeAtrasado = paraHoje.filter((c) => dados && c.vencimento < dados.hoje).reduce((s, c) => s + c.valor, 0);
+  const hojePorEmpresa = cad.empresas
+    .map((e) => {
+      const contas = paraHoje.filter((c) => c.empresaId === e.id);
+      return { id: e.id, nome: e.nome, contas, total: contas.reduce((s, c) => s + c.valor, 0) };
+    })
+    .filter((g) => g.contas.length)
+    .sort((a, b) => b.total - a.total);
   const contasMes = (dados?.contas ?? []).filter((c) => !mes || c.vencimento.startsWith(mes));
   const anteriores = (dados?.contas ?? []).filter((c) => mes && !c.vencimento.startsWith(mes));
   const lista = vista === "agenda" && dia ? (dados?.contas ?? []).filter((c) => c.vencimento === dia) : dados?.contas ?? [];
@@ -407,6 +421,77 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
         hidden
         onChange={(e) => aoEscolherArquivo(e.target.files?.[0])}
       />
+
+      {dados && (
+        <div className={`card fin-hoje${hojeTotal > 0 ? "" : " livre"}`}>
+          <div className="fin-hoje-cab">
+            <div>
+              <div className="fin-hoje-titulo">Pagar hoje</div>
+              <div className="fin-sub">{diaExtenso(dados.hoje)}</div>
+            </div>
+            <div className="fin-hoje-total">
+              {hojeTotal > 0 ? brl.format(hojeTotal) : "Nada para pagar hoje ✓"}
+              {hojeAtrasado > 0 && <span className="fin-hoje-atraso">inclui {brl.format(hojeAtrasado)} atrasado</span>}
+              {hojeTotal === 0 && dados.proxima && (
+                <span className="fin-sub">
+                  próximo: {dataBr(dados.proxima.vencimento)} · {brl.format(dados.proxima.total)}
+                </span>
+              )}
+            </div>
+          </div>
+          {hojeTotal > 0 && (
+            <div className="fin-hoje-empresas">
+              {hojePorEmpresa.map((g) => (
+                <div key={g.id} className="fin-hoje-empresa">
+                  <div className="fin-hoje-empresa-cab">
+                    <span>{g.nome}</span>
+                    <b>{brl.format(g.total)}</b>
+                  </div>
+                  {g.contas.map((c) => {
+                    const atrasada = c.vencimento < dados.hoje;
+                    return (
+                      <div key={c.id} className="fin-hoje-conta">
+                        <div className="fin-hoje-conta-info">
+                          <span className="fin-desc">
+                            {c.descricao}
+                            {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
+                            {(c.anexos ?? []).map((a) => (
+                              <a key={a.id} className="fin-clipe" href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer" title={a.nome}>
+                                📎
+                              </a>
+                            ))}
+                          </span>
+                          <span className="fin-sub">
+                            {[c.fornecedor, c.forma].filter(Boolean).join(" · ")}
+                            {atrasada && <b className="fin-atrasada"> · venceu {dataBr(c.vencimento)}</b>}
+                          </span>
+                        </div>
+                        <span className="fin-hoje-valor">{brl.format(c.valor)}</span>
+                        {pagando?.id === c.id ? (
+                          <span className="fin-pagar">
+                            <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
+                            <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
+                            <button className="mini" onClick={pagar}>
+                              Confirmar
+                            </button>
+                            <button className="mini ghost" onClick={() => setPagando(null)}>
+                              ✕
+                            </button>
+                          </span>
+                        ) : (
+                          <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
+                            Pagar
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {r && (
         <div className="tiles fin-resumo">
@@ -435,6 +520,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
       {dados && dados.porEmpresa.length > 0 && (
         <div className="fin-empresas">
+          <div className="fin-empresas-titulo">No mês, por empresa</div>
           {dados.porEmpresa.map((e) => (
             <button
               key={e.empresaId}

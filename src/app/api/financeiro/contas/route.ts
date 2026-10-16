@@ -73,6 +73,12 @@ export async function GET(req: NextRequest) {
     .filter((x) => x.aPagar || x.vencido || x.pago);
 
   const nomes = new Map(base.usuarios.map((u) => [u.id, u.nome]));
+  // Para o painel "pagar hoje", que mostra todas as empresas
+  const todasAbertas = base.contas.filter((c) => c.status === "aberta");
+  const proximaData = todasAbertas
+    .map((c) => c.vencimento)
+    .filter((d) => d > hoje)
+    .sort()[0];
   return NextResponse.json({
     hoje,
     resumo: {
@@ -88,6 +94,13 @@ export async function GET(req: NextRequest) {
     })),
     totalLista: soma(lista),
     porEmpresa,
+    // O que tem de sair hoje: vence hoje ou já venceu e segue em aberto
+    // (vale qualquer filtro — é o painel do dia)
+    paraHoje: base.contas
+      .filter((c) => c.status === "aberta" && c.vencimento <= hoje)
+      .sort((a, b) => a.vencimento.localeCompare(b.vencimento) || b.valor - a.valor)
+      .map((c) => ({ ...c, criadoPorNome: nomes.get(c.criadoPor) ?? "", pagoPorNome: "" })),
+    proxima: proximaData ? { vencimento: proximaData, total: soma(todasAbertas.filter((c) => c.vencimento === proximaData)) } : null,
   });
 }
 
