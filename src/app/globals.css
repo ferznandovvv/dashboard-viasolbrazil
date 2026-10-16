@@ -939,3 +939,15 @@ th.num { text-align: right; }
 }
 .crm-aceite { align-items: flex-start; line-height: 1.4; }
 .crm-aceite input { margin-top: 3px; }
+/* Sugestões de lançamentos anteriores */
+.fin-sugestoes {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: -4px 0 12px; padding: 10px; border: 1px dashed var(--border); border-radius: 12px;
+}
+.fin-sugestao {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--page);
+  color: var(--text-secondary); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+}
+.fin-sugestao:hover { border-color: var(--brand); color: var(--text-primary); }
+.fin-sugestao b { color: var(--text-primary); }
+.fin-sugestao-empresa { color: var(--brand); font-weight: 600; }

@@ -127,6 +127,7 @@ interface NovaConta {
    */
   jaPago?: boolean;
   chavePix?: string;
+  codigoBoleto?: string;
 }
 
 /** Lança uma conta — ou várias, quando parcelada ou mensal. */
@@ -167,6 +168,8 @@ export async function POST(req: NextRequest) {
           observacao: (n.observacao ?? "").trim(),
           rateio: r.rateio?.map((p) => ({ ...p })),
           chavePix: (n.chavePix ?? "").trim().slice(0, 140) || undefined,
+          // O código do boleto é de um mês só: nas repetições, só na primeira
+          codigoBoleto: i === 0 ? (n.codigoBoleto ?? "").trim().slice(0, 80) || undefined : undefined,
           criadoPor: usuario.id,
           criadoEm: agora,
           ...(n.jaPago

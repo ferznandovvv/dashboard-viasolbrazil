@@ -24,6 +24,7 @@ type Pedido =
       observacao?: string;
       rateio?: ParteRateio[];
       chavePix?: string;
+      codigoBoleto?: string;
     };
 
 /** Dar baixa, desfazer a baixa ou editar uma conta. */
@@ -75,6 +76,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           forma: p.forma ?? "",
           observacao: (p.observacao ?? "").trim(),
           chavePix: (p.chavePix ?? "").trim().slice(0, 140) || undefined,
+          codigoBoleto: (p.codigoBoleto ?? "").trim().slice(0, 80) || undefined,
         });
       } else throw new Error("Pedido desconhecido.");
       c.alteradoEm = agora;

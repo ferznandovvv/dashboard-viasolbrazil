@@ -105,6 +105,8 @@ export interface Conta {
   anexos?: Anexo[];
   /** Para pagar por PIX: a chave de quem recebe */
   chavePix?: string;
+  /** Para pagar boleto: código de barras / linha digitável */
+  codigoBoleto?: string;
   /** Mudanças de vencimento (reagendado), da mais antiga à mais nova */
   reagendamentos?: { de: string; para: string; em: string; por: string }[];
   status: "aberta" | "paga";

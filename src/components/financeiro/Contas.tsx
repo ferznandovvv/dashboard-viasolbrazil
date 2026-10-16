@@ -47,6 +47,7 @@ interface Formulario {
   partes: Record<string, string>;
   anexos: Conta["anexos"];
   chavePix: string;
+  codigoBoleto: string;
 }
 
 const mesAtual = () => hojeSp().slice(0, 7);
@@ -69,11 +70,21 @@ const somarDia = (d: string, n: number) => {
   return x.toISOString().slice(0, 10);
 };
 
-/** Chave PIX com botão de copiar — é o que se cola no app do banco. */
-function ChavePix({ chave, copiada, aoCopiar }: { chave: string; copiada: boolean; aoCopiar: () => void }) {
+/** Chave PIX ou código do boleto com botão de copiar — é o que se cola no app do banco. */
+function ChavePix({
+  chave,
+  copiada,
+  aoCopiar,
+  rotulo = "PIX",
+}: {
+  chave: string;
+  copiada: boolean;
+  aoCopiar: () => void;
+  rotulo?: string;
+}) {
   return (
     <span className="fin-pix">
-      PIX: <code>{chave}</code>
+      {rotulo}: <code>{chave}</code>
       <button type="button" className="link" onClick={aoCopiar}>
         {copiada ? "copiada ✓" : "copiar"}
       </button>
@@ -124,7 +135,9 @@ export function Contas({
   const [janela, setJanela] = useState<Janela>("hoje");
   const [copiada, setCopiada] = useState("");
   const [novaCategoria, setNovaCategoria] = useState<{ nome: string; grupo: string } | null>(null);
-  const [sugestoes, setSugestoes] = useState<{ porFornecedor: Sugestao[]; porDescricao: Sugestao[] } | null>(null);
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
+  /** Em qual campo a pessoa está digitando, para mostrar as sugestões embaixo dele */
+  const [sugerirEm, setSugerirEm] = useState<"descricao" | "fornecedor" | "">("");
   const [preenchido, setPreenchido] = useState("");
   const anexarEm = useRef<string>("");
   const seletor = useRef<HTMLInputElement>(null);
@@ -160,40 +173,75 @@ export function Contas({
   const abrindoNovo = !!form && !form.id;
   useEffect(() => {
     if (!abrindoNovo) return;
-    api<{ porFornecedor: Sugestao[]; porDescricao: Sugestao[] }>("/api/financeiro/sugestoes")
-      .then(setSugestoes)
+    api<{ lancamentos: Sugestao[] }>("/api/financeiro/sugestoes")
+      .then((r) => setSugestoes(r.lancamentos))
       .catch(() => {});
   }, [abrindoNovo]);
 
+  /** Digitando descrição ou fornecedor: só guarda e abre as sugestões. */
+  const digitar = (campoDigitado: "fornecedor" | "descricao", texto: string) => {
+    campo(campoDigitado, texto);
+    setSugerirEm(campoDigitado);
+  };
+
   /**
-   * Digitou um fornecedor ou uma descrição que já existe: completa o resto
-   * com o último lançamento igual — só o que ainda está em branco.
+   * Lançamentos anteriores parecidos com o que está sendo digitado — a pessoa
+   * escolhe um; nada é preenchido sozinho. Os da empresa já escolhida vêm antes.
    */
-  const completar = (campoDigitado: "fornecedor" | "descricao", texto: string) => {
+  const parecidos = (() => {
+    if (!form || form.id || !sugerirEm) return [];
+    const termo = form[sugerirEm].trim().toLowerCase();
+    if (termo.length < 2) return [];
+    return sugestoes
+      .filter((x) => x[sugerirEm].toLowerCase().includes(termo))
+      .sort(
+        (a, b) =>
+          Number(b.empresaId === form.empresaId) - Number(a.empresaId === form.empresaId) ||
+          Number(b[sugerirEm].toLowerCase().startsWith(termo)) - Number(a[sugerirEm].toLowerCase().startsWith(termo)) ||
+          b.em.localeCompare(a.em)
+      )
+      .slice(0, 6);
+  })();
+
+  /** Escolheu uma sugestão: copia o lançamento anterior (o valor, só se estiver em branco). */
+  const usarSugestao = (x: Sugestao) => {
     if (!form) return;
-    const novo = { ...form, [campoDigitado]: texto };
-    const lista = campoDigitado === "fornecedor" ? sugestoes?.porFornecedor : sugestoes?.porDescricao;
-    const s = form.id ? undefined : lista?.find((x) => x[campoDigitado].trim().toLowerCase() === texto.trim().toLowerCase());
-    if (!s) {
-      setForm(novo);
-      return;
-    }
-    const empresaValida = cad.empresas.some((e) => e.id === s.empresaId && e.ativa);
-    const categoriaValida = cad.categorias.some((c) => c.id === s.categoriaId && c.ativa);
-    setPreenchido(`Completei com o último lançamento igual (${dataBr(s.em)}) — confira o valor.`);
+    const empresaValida = cad.empresas.some((e) => e.id === x.empresaId && e.ativa);
+    const categoriaValida = cad.categorias.some((c) => c.id === x.categoriaId && c.ativa);
+    setSugerirEm("");
+    setPreenchido(`Copiado do lançamento de ${dataBr(x.em)} — confira o valor e o vencimento.`);
     setForm({
-      ...novo,
-      descricao: novo.descricao || s.descricao,
-      fornecedor: novo.fornecedor || s.fornecedor,
-      empresaId: empresaValida ? s.empresaId : novo.empresaId,
-      categoriaId: categoriaValida ? s.categoriaId : novo.categoriaId,
+      ...form,
+      descricao: x.descricao,
+      fornecedor: x.fornecedor,
+      empresaId: empresaValida ? x.empresaId : form.empresaId,
+      categoriaId: categoriaValida ? x.categoriaId : form.categoriaId,
       // Pagamento já feito não volta a ser "Boleto" só porque a conta era boleto
-      forma: form.modo === "pago" && s.forma === "Boleto" ? form.forma : s.forma || form.forma,
-      valor: novo.valor || valorParaCampo(s.valor),
-      ...divisaoNoForm(s.rateio),
-      chavePix: form.chavePix || s.chavePix || "",
+      forma: form.modo === "pago" && x.forma === "Boleto" ? form.forma : x.forma || form.forma,
+      valor: form.valor || valorParaCampo(x.valor),
+      ...divisaoNoForm(x.rateio),
+      chavePix: x.chavePix || form.chavePix,
     });
   };
+
+  const listaSugestoes = (campoAlvo: "descricao" | "fornecedor") =>
+    sugerirEm === campoAlvo && parecidos.length > 0 ? (
+      <div className="fin-sugestoes">
+        <span className="fin-sub">Já lançados — clique para copiar:</span>
+        {parecidos.map((x, i) => (
+          <button key={i} type="button" className="fin-sugestao" onClick={() => usarSugestao(x)}>
+            <b>{x.descricao}</b>
+            {x.fornecedor && x.fornecedor.toLowerCase() !== x.descricao.toLowerCase() && <span> · {x.fornecedor}</span>}
+            <span className="fin-sugestao-empresa"> · {nomeEmpresa(x.empresaId)}</span>
+            <span> · {brl.format(x.valor)}</span>
+            <span className="fin-sub"> · {dataBr(x.em)}</span>
+          </button>
+        ))}
+        <button type="button" className="link" onClick={() => setSugerirEm("")}>
+          fechar
+        </button>
+      </div>
+    ) : null;
 
   /** Lançar de novo uma conta igual (outro mês, outro comprovante). */
   const copiar = (c: ContaTela) => {
@@ -234,6 +282,7 @@ export function Contas({
     partes: {},
     anexos: [],
     chavePix: "",
+    codigoBoleto: "",
   });
 
   const editar = (c: ContaTela) => {
@@ -255,6 +304,7 @@ export function Contas({
       ...divisaoNoForm(c.rateio),
       anexos: c.anexos ?? [],
       chavePix: c.chavePix ?? "",
+      codigoBoleto: c.codigoBoleto ?? "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -296,6 +346,7 @@ export function Contas({
       repetir: form.repetir === "nao" ? undefined : form.repetir,
       jaPago: form.modo === "pago",
       chavePix: form.forma === "PIX" ? form.chavePix : "",
+      codigoBoleto: form.forma === "Boleto" ? form.codigoBoleto : "",
     };
     try {
       let contaId = form.id;
@@ -394,16 +445,31 @@ export function Contas({
     }
   };
 
-  const copiarChave = async (c: ContaTela) => {
+  const copiarTexto = async (marca: string, texto: string) => {
     try {
-      await navigator.clipboard.writeText(c.chavePix ?? "");
+      await navigator.clipboard.writeText(texto);
     } catch {
       // Sem permissão de área de transferência (http): deixa selecionar à mão
-      prompt("Copie a chave PIX:", c.chavePix ?? "");
+      prompt("Copie:", texto);
     }
-    setCopiada(c.id);
-    setTimeout(() => setCopiada((x) => (x === c.id ? "" : x)), 2500);
+    setCopiada(marca);
+    setTimeout(() => setCopiada((x) => (x === marca ? "" : x)), 2500);
   };
+  const copiarChave = (c: ContaTela) => copiarTexto(c.id, c.chavePix ?? "");
+  /** Chave PIX e código do boleto, para pagar direto do painel */
+  const codigosDe = (c: ContaTela) => (
+    <>
+      {c.chavePix && <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />}
+      {c.codigoBoleto && (
+        <ChavePix
+          rotulo="Boleto"
+          chave={c.codigoBoleto}
+          copiada={copiada === `${c.id}-boleto`}
+          aoCopiar={() => copiarTexto(`${c.id}-boleto`, c.codigoBoleto ?? "")}
+        />
+      )}
+    </>
+  );
 
   const reagendar = async () => {
     if (!reagendando) return;
@@ -616,35 +682,21 @@ export function Contas({
               fica paga no mês dela.
             </p>
           )}
-          {!form.id && sugestoes && (
-            <>
-              <datalist id="fin-fornecedores">
-                {sugestoes.porFornecedor.map((x) => (
-                  <option key={x.fornecedor} value={x.fornecedor} />
-                ))}
-              </datalist>
-              <datalist id="fin-descricoes">
-                {sugestoes.porDescricao.map((x) => (
-                  <option key={x.descricao} value={x.descricao} />
-                ))}
-              </datalist>
-            </>
-          )}
           {preenchido && <div className="parcial" style={{ margin: "0 0 10px" }}>{preenchido}</div>}
           <div className="fin-grid">
             <label className="config-campo fin-largo">
               <span>Descrição</span>
               <input
                 value={form.descricao}
-                onChange={(e) => completar("descricao", e.target.value)}
+                onChange={(e) => digitar("descricao", e.target.value)}
                 autoFocus
-                list="fin-descricoes"
+                autoComplete="off"
                 placeholder="ex.: Aluguel loja Centro"
               />
             </label>
             <label className="config-campo">
               <span>Fornecedor</span>
-              <input value={form.fornecedor} onChange={(e) => completar("fornecedor", e.target.value)} list="fin-fornecedores" />
+              <input value={form.fornecedor} onChange={(e) => digitar("fornecedor", e.target.value)} autoComplete="off" />
             </label>
             <label className="config-campo">
               <span>{form.dividir || form.despesaDe ? "Empresa que paga" : "Empresa"}</span>
@@ -657,6 +709,8 @@ export function Contas({
                 ))}
               </select>
             </label>
+            {listaSugestoes("descricao")}
+            {listaSugestoes("fornecedor")}
             <label className="config-campo">
               <span>Categoria</span>
               <select
@@ -733,6 +787,16 @@ export function Contas({
               <label className="config-campo">
                 <span>Chave PIX de quem recebe</span>
                 <input value={form.chavePix} onChange={(e) => campo("chavePix", e.target.value)} placeholder="CPF, CNPJ, telefone, e-mail…" />
+              </label>
+            )}
+            {form.forma === "Boleto" && !pago && (
+              <label className="config-campo fin-largo">
+                <span>Código de barras do boleto (opcional)</span>
+                <input
+                  value={form.codigoBoleto}
+                  onChange={(e) => campo("codigoBoleto", e.target.value)}
+                  placeholder="cole a linha digitável"
+                />
               </label>
             )}
             {!form.id && (
@@ -925,11 +989,11 @@ export function Contas({
                             ))}
                           </span>
                           <span className="fin-sub">
-                            {[c.fornecedor, c.forma].filter(Boolean).join(" · ")}
+                            {[c.fornecedor, c.forma, descreverRateio(c)].filter(Boolean).join(" · ")}
                             {atrasada && <b className="fin-atrasada"> · venceu {dataBr(c.vencimento)}</b>}
                             {reagendadoTexto(c)}
                           </span>
-                          {c.chavePix && <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />}
+                          {codigosDe(c)}
                           {c.observacao && <span className="fin-sub fin-obs">{c.observacao}</span>}
                         </div>
                         <span className="fin-hoje-valor">{brl.format(c.valor)}</span>
@@ -1104,9 +1168,7 @@ export function Contas({
                                 {reagendadoTexto(c)}
                               </div>
                             )}
-                            {c.chavePix && c.status === "aberta" && (
-                              <ChavePix chave={c.chavePix} copiada={copiada === c.id} aoCopiar={() => copiarChave(c)} />
-                            )}
+                            {c.status === "aberta" && codigosDe(c)}
                           </td>
                           {colunaEmpresa && <td className="fin-sub">{nomeEmpresa(c.empresaId)}</td>}
                           <td className="fin-sub">{nomeCategoria(c.categoriaId)}</td>
