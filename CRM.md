@@ -156,8 +156,12 @@ se a ideia é trazer a cliente do site para a loja.
 ## Caixa da loja
 
 `/crm/loja?k=CODIGO` (o mesmo `TV_CODE` da tela de metas). No celular ou
-tablet da loja: buscar a cliente por celular, CPF ou nome; cadastrar na hora
-com o aceite de mensagens; ver saldo; registrar resgate. O resgate aqui só
+tablet da loja, duas abas. **Caixa**: buscar a cliente por celular, CPF ou
+nome; cadastrar na hora com o aceite de mensagens; ver saldo; registrar
+resgate; dar baixa num código de oferta. **Minha loja**: o % de clientes da
+loja com celular (e a posição no ranking das lojas), o informativo de por
+que pedir o celular, e quem dá pra chamar esta semana (cashback vencendo e
+aniversariantes do mês, com botão direto pro WhatsApp). O resgate aqui só
 registra no CRM, o desconto na venda do TOTVS continua sendo lançado pela
 vendedora.
 

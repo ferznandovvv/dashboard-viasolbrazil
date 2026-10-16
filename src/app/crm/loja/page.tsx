@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Ficha {
   id: string;
@@ -39,6 +39,7 @@ export default function CaixaCrm() {
   const [lista, setLista] = useState<Ficha[] | null>(null);
   const [sel, setSel] = useState<Ficha | null>(null);
   const [tela, setTela] = useState<"busca" | "cadastro" | "resgate" | "oferta">("busca");
+  const [aba, setAba] = useState<"caixa" | "loja">("caixa");
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const busca = useRef<HTMLInputElement>(null);
@@ -49,18 +50,21 @@ export default function CaixaCrm() {
     setLoja(p.get("loja") ?? localStorage.getItem("crm_loja") ?? "");
   }, []);
 
-  const api = async <T,>(url: string, corpo?: object): Promise<T> => {
-    const sep = url.includes("?") ? "&" : "?";
-    const r = await fetch(`${url}${sep}k=${encodeURIComponent(k)}`, {
-      method: corpo ? "POST" : "GET",
-      headers: corpo ? { "Content-Type": "application/json" } : undefined,
-      body: corpo ? JSON.stringify(corpo) : undefined,
-      cache: "no-store",
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((j as { erro?: string }).erro ?? `Erro ${r.status}`);
-    return j as T;
-  };
+  const api = useCallback(
+    async <T,>(url: string, corpo?: object): Promise<T> => {
+      const sep = url.includes("?") ? "&" : "?";
+      const r = await fetch(`${url}${sep}k=${encodeURIComponent(k)}`, {
+        method: corpo ? "POST" : "GET",
+        headers: corpo ? { "Content-Type": "application/json" } : undefined,
+        body: corpo ? JSON.stringify(corpo) : undefined,
+        cache: "no-store",
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((j as { erro?: string }).erro ?? `Erro ${r.status}`);
+      return j as T;
+    },
+    [k]
+  );
 
   useEffect(() => {
     if (!k && lojas.length) return;
@@ -122,7 +126,14 @@ export default function CaixaCrm() {
         <button className="link" onClick={() => escolherLoja("")}>trocar loja</button>
       </div>
 
-      {tela === "busca" && (
+      <div className="lj-abas" role="tablist">
+        <button className={aba === "caixa" ? "on" : ""} onClick={() => setAba("caixa")}>Caixa</button>
+        <button className={aba === "loja" ? "on" : ""} onClick={() => setAba("loja")}>Minha loja</button>
+      </div>
+
+      {aba === "loja" && <PainelLoja loja={loja} api={api} />}
+
+      {aba === "caixa" && tela === "busca" && (
         <>
           <input
             ref={busca}
@@ -195,7 +206,7 @@ export default function CaixaCrm() {
         </>
       )}
 
-      {tela === "cadastro" && (
+      {aba === "caixa" && tela === "cadastro" && (
         <Cadastro
           loja={loja}
           nomeInicial={/\d/.test(q) ? "" : q}
@@ -217,7 +228,7 @@ export default function CaixaCrm() {
         />
       )}
 
-      {tela === "oferta" && (
+      {aba === "caixa" && tela === "oferta" && (
         <Oferta
           loja={loja}
           cancelar={() => setTela("busca")}
@@ -237,7 +248,7 @@ export default function CaixaCrm() {
         />
       )}
 
-      {tela === "resgate" && sel && (
+      {aba === "caixa" && tela === "resgate" && sel && (
         <Resgate
           f={sel}
           cancelar={() => setTela("busca")}
@@ -256,6 +267,101 @@ export default function CaixaCrm() {
         />
       )}
     </main>
+  );
+}
+
+interface Painel {
+  loja: string;
+  clientes: number;
+  comTelefone: number;
+  pctTelefone: number;
+  cadastradasSemana: number;
+  ranking: { loja: string; clientes: number; pct: number }[];
+  aniversariantes: { nome: string; telefone: string; dia: string }[];
+  vencendo: { nome: string; telefone: string; valor: number; validade: string }[];
+  comSaldo: number;
+  saldoTotal: number;
+  esperando: number;
+  modoSombra: boolean;
+}
+
+const zap = (tel: string) => `https://wa.me/55${tel.replace(/\D/g, "")}`;
+
+/** Painel da loja: por que o celular importa, como a loja está e quem dá pra chamar hoje. */
+function PainelLoja({ loja, api }: { loja: string; api: <T>(url: string, corpo?: object) => Promise<T> }) {
+  const [p, setP] = useState<Painel | null>(null);
+  const [erro, setErro] = useState("");
+  useEffect(() => {
+    api<Painel>(`/api/crm/loja?painel=${encodeURIComponent(loja)}`).then(setP).catch((e) => setErro(e.message));
+  }, [loja, api]);
+  if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
+  const posicao = p.ranking.findIndex((r) => r.loja === loja) + 1;
+  return (
+    <div>
+      <div className="crm-caixa-ficha">
+        <div className="muted">Clientes da {loja} com celular cadastrado</div>
+        <div className="lj-grande">{p.pctTelefone}%</div>
+        <div className="muted lj-meta">
+          {p.comTelefone} de {p.clientes} clientes. {posicao ? `${posicao}ª de ${p.ranking.length} lojas.` : ""} {p.cadastradasSemana ? `${p.cadastradasSemana} cadastradas por aqui nos últimos 7 dias.` : ""}
+        </div>
+        <div className="lj-ranking">
+          {p.ranking.map((r) => (
+            <div key={r.loja} className={`lj-ranking-linha ${r.loja === loja ? "eu" : ""}`}>
+              <span>{r.loja}</span>
+              <span style={{ textAlign: "right" }}>{r.pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="crm-caixa-ficha lj-info">
+        <div className="crm-caixa-nome">Por que pedir o celular</div>
+        <p>Toda compra de uma cliente cadastrada com celular gera <b>cashback no nome dela</b>, e ela recebe uma mensagem sua no dia seguinte, assinada com o seu nome, lembrando de voltar. Sem o celular, a venda sai como consumidor final: não gera cashback, não lembra ninguém e a cliente não volta por nossa causa.</p>
+        <p>Na hora do caixa: <b>"Me passa seu celular que eu já deixo seu cashback guardado no seu nome?"</b> Aproveita e pergunta o aniversário: no mês dela, ela ganha {"10% de desconto"} e recebe a mensagem sua.</p>
+        <p>Cadastra aqui na aba Caixa (leva 20 segundos) ou direto no TOTVS, tanto faz. O que importa é o celular estar certo, com DDD.</p>
+      </div>
+
+      <div className="crm-caixa-ficha">
+        <div className="crm-caixa-nome">Pra chamar esta semana</div>
+        <div className="muted">
+          {p.comSaldo} clientes da loja com cashback pra usar, {brl.format(p.saldoTotal)} no total.
+          {p.esperando ? ` ${p.esperando} esperando resposta no WhatsApp agora.` : ""}
+          {p.modoSombra ? " As mensagens automáticas ainda não estão saindo; por enquanto, chamar é com você." : ""}
+        </div>
+        {p.vencendo.length > 0 && (
+          <>
+            <div className="muted" style={{ marginTop: 12, fontWeight: 600 }}>Cashback vencendo em até 14 dias</div>
+            <div className="lj-lista">
+              {p.vencendo.map((c) => (
+                <div key={c.nome + c.validade} className="lj-item">
+                  <span>
+                    {c.nome}
+                    <small>{brl.format(c.valor)} até {dataBr(c.validade)}</small>
+                  </span>
+                  {c.telefone ? <a href={zap(c.telefone)} target="_blank" rel="noreferrer">chamar</a> : <small>sem celular</small>}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {p.aniversariantes.length > 0 && (
+          <>
+            <div className="muted" style={{ marginTop: 12, fontWeight: 600 }}>Aniversariantes do mês</div>
+            <div className="lj-lista">
+              {p.aniversariantes.map((c) => (
+                <div key={c.nome + c.dia} className="lj-item">
+                  <span>
+                    {c.nome}
+                    <small>dia {c.dia}</small>
+                  </span>
+                  {c.telefone ? <a href={zap(c.telefone)} target="_blank" rel="noreferrer">chamar</a> : <small>sem celular</small>}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -2,177 +2,315 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ConfigCrm, Modelo, NumeroWhatsapp } from "@/lib/crm/tipos";
-import { type DadosConfig, api } from "./comum";
+import { type DadosConfig, api, brl } from "./comum";
 
-type Secao = "cashback" | "envio" | "numeros" | "modelos" | "backup";
+type Secao = "cashback" | "campanhas" | "envio" | "numeros" | "modelos" | "backup";
 
-/** Regras do cashback, provedor e números, ritmo de envio e textos das campanhas. */
+const SECOES: [Secao, string, string][] = [
+  ["cashback", "Cashback", "Percentual, validade e a regra de uso"],
+  ["campanhas", "Campanhas", "Lembretes, aniversário, reativação"],
+  ["envio", "Envio", "Provedor, modo sombra, horário e ritmo"],
+  ["numeros", "Números", "Um WhatsApp por loja"],
+  ["modelos", "Textos", "O que as mensagens dizem"],
+  ["backup", "Backup", "Cópia da base"],
+];
+
+/** Regras do cashback, campanhas, provedor e números, ritmo de envio e textos. */
 export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) {
   const [d, setD] = useState<DadosConfig | null>(null);
   const [secao, setSecao] = useState<Secao>("cashback");
   const [cfg, setCfg] = useState<ConfigCrm | null>(null);
+  const [salvo, setSalvo] = useState<ConfigCrm | null>(null);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
     const x = await api<DadosConfig>("/api/crm/config");
     setD(x);
     setCfg(x.config);
+    setSalvo(x.config);
   }, []);
   useEffect(() => {
     carregar().catch((e) => setErro(e.message));
   }, [carregar]);
 
-  const salvar = async (parte: Partial<ConfigCrm>, msg = "Salvo.") => {
+  const mudou = Boolean(cfg && salvo && JSON.stringify(cfg) !== JSON.stringify(salvo));
+
+  const salvar = async (parte?: Partial<ConfigCrm>, msg = "Salvo.") => {
+    if (!cfg) return;
     setErro("");
     setAviso("");
+    setSalvando(true);
     try {
-      await api("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "config", config: parte }) });
+      await api("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "config", config: parte ?? cfg }) });
       await carregar();
       await recarregar();
       setAviso(msg);
+      setTimeout(() => setAviso(""), 3000);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setSalvando(false);
     }
   };
 
   if (!d || !cfg) return <div className="empty">{erro || "Carregando…"}</div>;
   const n = (k: keyof ConfigCrm) => (e: React.ChangeEvent<HTMLInputElement>) => setCfg({ ...cfg, [k]: e.target.value === "" ? "" : Number(e.target.value.replace(",", ".")) });
   const t = (k: keyof ConfigCrm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setCfg({ ...cfg, [k]: e.target.value });
+  const b = (k: keyof ConfigCrm) => (e: React.ChangeEvent<HTMLInputElement>) => setCfg({ ...cfg, [k]: e.target.checked });
+
+  // Exemplo vivo da regra, pra ver o efeito do que digitou
+  const exCompra = 300;
+  const exCashback = Math.round(exCompra * (Number(cfg.cashbackPct) || 0)) / 100;
+  const mult = Number(cfg.cashbackMultiploCompra) || 0;
+  const exMinima = mult > 0 ? Math.ceil(exCashback * mult) : null;
+  const exDesconto = mult > 0 ? Math.round(100 / mult) : null;
+  const comSalvar = secao === "cashback" || secao === "campanhas" || secao === "envio" || secao === "backup";
 
   return (
-    <div>
-      <div className="seg" role="group" style={{ marginBottom: 14 }}>
-        {(
-          [
-            ["cashback", "Cashback"],
-            ["envio", "Envio"],
-            ["numeros", "Números"],
-            ["modelos", "Textos"],
-            ["backup", "Backup"],
-          ] as [Secao, string][]
-        ).map(([s, nome]) => (
+    <div className="cfg">
+      <nav className="cfg-menu" aria-label="Seções">
+        {SECOES.map(([s, nome, dica]) => (
           <button key={s} className={secao === s ? "on" : ""} onClick={() => setSecao(s)}>
-            {nome}
+            <b>{nome}</b>
+            <small>{dica}</small>
           </button>
         ))}
-      </div>
+      </nav>
 
-      {secao === "cashback" && (
-        <div className="card">
-          <h2>Regras do cashback</h2>
-          <div className="fin-grid">
-            <label className="config-campo"><span>Percentual sobre a compra (%)</span><input value={cfg.cashbackPct} onChange={n("cashbackPct")} /></label>
-            <label className="config-campo"><span>Validade do crédito (dias)</span><input value={cfg.cashbackValidadeDias} onChange={n("cashbackValidadeDias")} /></label>
-            <label className="config-campo"><span>Compra mínima para gerar (R$)</span><input value={cfg.cashbackCompraMinima} onChange={n("cashbackCompraMinima")} /></label>
-            <label className="config-campo"><span>Saldo mínimo para resgatar (R$)</span><input value={cfg.cashbackResgateMinimo} onChange={n("cashbackResgateMinimo")} /><small>0 = sem mínimo</small></label>
-            <label className="config-campo"><span>A compra precisa ser N vezes o cashback usado</span><input value={cfg.cashbackMultiploCompra} onChange={n("cashbackMultiploCompra")} /><small>3 = o cashback paga no máximo um terço da compra (33% de desconto). 4 = 25%, 5 = 20%. 0 desliga</small></label>
-            <label className="config-campo"><span>Primeiro aviso de vencimento (dias antes)</span><input value={cfg.avisoVencimentoDias} onChange={n("avisoVencimentoDias")} /></label>
-            <label className="config-campo"><span>Último aviso, com urgência (dias antes)</span><input value={cfg.avisoVencimentoUrgenteDias} onChange={n("avisoVencimentoUrgenteDias")} /></label>
-          </div>
-          <label className="fin-check"><input type="checkbox" checked={cfg.cashbackSite} onChange={(e) => setCfg({ ...cfg, cashbackSite: e.target.checked })} /> Compras no site (Shopify) também geram cashback para usar nas lojas</label>
-          <label className="fin-check"><input type="checkbox" checked={cfg.siteNasAutomacoes} onChange={(e) => setCfg({ ...cfg, siteNasAutomacoes: e.target.checked })} /> Clientes que só compraram no site entram nas automações (desligado enquanto o site estiver no Edrone; mensagens avulsas sempre funcionam)</label>
-          <h2 style={{ marginTop: 10 }}>Campanhas automáticas</h2>
-          <div className="fin-grid">
-            <label className="config-campo"><span>Aniversário: o que ela ganha</span><input value={cfg.aniversarioOferta} onChange={t("aniversarioOferta")} placeholder="10% de desconto" /><small>Entra no texto como {"{oferta}"}</small></label>
-            <label className="config-campo"><span>Pós-venda: dias depois da compra</span><input value={cfg.posVendaDias} onChange={n("posVendaDias")} /></label>
-            <label className="config-campo"><span>Reativação: sem comprar há (dias)</span><input value={cfg.reativacaoDias} onChange={n("reativacaoDias")} /></label>
-            <label className="config-campo"><span>Reativação: total gasto mínimo (R$)</span><input value={cfg.reativacaoTicketMinimo} onChange={n("reativacaoTicketMinimo")} /></label>
-            <div className="config-campo fin-largo">
-              <span>Reativação: oferta por faixa de total gasto (vale a maior faixa atingida)</span>
-              {(cfg.reativacaoFaixas ?? []).map((f, i) => (
-                <div key={i} className="crm-inline" style={{ marginBottom: 6 }}>
-                  <span className="muted">a partir de R$</span>
-                  <input className="crm-input" style={{ width: 90 }} value={f.minimo} onChange={(e) => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.map((x, j) => (j === i ? { ...x, minimo: Number(e.target.value) || 0 } : x)) })} />
-                  <span className="muted">ganha</span>
-                  <input className="crm-input" style={{ flex: 1, minWidth: 180 }} value={f.oferta} onChange={(e) => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.map((x, j) => (j === i ? { ...x, oferta: e.target.value } : x)) })} />
-                  <button className="link fin-excluir" onClick={() => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.filter((_, j) => j !== i) })}>remover</button>
-                </div>
-              ))}
-              <button className="link" onClick={() => setCfg({ ...cfg, reativacaoFaixas: [...(cfg.reativacaoFaixas ?? []), { minimo: 0, oferta: "" }] })}>+ faixa</button>
-              <small>A campanha de reativação só manda para quem atinge alguma faixa. Ligue a campanha em Textos quando combinar com as gerentes.</small>
-            </div>
-            <label className="config-campo"><span>Reativação: intervalo entre tentativas (dias)</span><input value={cfg.reativacaoIntervaloDias} onChange={n("reativacaoIntervaloDias")} /></label>
-            <label className="config-campo"><span>Horário em que as automações rodam</span><input type="time" value={cfg.horaAutomacoes} onChange={t("horaAutomacoes")} /><small>Depois da sincronização com o TOTVS (8h30)</small></label>
-          </div>
-          <button className="mini" onClick={() => salvar(cfg)}>Salvar</button>
-        </div>
-      )}
+      <div className="cfg-corpo">
+        {secao === "cashback" && (
+          <>
+            <section className="card cfg-card">
+              <h2>Quanto ela ganha</h2>
+              <div className="cfg-grid">
+                <Campo rotulo="Percentual da compra" sufixo="%" valor={cfg.cashbackPct} onChange={n("cashbackPct")} />
+                <Campo rotulo="Vale por" sufixo="dias" valor={cfg.cashbackValidadeDias} onChange={n("cashbackValidadeDias")} dica="Quem viajou demora a voltar; 90 dá folga" />
+                <Campo rotulo="Compra mínima pra gerar" prefixo="R$" valor={cfg.cashbackCompraMinima} onChange={n("cashbackCompraMinima")} dica="0 = qualquer compra gera" />
+              </div>
+            </section>
 
-      {secao === "envio" && (
-        <div className="card">
-          <h2>Provedor</h2>
-          <div className="fin-grid">
-            <label className="config-campo">
-              <span>Quem manda as mensagens</span>
-              <select value={cfg.provedor} onChange={t("provedor")}>
-                <option value="nenhum">Nenhum (só acumula na fila)</option>
-                <option value="waakg">WA-AKG (não oficial, na máquina da empresa)</option>
-                <option value="cloudapi">WhatsApp Cloud API (oficial da Meta)</option>
-              </select>
-            </label>
-            {cfg.provedor === "waakg" && (
-              <>
-                <label className="config-campo"><span>Endereço da WA-AKG</span><input value={cfg.waakgUrl ?? ""} onChange={t("waakgUrl")} placeholder="http://localhost:3000" /></label>
-                <label className="config-campo"><span>API Key {d.temWaakgApiKey && <span className="ok">(salva)</span>}</span><input value={cfg.waakgApiKey ?? ""} onChange={t("waakgApiKey")} placeholder="cole para trocar" /></label>
-              </>
-            )}
-            {cfg.provedor === "cloudapi" && (
-              <label className="config-campo fin-largo"><span>Token de acesso {d.temCloudApiToken && <span className="ok">(salvo)</span>}</span><input value={cfg.cloudApiToken ?? ""} onChange={t("cloudApiToken")} placeholder="cole para trocar" /></label>
-            )}
-          </div>
-          <div className="config-campo">
-            <span>Webhook (cole na WA-AKG em Webhooks, eventos message.received, message.sent e message.status; ou na Meta como callback)</span>
-            <input readOnly value={d.webhookUrl} onFocus={(e) => e.target.select()} />
-            <small>Se a WA-AKG roda na mesma máquina, pode usar http://localhost:3100 no lugar do domínio.</small>
-          </div>
+            <section className="card cfg-card">
+              <h2>Como ela usa</h2>
+              <div className="cfg-grid">
+                <Campo rotulo="A compra precisa ser N vezes o cashback usado" valor={cfg.cashbackMultiploCompra} onChange={n("cashbackMultiploCompra")} dica="É o que faz ela comprar mais do que o cupom. 0 desliga" />
+                <Campo rotulo="Saldo mínimo pra resgatar" prefixo="R$" valor={cfg.cashbackResgateMinimo} onChange={n("cashbackResgateMinimo")} dica="0 = sem mínimo" />
+              </div>
+              <div className="cfg-exemplo">
+                <b>Na prática:</b> uma compra de {brl.format(exCompra)} gera <b>{brl.format(exCashback)}</b> de cashback.
+                {exMinima !== null ? (
+                  <>
+                    {" "}Pra usar os {brl.format(exCashback)} inteiros, a próxima compra precisa ser de pelo menos <b>{brl.format(exMinima)}</b>: até <b>{exDesconto}% de desconto</b> nessa compra.
+                  </>
+                ) : (
+                  <> Sem regra de múltiplo, ela pode usar o saldo todo em qualquer compra.</>
+                )}
+              </div>
+            </section>
 
-          <h2 style={{ marginTop: 10 }}>Ritmo (o que protege os números)</h2>
-          <div className="fin-grid">
-            <label className="config-campo"><span>Teto de mensagens por número por dia</span><input value={cfg.tetoDiaPorNumero} onChange={n("tetoDiaPorNumero")} /><small>Comece baixo (20) e suba aos poucos</small></label>
-            <label className="config-campo"><span>Intervalo mínimo entre mensagens (segundos)</span><input value={cfg.intervaloMinSeg} onChange={n("intervaloMinSeg")} /></label>
-            <label className="config-campo"><span>Intervalo máximo (segundos)</span><input value={cfg.intervaloMaxSeg} onChange={n("intervaloMaxSeg")} /></label>
-            <label className="config-campo"><span>Campanhas sem resposta até parar marketing</span><input value={cfg.maxSemResposta} onChange={n("maxSemResposta")} /><small>Avisos de cashback continuam</small></label>
-            <label className="config-campo"><span>Manda das (hora)</span><input value={cfg.envioInicio} onChange={n("envioInicio")} /></label>
-            <label className="config-campo"><span>até as (hora)</span><input value={cfg.envioFim} onChange={n("envioFim")} /></label>
-          </div>
-          <div className="config-campo">
-            <span>Dias</span>
-            {["dom", "seg", "ter", "qua", "qui", "sex", "sáb"].map((nome, i) => (
-              <label key={i} className="fin-chip" style={{ opacity: cfg.envioDias.includes(i) ? 1 : 0.45 }}>
-                <input type="checkbox" style={{ display: "none" }} checked={cfg.envioDias.includes(i)} onChange={(e) => setCfg({ ...cfg, envioDias: e.target.checked ? [...cfg.envioDias, i].sort() : cfg.envioDias.filter((x) => x !== i) })} />
-                {nome}
+            <section className="card cfg-card">
+              <h2>Site</h2>
+              <label className="cfg-check">
+                <input type="checkbox" checked={cfg.cashbackSite} onChange={b("cashbackSite")} />
+                <span>
+                  <b>Compra no site também gera cashback pra usar nas lojas</b>
+                  <small>A mensagem avisa qual loja fica na cidade dela</small>
+                </span>
               </label>
-            ))}
-          </div>
-          <div className="fin-grid">
-            <label className="config-campo"><span>Máximo de mensagens por cliente em 30 dias</span><input value={cfg.maxMensagensMes} onChange={n("maxMensagensMes")} /><small>De qualquer campanha. O aviso de cashback da própria compra não conta</small></label>
-          </div>
-          <label className="fin-check"><input type="checkbox" checked={cfg.modoSombra} onChange={(e) => setCfg({ ...cfg, modoSombra: e.target.checked })} /> <b>Modo sombra</b>: as automações geram as mensagens, mas nada é enviado. Leia em Mensagens o que teria saído e desligue quando estiver confortável</label>
-          <label className="fin-check"><input type="checkbox" checked={cfg.pausado} onChange={(e) => setCfg({ ...cfg, pausado: e.target.checked })} /> Pausar todos os envios (a fila continua acumulando)</label>
-          <button className="mini" onClick={() => salvar(cfg)}>Salvar</button>
-        </div>
-      )}
+              <label className="cfg-check">
+                <input type="checkbox" checked={cfg.siteNasAutomacoes} onChange={b("siteNasAutomacoes")} />
+                <span>
+                  <b>Quem só comprou no site entra nas campanhas automáticas</b>
+                  <small>Deixe desligado enquanto o site estiver no Edrone. Mensagem avulsa pra um segmento sempre funciona</small>
+                </span>
+              </label>
+            </section>
+          </>
+        )}
 
-      {secao === "numeros" && <Numeros lojas={d.lojas} numeros={cfg.numeros} provedor={cfg.provedor} salvar={(numeros) => salvar({ numeros })} />}
+        {secao === "campanhas" && (
+          <>
+            <section className="card cfg-card">
+              <h2>Lembretes de vencimento</h2>
+              <div className="cfg-grid">
+                <Campo rotulo="Primeiro aviso" sufixo="dias antes" valor={cfg.avisoVencimentoDias} onChange={n("avisoVencimentoDias")} dica="Leve, oferecendo mandar fotos" />
+                <Campo rotulo="Último aviso" sufixo="dias antes" valor={cfg.avisoVencimentoUrgenteDias} onChange={n("avisoVencimentoUrgenteDias")} dica="Com urgência" />
+              </div>
+            </section>
 
-      {secao === "modelos" && <Modelos d={d} aoMudar={carregar} />}
+            <section className="card cfg-card">
+              <h2>Aniversário</h2>
+              <div className="cfg-grid">
+                <Campo rotulo="O que ela ganha" valor={cfg.aniversarioOferta} onChange={t("aniversarioOferta")} texto dica="Entra no texto como {oferta}; vira um código único no caixa" />
+                <label className="cfg-campo">
+                  <span>Quando mandar</span>
+                  <select value={cfg.aniversarioQuando} onChange={t("aniversarioQuando")}>
+                    <option value="inicio_mes">No começo do mês (ela tem o mês todo)</option>
+                    <option value="dia">No dia do aniversário</option>
+                  </select>
+                </label>
+              </div>
+            </section>
 
-      {secao === "backup" && (
-        <div className="card">
-          <h2>Cópia de segurança</h2>
-          <div className="muted" style={{ marginBottom: 10 }}>A base do CRM fica em dados/crm/base.json. Informe uma pasta (Google Drive, OneDrive) para receber uma cópia por dia, como no financeiro.</div>
-          <label className="config-campo"><span>Pasta de backup</span><input value={cfg.backupDir ?? ""} onChange={t("backupDir")} placeholder="C:\Users\...\Google Drive\Backups" /></label>
-          <div className="config-acoes">
-            <button className="mini" onClick={() => salvar({ backupDir: cfg.backupDir })}>Salvar</button>
+            <section className="card cfg-card">
+              <h2>Reativação</h2>
+              <div className="muted" style={{ marginBottom: 10 }}>Boa cliente que sumiu. Só manda pra quem atinge alguma faixa. A campanha fica desligada em Textos até você combinar com as gerentes.</div>
+              <div className="cfg-grid">
+                <Campo rotulo="Sem comprar há" sufixo="dias" valor={cfg.reativacaoDias} onChange={n("reativacaoDias")} />
+                <Campo rotulo="Total gasto mínimo" prefixo="R$" valor={cfg.reativacaoTicketMinimo} onChange={n("reativacaoTicketMinimo")} />
+                <Campo rotulo="Esperar entre tentativas" sufixo="dias" valor={cfg.reativacaoIntervaloDias} onChange={n("reativacaoIntervaloDias")} />
+              </div>
+              <div className="cfg-campo">
+                <span>Oferta por faixa de total gasto (vale a maior faixa atingida)</span>
+                {(cfg.reativacaoFaixas ?? []).map((f, i) => (
+                  <div key={i} className="cfg-faixa">
+                    <span className="muted">a partir de R$</span>
+                    <input value={f.minimo} onChange={(e) => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.map((x, j) => (j === i ? { ...x, minimo: Number(e.target.value) || 0 } : x)) })} />
+                    <span className="muted">ganha</span>
+                    <input className="larga" value={f.oferta} onChange={(e) => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.map((x, j) => (j === i ? { ...x, oferta: e.target.value } : x)) })} />
+                    <button className="link fin-excluir" onClick={() => setCfg({ ...cfg, reativacaoFaixas: cfg.reativacaoFaixas.filter((_, j) => j !== i) })}>remover</button>
+                  </div>
+                ))}
+                <button className="link" onClick={() => setCfg({ ...cfg, reativacaoFaixas: [...(cfg.reativacaoFaixas ?? []), { minimo: 0, oferta: "" }] })}>+ faixa</button>
+              </div>
+            </section>
+
+            <section className="card cfg-card">
+              <h2>Outras</h2>
+              <div className="cfg-grid">
+                <Campo rotulo="Pós-venda" sufixo="dias depois da compra" valor={cfg.posVendaDias} onChange={n("posVendaDias")} dica="Campanha desligada por padrão" />
+                <label className="cfg-campo">
+                  <span>Hora em que as campanhas do dia são geradas</span>
+                  <input type="time" value={cfg.horaAutomacoes} onChange={t("horaAutomacoes")} />
+                  <small>Depois da sincronização com o TOTVS (8h30) e a Shopify (8h45)</small>
+                </label>
+              </div>
+            </section>
+          </>
+        )}
+
+        {secao === "envio" && (
+          <>
+            <section className={`card cfg-card ${cfg.modoSombra ? "cfg-sombra" : ""}`}>
+              <h2>Modo de operação</h2>
+              <label className="cfg-check">
+                <input type="checkbox" checked={cfg.modoSombra} onChange={b("modoSombra")} />
+                <span>
+                  <b>Modo sombra</b>
+                  <small>As automações geram as mensagens, mas nada é enviado. Leia em Mensagens o que teria saído e desligue quando estiver confortável. Nem a confirmação de SAIR sai.</small>
+                </span>
+              </label>
+              <label className="cfg-check">
+                <input type="checkbox" checked={cfg.pausado} onChange={b("pausado")} />
+                <span>
+                  <b>Pausar todos os envios</b>
+                  <small>Pra uma emergência: a fila continua acumulando, nada sai</small>
+                </span>
+              </label>
+            </section>
+
+            <section className="card cfg-card">
+              <h2>Provedor</h2>
+              <div className="cfg-grid">
+                <label className="cfg-campo">
+                  <span>Quem manda as mensagens</span>
+                  <select value={cfg.provedor} onChange={t("provedor")}>
+                    <option value="nenhum">Nenhum (só acumula na fila)</option>
+                    <option value="waakg">WA-AKG (não oficial, na máquina da empresa)</option>
+                    <option value="cloudapi">WhatsApp Cloud API (oficial da Meta)</option>
+                  </select>
+                </label>
+                {cfg.provedor === "waakg" && (
+                  <>
+                    <Campo rotulo="Endereço da WA-AKG" valor={cfg.waakgUrl ?? ""} onChange={t("waakgUrl")} texto placeholder="http://localhost:3200" />
+                    <Campo rotulo={`API Key${d.temWaakgApiKey ? " (salva)" : ""}`} valor={cfg.waakgApiKey ?? ""} onChange={t("waakgApiKey")} texto placeholder="cole pra trocar" />
+                  </>
+                )}
+                {cfg.provedor === "cloudapi" && <Campo rotulo={`Token de acesso${d.temCloudApiToken ? " (salvo)" : ""}`} valor={cfg.cloudApiToken ?? ""} onChange={t("cloudApiToken")} texto placeholder="cole pra trocar" />}
+              </div>
+              <label className="cfg-campo">
+                <span>Webhook: cole na WA-AKG em Webhooks, com os eventos message.received, message.sent e message.status</span>
+                <input readOnly value={d.webhookUrl} onFocus={(e) => e.target.select()} />
+                <small>Se a WA-AKG roda na mesma máquina, pode usar http://localhost:3100 no lugar do domínio.</small>
+              </label>
+            </section>
+
+            <section className="card cfg-card">
+              <h2>Ritmo (é isso que protege os números)</h2>
+              <div className="cfg-grid">
+                <Campo rotulo="Teto por número por dia" sufixo="mensagens" valor={cfg.tetoDiaPorNumero} onChange={n("tetoDiaPorNumero")} dica="Comece em 20 e suba aos poucos" />
+                <Campo rotulo="Máximo por cliente em 30 dias" sufixo="mensagens" valor={cfg.maxMensagensMes} onChange={n("maxMensagensMes")} dica="De qualquer campanha. O aviso de cashback da própria compra não conta" />
+                <Campo rotulo="Intervalo mínimo entre mensagens" sufixo="seg" valor={cfg.intervaloMinSeg} onChange={n("intervaloMinSeg")} />
+                <Campo rotulo="Intervalo máximo" sufixo="seg" valor={cfg.intervaloMaxSeg} onChange={n("intervaloMaxSeg")} />
+                <Campo rotulo="Campanhas sem resposta até parar marketing" valor={cfg.maxSemResposta} onChange={n("maxSemResposta")} dica="Avisos de cashback continuam" />
+                <div className="cfg-campo">
+                  <span>Horário</span>
+                  <div className="cfg-input">
+                    <em>das</em>
+                    <input value={cfg.envioInicio} onChange={n("envioInicio")} inputMode="numeric" />
+                    <em>h às</em>
+                    <input value={cfg.envioFim} onChange={n("envioFim")} inputMode="numeric" />
+                    <em>h</em>
+                  </div>
+                </div>
+              </div>
+              <div className="cfg-campo">
+                <span>Dias</span>
+                <div>
+                  {["dom", "seg", "ter", "qua", "qui", "sex", "sáb"].map((nome, i) => (
+                    <label key={i} className={`fin-chip ${cfg.envioDias.includes(i) ? "" : "inativa"}`}>
+                      <input type="checkbox" style={{ display: "none" }} checked={cfg.envioDias.includes(i)} onChange={(e) => setCfg({ ...cfg, envioDias: e.target.checked ? [...cfg.envioDias, i].sort() : cfg.envioDias.filter((x) => x !== i) })} />
+                      {nome}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {secao === "numeros" && <Numeros lojas={d.lojas} numeros={cfg.numeros} provedor={cfg.provedor} salvar={(numeros) => salvar({ numeros }, "Números salvos.")} />}
+
+        {secao === "modelos" && <Modelos d={d} aoMudar={carregar} />}
+
+        {secao === "backup" && (
+          <section className="card cfg-card">
+            <h2>Cópia de segurança</h2>
+            <div className="muted" style={{ marginBottom: 10 }}>A base do CRM fica em dados/crm/base.json. Informe uma pasta (Google Drive, OneDrive) pra receber uma cópia por dia, como no financeiro.</div>
+            <Campo rotulo="Pasta de backup" valor={cfg.backupDir ?? ""} onChange={t("backupDir")} texto placeholder="C:\Users\...\Google Drive\Backups" />
             <button className="mini ghost" onClick={async () => { const r = await api<{ backup: string }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "backup" }) }); setAviso(`Cópia: ${r.backup}`); }}>Copiar agora</button>
-          </div>
-        </div>
-      )}
+          </section>
+        )}
 
-      {erro && <div className="login-error">{erro}</div>}
-      {aviso && <div className="crm-aviso">{aviso}</div>}
+        {erro && <div className="login-error">{erro}</div>}
+        {aviso && <div className="crm-aviso">{aviso}</div>}
+
+        {comSalvar && (
+          <div className={`cfg-salvar ${mudou ? "on" : ""}`}>
+            <span className="muted">{mudou ? "Alterações não salvas" : "Tudo salvo"}</span>
+            {mudou && <button className="link" onClick={() => setCfg(salvo)}>descartar</button>}
+            <button className="mini" disabled={!mudou || salvando} onClick={() => salvar()}>
+              {salvando ? "Salvando…" : "Salvar"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function Campo({ rotulo, valor, onChange, prefixo, sufixo, dica, texto, placeholder }: { rotulo: string; valor: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; prefixo?: string; sufixo?: string; dica?: string; texto?: boolean; placeholder?: string }) {
+  return (
+    <label className="cfg-campo">
+      <span>{rotulo}</span>
+      <div className="cfg-input">
+        {prefixo && <em>{prefixo}</em>}
+        <input value={valor} onChange={onChange} inputMode={texto ? undefined : "decimal"} placeholder={placeholder} />
+        {sufixo && <em>{sufixo}</em>}
+      </div>
+      {dica && <small>{dica}</small>}
+    </label>
   );
 }
 
@@ -202,49 +340,54 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
   };
 
   return (
-    <div className="card">
+    <section className="card cfg-card">
       <h2>Um número por loja</h2>
-      <div className="muted" style={{ marginBottom: 10 }}>
+      <div className="muted" style={{ marginBottom: 12 }}>
         {provedor === "waakg"
-          ? "Na WA-AKG, crie uma sessão por loja (escaneando o QR no celular da loja) e cole aqui o sessionId de cada uma. Cada loja manda só para as próprias clientes, pelo próprio número."
+          ? "Na WA-AKG, crie uma sessão por loja (escaneando o QR no celular da loja) e cole aqui o nome da sessão. Cada loja manda só pras próprias clientes, pelo próprio número."
           : provedor === "cloudapi"
             ? "Cole o phone_number_id de cada número cadastrado na Meta."
-            : "Escolha o provedor na aba Envio antes."}
+            : "Escolha o provedor na seção Envio antes."}{" "}
+        A vendedora é quem assina as mensagens quando a venda não tem vendedora identificada (aniversário, lembretes).
       </div>
-      <table className="prod-tbl fin-tbl">
-        <thead>
-          <tr>
-            <th>Loja</th>
-            <th>Sessão / id do número</th>
-            <th>Vendedora que assina</th>
-            <th>Teto/dia</th>
-            <th>Ligado</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {lista.map((n, i) => (
-            <tr key={n.loja}>
-              <td className="fin-desc">{n.loja}</td>
-              <td><input className="fin-pagar-input crm-input" value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
-              <td><input className="crm-input" value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
-              <td><input className="crm-input" style={{ width: 70 }} value={n.tetoDia ?? ""} onChange={(e) => muda(i, { tetoDia: e.target.value ? Number(e.target.value) : undefined })} placeholder="geral" /></td>
-              <td><input type="checkbox" checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
-              <td className="fin-acoes">
-                <button className="link" disabled={!n.sessao} onClick={() => testar(n.loja)}>situação</button>
-                <button className="link" disabled={!n.sessao || !telTeste} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
-                {teste[n.loja] && <div className="fin-sub">{teste[n.loja]}</div>}
-              </td>
+      <div className="tbl-wrap">
+        <table className="prod-tbl fin-tbl cfg-tabela">
+          <thead>
+            <tr>
+              <th>Loja</th>
+              <th>Sessão / id</th>
+              <th>Vendedora que assina</th>
+              <th>Teto/dia</th>
+              <th>Ligado</th>
+              <th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="config-acoes" style={{ marginTop: 12 }}>
-        <button className="mini" onClick={() => salvar(lista)}>Salvar números</button>
-        <label className="config-campo" style={{ margin: 0 }}><span>Seu celular, para o teste</span><input value={telTeste} onChange={(e) => setTelTeste(e.target.value)} placeholder="(16) 99999-8888" style={{ width: 180 }} /></label>
-        <small className="muted">Salve antes de testar. O teste manda na hora, fora da fila.</small>
+          </thead>
+          <tbody>
+            {lista.map((n, i) => (
+              <tr key={n.loja}>
+                <td className="fin-desc">{n.loja}</td>
+                <td><input className="crm-input" value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
+                <td><input className="crm-input" value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
+                <td><input className="crm-input" style={{ width: 70 }} value={n.tetoDia ?? ""} onChange={(e) => muda(i, { tetoDia: e.target.value ? Number(e.target.value) : undefined })} placeholder="geral" /></td>
+                <td><input type="checkbox" checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
+                <td className="fin-acoes">
+                  <button className="link" disabled={!n.sessao} onClick={() => testar(n.loja)}>situação</button>
+                  <button className="link" disabled={!n.sessao || !telTeste} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
+                  {teste[n.loja] && <div className="fin-sub">{teste[n.loja]}</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>
+      <div className="cfg-salvar on" style={{ marginTop: 12 }}>
+        <label className="cfg-campo" style={{ margin: 0, flex: 1 }}>
+          <span>Seu celular, pro teste (sai na hora, fora da fila, mesmo em modo sombra)</span>
+          <input value={telTeste} onChange={(e) => setTelTeste(e.target.value)} placeholder="(16) 99999-8888" style={{ maxWidth: 220 }} />
+        </label>
+        <button className="mini" onClick={() => salvar(lista)}>Salvar números</button>
+      </div>
+    </section>
   );
 }
 
@@ -262,10 +405,10 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
     }
   };
   return (
-    <div className="card">
+    <section className="card cfg-card">
       <h2>Textos das campanhas</h2>
-      <div className="muted" style={{ marginBottom: 10 }}>
-        Cada campanha tem variações; o sistema sorteia uma por mensagem, para o mesmo número não mandar sempre o texto igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{vendedora}"} (quem assina), {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{compraMinima}"} (compra mínima pra usar o valor), {"{oferta}"} e {"{codigo}"} (aniversário e reativação; o código é único por mensagem e mede qual campanha trouxe a cliente), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
+      <div className="muted" style={{ marginBottom: 12 }}>
+        Cada campanha tem variações; o sistema sorteia uma por mensagem, pro mesmo número não mandar sempre igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{vendedora}"} (quem assina), {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{compraMinima}"} (compra mínima pra usar o valor), {"{oferta}"} e {"{codigo}"} (aniversário e reativação; o código é único por mensagem e mede qual campanha trouxe a cliente), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
       </div>
       {d.campanhas
         .filter((c) => c.id !== "avulsa")
@@ -273,22 +416,22 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
           const m = d.modelos.find((x) => x.campanha === c.id) ?? { campanha: c.id, ativo: false, variacoes: [] };
           const editando = edit?.campanha === c.id;
           return (
-            <div key={c.id} className="fin-grupo">
-              <div className="fin-cab">
-                <div>
-                  <span className="fin-grupo-nome">{c.nome}</span>
-                  <span className="muted"> {c.dica}{c.marketing ? " · marketing" : " · aviso"}</span>
+            <div key={c.id} className={`cfg-modelo ${m.ativo ? "" : "off"}`}>
+              <div className="cfg-modelo-cab">
+                <label className="cfg-switch" title={m.ativo ? "Desligar" : "Ligar"}>
+                  <input type="checkbox" checked={m.ativo} onChange={(e) => salvar({ ...m, ativo: e.target.checked })} />
+                  <i />
+                </label>
+                <div style={{ flex: 1 }}>
+                  <b>{c.nome}</b>
+                  <div className="fin-sub">{c.dica} · {c.marketing ? "marketing (conta pro limite de sem resposta)" : "aviso"}</div>
                 </div>
-                <div>
-                  <span className={`badge ${m.ativo ? "on" : ""}`}>{m.ativo ? "ligada" : "desligada"}</span>
-                  <button className="link" style={{ marginLeft: 10 }} onClick={() => setEdit(editando ? null : structuredClone(m))}>{editando ? "fechar" : "editar"}</button>
-                </div>
+                <button className="link" onClick={() => setEdit(editando ? null : structuredClone(m))}>{editando ? "fechar" : "editar textos"}</button>
               </div>
               {!editando ? (
                 m.variacoes.map((v, i) => <div key={i} className="crm-variacao">{v}</div>)
               ) : (
-                <div>
-                  <label className="fin-check"><input type="checkbox" checked={edit!.ativo} onChange={(e) => setEdit({ ...edit!, ativo: e.target.checked })} /> Campanha ligada</label>
+                <div style={{ marginTop: 8 }}>
                   {edit!.variacoes.map((v, i) => (
                     <div key={i} className="crm-inline" style={{ alignItems: "flex-start", marginBottom: 8 }}>
                       <textarea className="crm-textarea" rows={3} value={v} onChange={(e) => setEdit({ ...edit!, variacoes: edit!.variacoes.map((x, j) => (j === i ? e.target.value : x)) })} />
@@ -297,7 +440,7 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
                   ))}
                   <div className="config-acoes">
                     <button className="mini ghost" onClick={() => setEdit({ ...edit!, variacoes: [...edit!.variacoes, ""] })}>+ variação</button>
-                    <button className="mini" onClick={() => salvar(edit!)}>Salvar</button>
+                    <button className="mini" onClick={() => salvar(edit!)}>Salvar textos</button>
                   </div>
                 </div>
               )}
@@ -305,6 +448,6 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
           );
         })}
       {erro && <div className="login-error">{erro}</div>}
-    </div>
+    </section>
   );
 }
