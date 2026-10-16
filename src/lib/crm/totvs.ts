@@ -263,8 +263,26 @@ async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: b
     pessoas.push(...(await buscarPessoasAlteradas(de, ate)));
   }
 
+  // Nome das vendedoras das notas (para assinar as mensagens), só os CPFs ainda desconhecidos
+  const cpfsVend = Array.from(new Set(vendas.map((v) => v.venda.vendedoraCpf).filter((c): c is string => Boolean(c)))).filter((c) => !base.vendedoras?.[c]);
+  const nomesVend = new Map<string, string>();
+  for (let i = 0; i < cpfsVend.length; i += 50) {
+    const lote = cpfsVend.slice(i, i + 50);
+    for (const extra of [{}, { personIsInactive: true }]) {
+      const r = await consultarPessoas({ cpfList: lote, ...extra });
+      for (const p of ((r.json?.items as Obj[] | undefined) ?? [])) {
+        const cpf = str(p, "cpf")?.replace(/\D/g, "").padStart(11, "0");
+        const nome = str(p, "name");
+        if (cpf && nome && !nomesVend.has(cpf)) nomesVend.set(cpf, nome);
+      }
+      if (lote.every((c) => nomesVend.has(c))) break;
+    }
+  }
+
   progresso.etapa = `${de} a ${ate}: gravando`;
   await alterarBase((b) => {
+    b.vendedoras ??= {};
+    for (const [cpf, nome] of nomesVend) b.vendedoras[cpf] = nome;
     const pctAntes = b.config.cashbackPct;
     if (opcoes.creditar === false) b.config.cashbackPct = 0; // carga histórica sem cashback
     const foraDoPerfil = new Set(pessoas.filter((p) => p.codigo && !pessoaValida(p)).map((p) => p.codigo!));

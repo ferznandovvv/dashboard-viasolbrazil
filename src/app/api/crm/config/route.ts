@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
           avisoVencimentoDias: num(c.avisoVencimentoDias, atual.avisoVencimentoDias, 1, 60),
           avisoVencimentoUrgenteDias: num(c.avisoVencimentoUrgenteDias, atual.avisoVencimentoUrgenteDias, 0, 30),
           aniversarioOferta: typeof c.aniversarioOferta === "string" ? c.aniversarioOferta.trim() : atual.aniversarioOferta,
+          aniversarioQuando: c.aniversarioQuando === "dia" || c.aniversarioQuando === "inicio_mes" ? c.aniversarioQuando : atual.aniversarioQuando,
           reativacaoFaixas: Array.isArray(c.reativacaoFaixas)
             ? c.reativacaoFaixas
                 .map((f) => ({ minimo: num(f?.minimo, 0), oferta: String(f?.oferta ?? "").trim() }))
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
           numeros: Array.isArray(c.numeros)
             ? c.numeros
                 .filter((n) => n && typeof n.loja === "string")
-                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined }))
+                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined }))
             : atual.numeros,
           envioInicio: num(c.envioInicio, atual.envioInicio, 0, 23),
           envioFim: num(c.envioFim, atual.envioFim, 1, 24),

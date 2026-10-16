@@ -174,6 +174,8 @@ export interface NumeroWhatsapp {
   ativo: boolean;
   /** Teto diário deste número; sobrepõe o geral */
   tetoDia?: number;
+  /** Quem assina as mensagens dessa loja quando a venda não tem vendedora (ex.: "Carol") */
+  vendedora?: string;
 }
 
 export interface ConfigCrm {
@@ -199,6 +201,8 @@ export interface ConfigCrm {
   avisoVencimentoUrgenteDias: number;
   /** O que a aniversariante ganha (vai no texto como {oferta}) */
   aniversarioOferta: string;
+  /** Quando mandar: no começo do mês (ela tem o mês todo) ou no dia */
+  aniversarioQuando: "inicio_mes" | "dia";
   /** Reativação: pelo total gasto, o que oferecer. Vale a maior faixa atingida */
   reativacaoFaixas: { minimo: number; oferta: string }[];
   /** Dias depois da compra para o pós-venda */
@@ -256,6 +260,8 @@ export interface BaseCrm {
   mensagens: Mensagem[];
   recebidas: Recebida[];
   atendimento: Atendimento[];
+  /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */
+  vendedoras: Record<string, string>;
   modelos: Modelo[];
   config: ConfigCrm;
 }
@@ -291,70 +297,70 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "boas_vindas",
     ativo: false,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol {loja}. Seu cadastro ficou pronto, e a partir de agora cada compra sua rende cashback pra próxima. Qualquer coisa, me chama por aqui.",
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Seu cadastro ficou pronto, e a partir de agora cada compra sua rende cashback pra próxima. Qualquer coisa, me chama por aqui.",
     ],
   },
   {
     campanha: "cashback_creditado",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, tudo bem? Aqui é da Via Sol {loja}. Passando pra avisar que sua compra de ontem rendeu {valor} de cashback. Fica guardado no seu nome até {validade}, é só me avisar quando vier usar. Qualquer dúvida, me chama aqui.",
-      "{primeiro}, obrigada pela visita ontem! Ficou {valor} de cashback no seu nome aqui na Via Sol {loja}, pra usar até {validade}. Quando chegar peça nova e você quiser dar uma olhada, me manda mensagem que eu separo.",
-      "Oi {primeiro}! Sua compra na Via Sol {loja} gerou {valor} de cashback pra você. Vale até {validade}, em qualquer loja nossa. Adorei te atender, volta logo.",
+      "Oi {primeiro}, tudo bem? Aqui é a {vendedora}, da Via Sol {loja} ☀️ Sua compra de ontem rendeu {valor} de cashback, que fica guardado no seu nome até {validade}. Pra usar, a compra precisa ser pelo menos {compraMinima}. Quando quiser vir, me avisa que eu te recebo.",
+      "{primeiro}, obrigada pela visita ontem! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Quando chegar peça nova eu te mando foto, pode ser?",
+      "Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Entrou {valor} de cashback pra você, válido até {validade} em qualquer loja nossa (vale em compra a partir de {compraMinima}). Adorei te atender, volta logo.",
     ],
   },
   {
     campanha: "cashback_site_perto",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol {lojaProxima}. Vi que você comprou no nosso site e queria te contar: essa compra rendeu {valor} de cashback pra usar na loja, até {validade}. A gente fica em {cidade}, então quando quiser experimentar as peças ao vivo é só me chamar que eu te recebo.",
-      "{primeiro}, tudo bem? Sou da Via Sol aqui de {cidade}. Sua compra no site gerou {valor} de cashback, válido até {validade}, e você pode usar direto na nossa loja {lojaProxima}. Se quiser que eu separe alguma coisa do seu tamanho pra você provar, me avisa.",
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {lojaProxima} ☀️ Vi que você comprou no nosso site e queria te contar: essa compra rendeu {valor} de cashback pra usar na loja, até {validade}, em compra a partir de {compraMinima}. A gente fica em {cidade}, então quando quiser experimentar ao vivo é só me chamar.",
+      "{primeiro}, tudo bem? Sou a {vendedora}, da Via Sol aqui de {cidade} 🧡 Sua compra no site gerou {valor} de cashback, válido até {validade} na nossa loja {lojaProxima} (em compra a partir de {compraMinima}). Se quiser, separo peças do seu tamanho pra você provar.",
     ],
   },
   {
     campanha: "cashback_site_longe",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol. Sua compra no site rendeu {valor} de cashback, válido até {validade}, pra usar em qualquer uma das nossas lojas (Franca, Ribeirão Preto, São Paulo, Rio de Janeiro, Belo Horizonte e Praia Grande). Se passar por alguma delas, me avisa que eu deixo tudo preparado.",
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol ☀️ Sua compra no site rendeu {valor} de cashback, válido até {validade} em qualquer loja nossa (Franca, Ribeirão Preto, São Paulo, Rio de Janeiro, Belo Horizonte e Praia Grande), em compra a partir de {compraMinima}. Se passar por alguma delas, me avisa que eu deixo tudo preparado.",
     ],
   },
   {
     campanha: "cashback_vencendo",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol {loja}. Lembra do seu cashback de {valor}? Ele vence em {validade}. Chegaram peças novas essa semana, se quiser eu te mando umas fotos pra você escolher com calma.",
-      "{primeiro}, tudo bem? Passando pra lembrar que você tem {valor} de cashback aqui na Via Sol {loja}, válido até {validade}. Quer que eu separe algo do seu tamanho pra você vir ver?",
+      "Oi {primeiro}, {vendedora} aqui, da Via Sol {loja} ☀️ Lembra do seu cashback de {valor}? Ele vence em {validade}. Chegaram peças novas essa semana, quer que eu te mande umas fotos pra você escolher com calma?",
+      "{primeiro}, tudo bem? Passando pra lembrar que você tem {valor} de cashback aqui na Via Sol {loja}, válido até {validade} 🧡 Quer que eu separe algo do seu tamanho pra você vir ver?",
     ],
   },
   {
     campanha: "cashback_vencendo_urgente",
     ativo: true,
     variacoes: [
-      "{primeiro}, seu cashback de {valor} vence em {validade}, daqui a pouquinho. Não queria que você perdesse. Se não der pra passar na loja, me responde que eu vejo um jeito de te ajudar a usar.",
-      "Oi {primeiro}! Último lembrete: {valor} de cashback no seu nome vencendo dia {validade}. Dá tempo de usar ainda, a loja {loja} está aberta até as 19h. Te espero!",
+      "{primeiro}, é a {vendedora} 🧡 Seu cashback de {valor} vence em {validade}, daqui a pouquinho. Não queria que você perdesse. Se não der pra passar na loja, me responde que eu vejo um jeito de te ajudar a usar.",
+      "Oi {primeiro}! Último lembrete da {vendedora}: {valor} de cashback no seu nome vencendo dia {validade} ☀️ Dá tempo de usar ainda, te espero na Via Sol {loja}.",
     ],
   },
   {
     campanha: "aniversario",
     ativo: true,
     variacoes: [
-      "Feliz aniversário, {primeiro}! Aqui é da Via Sol {loja}. Te desejo um ano cheio de sol e coisa boa. Pra comemorar, esse mês você tem {oferta} em qualquer peça da loja. É só mostrar essa mensagem no caixa.",
-      "{primeiro}, parabéns pelo seu dia! A equipe da Via Sol {loja} te manda um abraço. Durante o mês do seu aniversário você tem {oferta} aqui com a gente. Vem comemorar com uma peça nova.",
+      "{primeiro}, mês do seu aniversário chegou! 🎉 Aqui é a {vendedora}, da Via Sol {loja}. Pra comemorar, durante todo o mês você tem {oferta} em qualquer peça da loja. É só mostrar essa mensagem no caixa. Te espero!",
+      "Oi {primeiro}, é a {vendedora}, da Via Sol {loja} ☀️ Esse mês é o seu, então separei um presente: {oferta} em qualquer compra até o fim do mês. Mostra essa mensagem pra gente no caixa. Feliz aniversário adiantado!",
     ],
   },
   {
     campanha: "pos_venda",
     ativo: false,
     variacoes: [
-      "Oi {primeiro}, tudo bem? Como ficaram as peças da Via Sol {loja}? Se precisar trocar tamanho ou tiver qualquer dúvida, é só me responder aqui.",
+      "Oi {primeiro}, tudo bem? {vendedora} aqui, da Via Sol {loja}. Como ficaram as peças? Se precisar trocar tamanho ou tiver qualquer dúvida, é só me responder.",
     ],
   },
   {
     campanha: "reativacao",
     ativo: false,
     variacoes: [
-      "Oi {primeiro}, aqui é da Via Sol {loja}. Faz um tempinho que você não aparece e eu lembrei de você porque chegou coleção nova. Como você é cliente nossa de verdade, separei {oferta} pra sua próxima compra. Quer que eu mande fotos ou prefere passar aqui?",
-      "{primeiro}, saudades! Via Sol {loja} aqui. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando. Me avisa quando puder vir.",
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Faz um tempinho que você não aparece e eu lembrei de você porque chegou coleção nova. Como você é cliente nossa de verdade, separei {oferta} pra sua próxima compra. Quer que eu mande fotos ou prefere passar aqui?",
+      "{primeiro}, saudades! 🧡 {vendedora}, da Via Sol {loja}. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando. Me avisa quando puder vir.",
     ],
   },
   { campanha: "avulsa", ativo: true, variacoes: [] },
@@ -372,6 +378,7 @@ export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   avisoVencimentoDias: 10,
   avisoVencimentoUrgenteDias: 2,
   aniversarioOferta: "10% de desconto",
+  aniversarioQuando: "inicio_mes",
   reativacaoFaixas: [
     { minimo: 500, oferta: "10% de desconto" },
     { minimo: 1000, oferta: "um presente surpresa" },

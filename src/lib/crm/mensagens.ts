@@ -17,6 +17,30 @@ export interface Variaveis {
   lojaProxima?: string;
   /** Cidade escrita bonito (a do cadastro pode vir sem acento) */
   cidade?: string;
+  /** Primeiro nome de quem assina (vendedora da venda ou da loja) */
+  vendedora?: string;
+  /** Compra mínima para usar o cashback, já formatada */
+  compraMinima?: string;
+}
+
+/** Compra mínima para usar `valor` de cashback, pela regra do múltiplo. */
+export function compraMinimaPara(base: BaseCrm, valor?: number): string {
+  if (valor === undefined) return "";
+  const m = base.config.cashbackMultiploCompra;
+  if (m > 0) return brl(Math.ceil(valor * m));
+  const pct = base.config.cashbackMaxPctDaCompra;
+  if (pct > 0) return brl(Math.ceil((valor * 100) / pct));
+  return "qualquer valor";
+}
+
+/** Quem assina: a vendedora da venda, senão a configurada para a loja, senão a equipe. */
+export function assinatura(base: BaseCrm, loja?: string, vendedoraCpf?: string): string {
+  const nome = vendedoraCpf ? base.vendedoras?.[vendedoraCpf] : undefined;
+  const configurada = base.config.numeros.find((n) => n.loja === loja)?.vendedora;
+  const escolhido = (nome || configurada || "").trim();
+  if (!escolhido) return "equipe";
+  const p = escolhido.split(/\s+/)[0];
+  return p[0].toUpperCase() + p.slice(1).toLowerCase();
 }
 
 export function renderizar(texto: string, cliente: Cliente, loja: string, v: Variaveis = {}): string {
@@ -30,6 +54,11 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{oferta\}/g, v.oferta ?? "")
     .replace(/\{lojaProxima\}/g, v.lojaProxima ?? v.loja ?? loja)
     .replace(/\{cidade\}/g, v.cidade ?? cliente.cidade ?? "")
+    .replace(/\{vendedora\}/g, v.vendedora ?? "equipe")
+    .replace(/\{compraMinima\}/g, v.compraMinima ?? "")
+    // "aqui é a equipe" fica estranho: vira "aqui é da equipe"
+    .replace(/\b([EeÉé]) a equipe\b/g, "$1 da equipe")
+    .replace(/\bSou a equipe\b/g, "Somos a equipe")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -40,7 +69,12 @@ export function textoDaCampanha(base: BaseCrm, campanha: TipoCampanha, cliente: 
   if (!modelo || !modelo.ativo) return null;
   const opcoes = modelo.variacoes.map((t) => t.trim()).filter(Boolean);
   if (!opcoes.length) return null;
-  return renderizar(opcoes[Math.floor(Math.random() * opcoes.length)], cliente, loja, v);
+  const completo: Variaveis = {
+    ...v,
+    vendedora: v.vendedora ?? assinatura(base, v.lojaProxima ?? loja),
+    compraMinima: v.compraMinima ?? compraMinimaPara(base, v.valor),
+  };
+  return renderizar(opcoes[Math.floor(Math.random() * opcoes.length)], cliente, loja, completo);
 }
 
 export const ehMarketing = (campanha: TipoCampanha) => CAMPANHAS.find((c) => c.id === campanha)?.marketing ?? true;

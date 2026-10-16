@@ -28,6 +28,7 @@ function inicial(): BaseCrm {
     mensagens: [],
     recebidas: [],
     atendimento: [],
+    vendedoras: {},
     modelos: structuredClone(MODELOS_PADRAO),
     config: { ...CONFIG_PADRAO, webhookSegredo: randomBytes(12).toString("hex") },
   };
@@ -75,6 +76,15 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
         reativacaoFaixas: CONFIG_PADRAO.reativacaoFaixas,
         reativacaoTicketMinimo: 500,
       });
+      b.modelos = structuredClone(MODELOS_PADRAO);
+    },
+  },
+  {
+    // Mensagens assinadas pela vendedora, aniversário no mês inteiro
+    id: "vendedora-v3",
+    aplicar: (b) => {
+      b.vendedoras ??= {};
+      b.config.aniversarioQuando ??= "inicio_mes";
       b.modelos = structuredClone(MODELOS_PADRAO);
     },
   },

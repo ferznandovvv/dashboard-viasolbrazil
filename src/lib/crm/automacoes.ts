@@ -6,7 +6,7 @@
 import { alterarBase, diasEntre, hojeSp, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
 import { resumir } from "./clientes";
-import { ehMarketing, enfileirar } from "./mensagens";
+import { assinatura, ehMarketing, enfileirar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -85,9 +85,16 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor: mov.valor, validade: mov.validade, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined }, chave: `cb-credito-${mov.id}` }));
       continue;
     }
+    const venda = b.vendas.find((v) => v.id === mov.vendaId);
     tentar(
       "cashback_creditado",
-      enfileirar(b, { cliente: c, campanha: "cashback_creditado", loja: mov.loja, variaveis: { valor: mov.valor, validade: mov.validade }, chave: `cb-credito-${mov.id}` })
+      enfileirar(b, {
+        cliente: c,
+        campanha: "cashback_creditado",
+        loja: mov.loja,
+        variaveis: { valor: mov.valor, validade: mov.validade, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
+        chave: `cb-credito-${mov.id}`,
+      })
     );
   }
 
@@ -111,10 +118,16 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
     }
   }
 
-  // Aniversário do dia
+  // Aniversário: no começo do mês (ela tem o mês todo pra usar) ou no dia
   const mmdd = hoje.slice(5);
+  const mes = hoje.slice(5, 7);
+  const inicioDoMes = b.config.aniversarioQuando === "inicio_mes";
   for (const c of b.clientes) {
-    if (!c.nascimento || c.nascimento.slice(5) !== mmdd || !participa(c.id)) continue;
+    if (!c.nascimento || !participa(c.id)) continue;
+    if (inicioDoMes) {
+      // A partir do dia 1 (a chave por ano garante uma vez só); quem já fez aniversário quando a campanha ligou fica de fora
+      if (c.nascimento.slice(5, 7) !== mes || c.nascimento.slice(8, 10) < hoje.slice(8, 10)) continue;
+    } else if (c.nascimento.slice(5) !== mmdd) continue;
     tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem === "Site" ? lojaNaCidade(c) : c.lojaOrigem, variaveis: { oferta: b.config.aniversarioOferta }, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
   }
 
