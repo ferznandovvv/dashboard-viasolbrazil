@@ -223,85 +223,112 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promi
   return out;
 }
 
+/** Um trecho (até um mês): notas, cadastro das clientes que apareceram, ligação e cashback. */
+async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: boolean; pessoasAlteradas?: boolean }): Promise<void> {
+  const vendas = await buscarVendas(de, ate);
+  progresso.etapa = `${de} a ${ate}: lendo cadastro de ${vendas.length} notas`;
+
+  // Um código que aparece em boa parte das notas não é uma pessoa: é o
+  // "consumidor final" com nome próprio. Desliga a ligação para ele.
+  if (vendas.length >= 30) {
+    const freq = new Map<string, number>();
+    for (const v of vendas) if (v.codigoCliente) freq.set(v.codigoCliente, (freq.get(v.codigoCliente) ?? 0) + 1);
+    for (const [cod, n] of freq) {
+      if (n / vendas.length > 0.15) {
+        console.warn(`[crm] código ${cod} em ${n} de ${vendas.length} notas: tratado como consumidor final`);
+        for (const v of vendas) if (v.codigoCliente === cod) (v.codigoCliente = undefined), (v.venda.codigoClienteTotvs = undefined);
+      }
+    }
+  }
+
+  const codigos = Array.from(new Set(vendas.map((v) => v.codigoCliente).filter((c): c is string => Boolean(c))));
+  const base = await lerBase();
+  const conhecidos = new Set(base.clientes.map((c) => c.codigoTotvs).filter(Boolean));
+  const faltando = codigos.filter((c) => !conhecidos.has(c));
+  // Também revisita, aos poucos, clientes já conhecidas que ficaram sem telefone:
+  // a vendedora pode ter completado o cadastro no TOTVS depois
+  const semTelefone = opcoes.pessoasAlteradas
+    ? base.clientes
+        .filter((c) => c.codigoTotvs && !c.telefone)
+        .sort((a, b) => a.atualizadoEm.localeCompare(b.atualizadoEm))
+        .slice(0, 200)
+        .map((c) => c.codigoTotvs!)
+    : [];
+  const pessoas = faltando.length || semTelefone.length ? await buscarPessoasPorCodigo([...faltando, ...semTelefone]) : [];
+  if (opcoes.pessoasAlteradas) {
+    progresso.etapa = "cadastros alterados no período";
+    pessoas.push(...(await buscarPessoasAlteradas(de, ate)));
+  }
+
+  progresso.etapa = `${de} a ${ate}: gravando`;
+  await alterarBase((b) => {
+    const pctAntes = b.config.cashbackPct;
+    if (opcoes.creditar === false) b.config.cashbackPct = 0; // carga histórica sem cashback
+    const foraDoPerfil = new Set(pessoas.filter((p) => p.codigo && !pessoaValida(p)).map((p) => p.codigo!));
+    for (const p of pessoas) {
+      if (!pessoaValida(p)) continue;
+      const { nova } = salvarCliente(b, { nome: p.nome!, telefone: p.telefone, cpf: p.cpf, email: p.email, nascimento: p.nascimento, codigoTotvs: p.codigo }, "totvs");
+      if (nova) progresso.clientesNovos++;
+      else progresso.clientesAtualizados++;
+    }
+    for (const { venda, codigoCliente } of vendas) {
+      // Fornecedor ou cadastro genérico que apareceu numa nota: a venda fica sem cliente
+      if (codigoCliente && foraDoPerfil.has(codigoCliente)) venda.codigoClienteTotvs = undefined;
+      const c =
+        (codigoCliente && !foraDoPerfil.has(codigoCliente) && b.clientes.find((x) => x.codigoTotvs === codigoCliente)) ||
+        (venda.cpfNaNota && b.clientes.find((x) => x.cpf === venda.cpfNaNota)) ||
+        undefined;
+      if (c) {
+        venda.clienteId = c.id;
+        c.lojaOrigem ??= venda.loja;
+      }
+      if (registrarVenda(b, venda)) progresso.vendasNovas++;
+    }
+    conciliarVendas(b);
+    b.config.cashbackPct = pctAntes;
+    b.config.ultimaSincTotvs = new Date().toISOString();
+    b.config.ultimaSincTotvsResultado = `${de} a ${ate}: ${progresso.vendasNovas} vendas novas, ${progresso.clientesNovos} clientes novos`;
+    if (!b.config.sincVendasDesde || de < b.config.sincVendasDesde) b.config.sincVendasDesde = de;
+  });
+}
+
+/** Quebra o período em pedaços de até um mês: a API limita a janela e assim o progresso fica visível e vai sendo salvo. */
+function trechos(de: string, ate: string): { de: string; ate: string }[] {
+  const out: { de: string; ate: string }[] = [];
+  let ini = de;
+  while (ini <= ate) {
+    const [a, m] = ini.split("-").map(Number);
+    const fimMes = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
+    out.push({ de: ini, ate: fimMes < ate ? fimMes : ate });
+    ini = somarDias(fimMes, 1);
+  }
+  return out;
+}
+
 /**
- * Sincroniza um período: vendas, depois o cadastro das clientes que
- * apareceram, depois liga uma coisa à outra e credita o cashback.
- * `creditar=false` para a carga histórica, que não deve gerar cashback antigo.
+ * Sincroniza um período, mês a mês. `creditar=false` para a carga histórica,
+ * que não deve gerar cashback antigo. Vai do mais recente para o mais antigo,
+ * para a base útil aparecer primeiro.
  */
 export async function sincronizar(de: string, ate: string, opcoes: { creditar?: boolean; pessoasAlteradas?: boolean } = {}): Promise<typeof progresso> {
   if (!totvsConfigured()) throw new Error("TOTVS não está configurado (veja /configurar).");
   if (progresso.rodando) throw new Error("Já tem uma sincronização rodando.");
   Object.assign(progresso, { rodando: true, etapa: "buscando notas", inicio: Date.now(), vendasNovas: 0, clientesNovos: 0, clientesAtualizados: 0, erro: undefined, fim: undefined });
   try {
-    const vendas = await buscarVendas(de, ate);
-    progresso.etapa = `lendo cadastro de ${vendas.length} notas`;
-
-    // Um código que aparece em boa parte das notas não é uma pessoa: é o
-    // "consumidor final" com nome próprio. Desliga a ligação para ele.
-    if (vendas.length >= 30) {
-      const freq = new Map<string, number>();
-      for (const v of vendas) if (v.codigoCliente) freq.set(v.codigoCliente, (freq.get(v.codigoCliente) ?? 0) + 1);
-      for (const [cod, n] of freq) {
-        if (n / vendas.length > 0.15) {
-          console.warn(`[crm] código ${cod} em ${n} de ${vendas.length} notas: tratado como consumidor final`);
-          for (const v of vendas) if (v.codigoCliente === cod) (v.codigoCliente = undefined), (v.venda.codigoClienteTotvs = undefined);
-        }
-      }
+    const partes = trechos(de, ate).reverse();
+    for (let i = 0; i < partes.length; i++) {
+      progresso.etapa = `mês ${i + 1} de ${partes.length} (${partes[i].de} a ${partes[i].ate}): buscando notas`;
+      await sincronizarTrecho(partes[i].de, partes[i].ate, opcoes);
     }
-
-    const codigos = Array.from(new Set(vendas.map((v) => v.codigoCliente).filter((c): c is string => Boolean(c))));
-    const base = await lerBase();
-    const conhecidos = new Set(base.clientes.map((c) => c.codigoTotvs).filter(Boolean));
-    const faltando = codigos.filter((c) => !conhecidos.has(c));
-    // Também revisita, aos poucos, clientes já conhecidas que ficaram sem telefone:
-    // a vendedora pode ter completado o cadastro no TOTVS depois
-    const semTelefone = base.clientes
-      .filter((c) => c.codigoTotvs && !c.telefone)
-      .sort((a, b) => a.atualizadoEm.localeCompare(b.atualizadoEm))
-      .slice(0, 200)
-      .map((c) => c.codigoTotvs!);
-    const pessoas = faltando.length || semTelefone.length ? await buscarPessoasPorCodigo([...faltando, ...semTelefone]) : [];
-    if (opcoes.pessoasAlteradas) {
-      progresso.etapa = "cadastros alterados no período";
-      pessoas.push(...(await buscarPessoasAlteradas(de, ate)));
-    }
-
-    progresso.etapa = "gravando";
     await alterarBase((b) => {
-      const pctAntes = b.config.cashbackPct;
-      if (opcoes.creditar === false) b.config.cashbackPct = 0; // carga histórica sem cashback
-      const foraDoPerfil = new Set(pessoas.filter((p) => p.codigo && !pessoaValida(p)).map((p) => p.codigo!));
-      for (const p of pessoas) {
-        if (!pessoaValida(p)) continue;
-        const { nova } = salvarCliente(b, { nome: p.nome!, telefone: p.telefone, cpf: p.cpf, email: p.email, nascimento: p.nascimento, codigoTotvs: p.codigo }, "totvs");
-        if (nova) progresso.clientesNovos++;
-        else progresso.clientesAtualizados++;
-      }
-      for (const { venda, codigoCliente } of vendas) {
-        // Fornecedor ou cadastro genérico que apareceu numa nota: a venda fica sem cliente
-        if (codigoCliente && foraDoPerfil.has(codigoCliente)) venda.codigoClienteTotvs = undefined;
-        const c =
-          (codigoCliente && !foraDoPerfil.has(codigoCliente) && b.clientes.find((x) => x.codigoTotvs === codigoCliente)) ||
-          (venda.cpfNaNota && b.clientes.find((x) => x.cpf === venda.cpfNaNota)) ||
-          undefined;
-        if (c) {
-          venda.clienteId = c.id;
-          c.lojaOrigem ??= venda.loja;
-        }
-        if (registrarVenda(b, venda)) progresso.vendasNovas++;
-      }
-      conciliarVendas(b);
-      b.config.cashbackPct = pctAntes;
-      b.config.ultimaSincTotvs = new Date().toISOString();
-      b.config.ultimaSincTotvsResultado = `${de} a ${ate}: ${progresso.vendasNovas} vendas novas, ${progresso.clientesNovos} clientes novos`;
-      if (!b.config.sincVendasDesde || de < b.config.sincVendasDesde) b.config.sincVendasDesde = de;
+      b.config.ultimaSincTotvsResultado = `${de} a ${ate}: ${progresso.vendasNovas} vendas novas, ${progresso.clientesNovos} clientes novos, ${progresso.clientesAtualizados} atualizados`;
     });
     progresso.etapa = "concluído";
   } catch (e) {
     progresso.erro = e instanceof Error ? e.message : String(e);
     progresso.etapa = "falhou";
     await alterarBase((b) => {
-      b.config.ultimaSincTotvsResultado = `falhou: ${progresso.erro}`;
+      b.config.ultimaSincTotvsResultado = `falhou (${progresso.vendasNovas} vendas já salvas): ${progresso.erro}`;
     });
   } finally {
     progresso.rodando = false;

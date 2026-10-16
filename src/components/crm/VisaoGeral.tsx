@@ -145,6 +145,8 @@ function CardFonte({ titulo, fonte, rota, dicaVazia, ocupado, acao }: { titulo: 
               <>
                 Sincronizando: {p.etapa}… ({p.vendasNovas} vendas, {p.clientesNovos} clientes novos)
               </>
+            ) : fonte.resultado?.startsWith("falhou") ? (
+              <span className="fin-status vencida">{fonte.resultado}</span>
             ) : fonte.ultima ? (
               <>
                 Última sincronização {dataHora(fonte.ultima)}. {fonte.resultado}
