@@ -1033,3 +1033,7 @@ th.num { text-align: right; }
 .lj-info { font-size: 14px; line-height: 1.55; }
 .lj-info p { margin: 8px 0; }
 .lj-info b { color: var(--brand); }
+
+.cfg-copiavel { margin: 6px 0 10px; }
+.cfg-copiavel small { display: block; margin-bottom: 3px; font-size: 11.5px; color: var(--text-muted); }
+.cfg-copiavel input { font-size: 12.5px; }

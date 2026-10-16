@@ -229,11 +229,12 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
                 )}
                 {cfg.provedor === "cloudapi" && <Campo rotulo={`Token de acesso${d.temCloudApiToken ? " (salvo)" : ""}`} valor={cfg.cloudApiToken ?? ""} onChange={t("cloudApiToken")} texto placeholder="cole pra trocar" />}
               </div>
-              <label className="cfg-campo">
+              <div className="cfg-campo">
                 <span>Webhook: cole na WA-AKG em Webhooks, com os eventos message.received, message.sent e message.status</span>
-                <input readOnly value={d.webhookUrl} onFocus={(e) => e.target.select()} />
-                <small>Se a WA-AKG roda na mesma máquina, pode usar http://localhost:3100 no lugar do domínio.</small>
-              </label>
+                <Copiavel rotulo="WA-AKG na mesma máquina do painel (use este)" valor={d.webhookUrl.replace(/^https?:\/\/[^/]+/, "http://localhost:3100")} />
+                <Copiavel rotulo="WA-AKG em outra máquina" valor={d.webhookUrl} />
+                <small>O código no fim (t=…) é o segredo que autentica; sem ele a rota recusa.</small>
+              </div>
             </section>
 
             <section className="card cfg-card">
@@ -295,6 +296,32 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Copiavel({ rotulo, valor }: { rotulo: string; valor: string }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <div className="cfg-copiavel">
+      <small>{rotulo}</small>
+      <div className="cfg-input">
+        <input readOnly value={valor} onFocus={(e) => e.target.select()} />
+        <button
+          className="mini ghost"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(valor);
+              setOk(true);
+              setTimeout(() => setOk(false), 1500);
+            } catch {
+              /* sem clipboard: a pessoa seleciona e copia */
+            }
+          }}
+        >
+          {ok ? "copiado" : "copiar"}
+        </button>
       </div>
     </div>
   );
