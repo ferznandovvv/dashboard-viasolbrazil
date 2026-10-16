@@ -213,8 +213,9 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     }
   });
 
-  // Confirma o opt-out com uma mensagem só, fora da fila (é resposta, não campanha)
-  if (feito === "opt-out") {
+  // Confirma o opt-out com uma mensagem só, fora da fila (é resposta, não campanha).
+  // Em modo sombra ou pausado, nem isso sai.
+  if (feito === "opt-out" && !base.config.modoSombra && !base.config.pausado) {
     const adaptador = adaptadorDe(base.config);
     if (adaptador) void adaptador.enviarTexto(ev.sessao, ev.telefone, "Tudo bem, não mandamos mais mensagens por aqui. Se mudar de ideia, é só chamar a gente.");
   }
