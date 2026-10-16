@@ -10,12 +10,28 @@ import { formatarTelefone, normalizarTelefone } from "@/lib/crm/telefone";
 
 export const dynamic = "force-dynamic";
 
-/** O caixa da loja entra com o mesmo código da tela de metas (TV_CODE). */
+/** Mesmo hash do middleware: o cookie do login do painel também vale aqui. */
+function cookieEsperado(senha: string): string {
+  let h = 0x811c9dc5;
+  const t = `viasol:${senha}`;
+  for (let i = 0; i < t.length; i++) {
+    h ^= t.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16);
+}
+
+/**
+ * O caixa da loja entra de dois jeitos: com o código da tela de metas (TV_CODE)
+ * na URL, no celular da loja; ou logado no painel, no computador.
+ */
 function autorizado(req: NextRequest): boolean {
+  const senha = env("DASHBOARD_PASSWORD");
   const codigo = env("TV_CODE");
-  // Sem senha no painel nem código configurado, fica aberto (igual às outras telas)
-  if (!env("DASHBOARD_PASSWORD") && !codigo) return true;
-  return Boolean(codigo) && req.nextUrl.searchParams.get("k") === codigo;
+  if (!senha && !codigo) return true;
+  if (codigo && req.nextUrl.searchParams.get("k") === codigo) return true;
+  if (senha && req.cookies.get("vs_auth")?.value === cookieEsperado(senha)) return true;
+  return false;
 }
 
 function fichaCurta(base: Awaited<ReturnType<typeof lerBase>>, id: string) {
