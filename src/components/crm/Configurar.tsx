@@ -145,6 +145,10 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
               </label>
             ))}
           </div>
+          <div className="fin-grid">
+            <label className="config-campo"><span>Máximo de mensagens por cliente em 30 dias</span><input value={cfg.maxMensagensMes} onChange={n("maxMensagensMes")} /><small>De qualquer campanha. O aviso de cashback da própria compra não conta</small></label>
+          </div>
+          <label className="fin-check"><input type="checkbox" checked={cfg.modoSombra} onChange={(e) => setCfg({ ...cfg, modoSombra: e.target.checked })} /> <b>Modo sombra</b>: as automações geram as mensagens, mas nada é enviado. Leia em Mensagens o que teria saído e desligue quando estiver confortável</label>
           <label className="fin-check"><input type="checkbox" checked={cfg.pausado} onChange={(e) => setCfg({ ...cfg, pausado: e.target.checked })} /> Pausar todos os envios (a fila continua acumulando)</label>
           <button className="mini" onClick={() => salvar(cfg)}>Salvar</button>
         </div>
@@ -173,7 +177,7 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
 }
 
 function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numeros: NumeroWhatsapp[]; provedor: string; salvar: (n: NumeroWhatsapp[]) => Promise<void> }) {
-  const [lista, setLista] = useState<NumeroWhatsapp[]>(() => lojas.map((l) => numeros.find((n) => n.loja === l) ?? { loja: l, sessao: "", ativo: false }));
+  const [lista, setLista] = useState<NumeroWhatsapp[]>(() => lojas.filter((l) => l !== "Site").map((l) => numeros.find((n) => n.loja === l) ?? { loja: l, sessao: "", ativo: false }));
   const [teste, setTeste] = useState<Record<string, string>>({});
   const [telTeste, setTelTeste] = useState("");
   const muda = (i: number, p: Partial<NumeroWhatsapp>) => setLista(lista.map((n, j) => (j === i ? { ...n, ...p } : n)));
@@ -212,6 +216,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
           <tr>
             <th>Loja</th>
             <th>Sessão / id do número</th>
+            <th>Vendedora que assina</th>
             <th>Teto/dia</th>
             <th>Ligado</th>
             <th></th>
@@ -222,6 +227,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
             <tr key={n.loja}>
               <td className="fin-desc">{n.loja}</td>
               <td><input className="fin-pagar-input crm-input" value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
+              <td><input className="crm-input" value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
               <td><input className="crm-input" style={{ width: 70 }} value={n.tetoDia ?? ""} onChange={(e) => muda(i, { tetoDia: e.target.value ? Number(e.target.value) : undefined })} placeholder="geral" /></td>
               <td><input type="checkbox" checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
               <td className="fin-acoes">
@@ -259,7 +265,7 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
     <div className="card">
       <h2>Textos das campanhas</h2>
       <div className="muted" style={{ marginBottom: 10 }}>
-        Cada campanha tem variações; o sistema sorteia uma por mensagem, para o mesmo número não mandar sempre o texto igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{codigo}"}, {"{oferta}"} (aniversário e reativação), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
+        Cada campanha tem variações; o sistema sorteia uma por mensagem, para o mesmo número não mandar sempre o texto igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{vendedora}"} (quem assina), {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{compraMinima}"} (compra mínima pra usar o valor), {"{oferta}"} e {"{codigo}"} (aniversário e reativação; o código é único por mensagem e mede qual campanha trouxe a cliente), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
       </div>
       {d.campanhas
         .filter((c) => c.id !== "avulsa")

@@ -89,6 +89,15 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Começa em modo sombra e com limite de 2 mensagens por cliente por mês
+    id: "sombra-limite",
+    aplicar: (b) => {
+      b.config.modoSombra ??= true;
+      b.config.maxMensagensMes ??= 2;
+      b.modelos = structuredClone(MODELOS_PADRAO);
+    },
+  },
+  {
     // Todo mundo que compra aceita contato: quem entrou antes dessa regra ganha o aceite.
     // Telefone que não é telefone sai. Funcionária identificada pelo nome não recebe mensagem.
     id: "aceite-geral",

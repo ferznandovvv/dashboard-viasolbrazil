@@ -951,3 +951,10 @@ th.num { text-align: right; }
 .fin-sugestao:hover { border-color: var(--brand); color: var(--text-primary); }
 .fin-sugestao b { color: var(--text-primary); }
 .fin-sugestao-empresa { color: var(--brand); font-weight: 600; }
+
+/* Análise */
+.an-barra { display: grid; grid-template-columns: 110px 1fr 36px; align-items: center; gap: 10px; margin: 4px 0; }
+.an-rotulo { font-size: 12px; color: var(--text-secondary); }
+.an-n { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.an-barra .rank-bar { display: block; height: 8px; border-radius: 999px; background: var(--page); border: 1px solid var(--border); overflow: hidden; }
+.an-barra .rank-fill { display: block; height: 100%; background: var(--brand); border-radius: 999px; }

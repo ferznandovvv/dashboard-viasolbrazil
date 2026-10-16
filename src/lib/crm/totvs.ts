@@ -10,7 +10,7 @@
  * resposta crua para acertar o mapeamento com dado real.
  */
 
-import { LOJAS, totvsConfigured, totvsFetch } from "../connectors/totvs";
+import { LOJAS, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
 import { alterarBase, hojeSp, lerBase, somarDias } from "./base";
 import { conciliarVendas, registrarVenda, salvarCliente } from "./clientes";
 import type { Venda } from "./tipos";
@@ -400,5 +400,65 @@ export async function diagnostico(): Promise<Record<string, unknown>> {
     nota: { status: nota.status, json: nota.json ?? nota.text.slice(0, 500) },
     pessoaPorCodigo,
     pessoasAlteradas: { status: alteradas.status, count: alteradas.json?.count, erro: alteradas.status !== 200 ? alteradas.text.slice(0, 300) : undefined },
+  };
+}
+
+/**
+ * Explora a API à procura de um jeito de lançar crédito ou vale no cliente,
+ * sem depender do suporte: endpoint que existe mas não pode ser usado
+ * responde 400/401/405; o que não existe responde 404. Também procura a
+ * documentação Swagger, que costuma listar tudo.
+ */
+export async function explorar(): Promise<Record<string, unknown>> {
+  if (!totvsConfigured()) throw new Error("TOTVS não está configurado.");
+  const base = totvsBaseUrl();
+  const token = await getTotvsToken();
+  const tentar = async (caminho: string, metodo: "GET" | "POST" = "GET", corpo?: unknown) => {
+    const controle = new AbortController();
+    const t = setTimeout(() => controle.abort(), 15000);
+    try {
+      const r = await fetch(`${base}${caminho}`, {
+        method: metodo,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: corpo ? JSON.stringify(corpo) : undefined,
+        cache: "no-store",
+        signal: controle.signal,
+      });
+      const texto = await r.text();
+      return { status: r.status, tipo: r.headers.get("content-type")?.split(";")[0], amostra: texto.slice(0, 220).replace(/\s+/g, " ") };
+    } catch (e) {
+      return { status: 0, erro: e instanceof Error ? e.message : String(e) };
+    } finally {
+      clearTimeout(t);
+    }
+  };
+
+  // 1. Documentação
+  const docs: Record<string, unknown> = {};
+  for (const c of ["/swagger/index.html", "/swagger/v1/swagger.json", "/swagger/v2/swagger.json", "/api/totvsmoda/swagger/v1/swagger.json", "/api/totvsmoda/docs", "/api/totvsmoda/api-docs", "/api/totvsmoda/person/v2/swagger.json", "/api/totvsmoda/fiscal/v2/swagger.json"]) {
+    docs[c] = await tentar(c);
+  }
+
+  // 2. Módulos e endpoints prováveis (busca via POST .../search como os conhecidos)
+  const modulos = ["person", "fiscal", "financial", "sales-order", "sales", "product", "stock", "pdv", "crm", "loyalty", "customer", "discount", "voucher", "credit", "gift-card", "promotion", "price", "commission", "seller", "cash", "accounts-receivable", "payment"];
+  const recursos = ["customer-credits", "credits", "credit", "vouchers", "voucher", "gift-cards", "discounts", "customer-discounts", "promotions", "coupons", "bonus", "loyalty", "balances", "cash-credits", "advance-payments", "receivables", "titles"];
+  const sondas: Record<string, unknown> = {};
+  // Primeiro uma rodada leve por módulo, só pra ver quais existem
+  for (const m of modulos) {
+    sondas[`/api/totvsmoda/${m}/v2`] = await tentar(`/api/totvsmoda/${m}/v2`);
+  }
+  // Depois os recursos de crédito nos módulos que não deram 404
+  const vivos = modulos.filter((m) => (sondas[`/api/totvsmoda/${m}/v2`] as { status: number }).status !== 404);
+  for (const m of vivos.length ? vivos : ["person", "financial", "sales", "pdv"]) {
+    for (const r of recursos) {
+      const c = `/api/totvsmoda/${m}/v2/${r}/search`;
+      const res = await tentar(c, "POST", { page: 1, pageSize: 1 });
+      if (res.status !== 404) sondas[c] = res;
+    }
+  }
+  return {
+    comoLer: "404 = não existe. 400/405 = existe, mas pede outro formato ou método. 401/403 = existe e a credencial não tem permissão. 200 = existe e já responde.",
+    documentacao: docs,
+    sondas,
   };
 }

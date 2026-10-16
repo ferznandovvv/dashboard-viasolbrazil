@@ -38,7 +38,7 @@ export default function CaixaCrm() {
   const [q, setQ] = useState("");
   const [lista, setLista] = useState<Ficha[] | null>(null);
   const [sel, setSel] = useState<Ficha | null>(null);
-  const [tela, setTela] = useState<"busca" | "cadastro" | "resgate">("busca");
+  const [tela, setTela] = useState<"busca" | "cadastro" | "resgate" | "oferta">("busca");
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const busca = useRef<HTMLInputElement>(null);
@@ -156,9 +156,14 @@ export default function CaixaCrm() {
           )}
 
           {!sel && (
-            <button className="crm-btn grande" onClick={() => { setTela("cadastro"); setErro(""); }}>
-              + Cadastrar cliente nova
-            </button>
+            <>
+              <button className="crm-btn grande" onClick={() => { setTela("cadastro"); setErro(""); }}>
+                + Cadastrar cliente nova
+              </button>
+              <button className="crm-btn grande ghost" onClick={() => { setTela("oferta"); setErro(""); }}>
+                Cliente trouxe um código de oferta
+              </button>
+            </>
           )}
 
           {sel && (
@@ -212,6 +217,26 @@ export default function CaixaCrm() {
         />
       )}
 
+      {tela === "oferta" && (
+        <Oferta
+          loja={loja}
+          cancelar={() => setTela("busca")}
+          erro={erro}
+          confirmar={async (codigo, valorCompra) => {
+            setErro("");
+            try {
+              const r = await api<{ codigo: { oferta: string; campanha?: string }; cliente: Ficha }>("/api/crm/loja", { acao: "usar-oferta", codigo, loja, valorCompra });
+              setSel(r.cliente);
+              setQ(r.cliente.telefone || r.cliente.nome);
+              setTela("busca");
+              setAviso(`Código válido: ${r.codigo.oferta} para ${r.cliente.nome}. Aplique na venda; o código já foi dado como usado.`);
+            } catch (e) {
+              setErro(e instanceof Error ? e.message : "Erro");
+            }
+          }}
+        />
+      )}
+
       {tela === "resgate" && sel && (
         <Resgate
           f={sel}
@@ -256,6 +281,27 @@ function Cadastro({ loja, nomeInicial, telInicial, salvar, cancelar, erro }: { l
       <div className="crm-caixa-acoes">
         <button className="crm-btn" disabled={ocupado || !nome.trim() || !tel.trim()} onClick={async () => { setOcupado(true); await salvar({ nome, telefone: tel, nascimento: nasc || undefined, cpf: cpf || undefined, optIn }); setOcupado(false); }}>
           Salvar
+        </button>
+        <button className="crm-btn ghost" onClick={cancelar}>Voltar</button>
+      </div>
+    </div>
+  );
+}
+
+function Oferta({ loja, confirmar, cancelar, erro }: { loja: string; confirmar: (codigo: string, valorCompra?: number) => Promise<void>; cancelar: () => void; erro: string }) {
+  const [codigo, setCodigo] = useState("");
+  const [compra, setCompra] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  return (
+    <div className="crm-caixa-ficha">
+      <div className="crm-caixa-nome">Código de oferta na {loja}</div>
+      <div className="muted">Aniversário, reativação e campanhas mandam um código de 6 letras. Digite aqui pra conferir e dar baixa.</div>
+      <label className="crm-campo"><span>Código</span><input value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} autoFocus autoCapitalize="characters" /></label>
+      <label className="crm-campo"><span>Valor da compra (ajuda a medir a campanha)</span><input value={compra} onChange={(e) => setCompra(e.target.value)} inputMode="decimal" placeholder="opcional" /></label>
+      {erro && <div className="login-error">{erro}</div>}
+      <div className="crm-caixa-acoes">
+        <button className="crm-btn" disabled={ocupado || codigo.trim().length < 6} onClick={async () => { setOcupado(true); await confirmar(codigo.trim(), lerValor(compra) || undefined); setOcupado(false); }}>
+          Conferir e usar
         </button>
         <button className="crm-btn ghost" onClick={cancelar}>Voltar</button>
       </div>

@@ -73,16 +73,27 @@ export interface MovimentoCashback {
   por?: string;
 }
 
-/** Código de resgate gerado para a cliente usar no caixa, uma vez só. */
+/**
+ * Código que a cliente mostra no caixa, uma vez só. Pode ser de cashback
+ * (valor) ou de uma oferta de campanha (aniversário, reativação), e guarda
+ * de qual campanha e mensagem veio: é isso que mede o que trouxe a cliente.
+ */
 export interface CodigoResgate {
   codigo: string;
   clienteId: string;
+  /** Cashback a usar (0 quando é oferta) */
   valor: number;
+  /** Oferta da campanha (ex.: "10% de desconto"), quando não é cashback */
+  oferta?: string;
+  campanha?: TipoCampanha;
+  mensagemId?: string;
   criadoEm: string;
   /** YYYY-MM-DD */
   validade: string;
   usadoEm?: string;
   usadoNaLoja?: string;
+  /** Valor da compra em que foi usado, para medir o retorno */
+  compraValor?: number;
 }
 
 export type TipoCampanha =
@@ -237,6 +248,10 @@ export interface ConfigCrm {
   horaAutomacoes: string;
   /** Pausa geral: nada sai da fila */
   pausado: boolean;
+  /** Modo sombra: as automações geram as mensagens, mas nada é enviado; serve para ler o que sairia */
+  modoSombra: boolean;
+  /** Máximo de mensagens por cliente em 30 dias, de qualquer campanha (aviso de cashback da própria compra não conta) */
+  maxMensagensMes: number;
   /** Último dia em que as automações rodaram (YYYY-MM-DD) */
   ultimaAutomacao?: string;
   /** Última sincronização com o TOTVS */
@@ -344,8 +359,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "aniversario",
     ativo: true,
     variacoes: [
-      "{primeiro}, mês do seu aniversário chegou! 🎉 Aqui é a {vendedora}, da Via Sol {loja}. Pra comemorar, durante todo o mês você tem {oferta} em qualquer peça da loja. É só mostrar essa mensagem no caixa. Te espero!",
-      "Oi {primeiro}, é a {vendedora}, da Via Sol {loja} ☀️ Esse mês é o seu, então separei um presente: {oferta} em qualquer compra até o fim do mês. Mostra essa mensagem pra gente no caixa. Feliz aniversário adiantado!",
+      "{primeiro}, mês do seu aniversário chegou! 🎉 Aqui é a {vendedora}, da Via Sol {loja}. Pra comemorar, durante todo o mês você tem {oferta} em qualquer peça da loja. É só falar o código {codigo} no caixa. Te espero!",
+      "Oi {primeiro}, é a {vendedora}, da Via Sol {loja} ☀️ Esse mês é o seu, então separei um presente: {oferta} em qualquer compra até o fim do mês. Seu código é {codigo}, é só mostrar pra gente no caixa. Feliz aniversário adiantado!",
     ],
   },
   {
@@ -359,8 +374,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "reativacao",
     ativo: false,
     variacoes: [
-      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Faz um tempinho que você não aparece e eu lembrei de você porque chegou coleção nova. Como você é cliente nossa de verdade, separei {oferta} pra sua próxima compra. Quer que eu mande fotos ou prefere passar aqui?",
-      "{primeiro}, saudades! 🧡 {vendedora}, da Via Sol {loja}. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando. Me avisa quando puder vir.",
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Faz um tempinho que você não aparece e eu lembrei de você porque chegou coleção nova. Como você é cliente nossa de verdade, separei {oferta} pra sua próxima compra (código {codigo}). Quer que eu mande fotos ou prefere passar aqui?",
+      "{primeiro}, saudades! 🧡 {vendedora}, da Via Sol {loja}. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando, é só falar o código {codigo} no caixa. Me avisa quando puder vir.",
     ],
   },
   { campanha: "avulsa", ativo: true, variacoes: [] },
@@ -398,4 +413,6 @@ export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   maxSemResposta: 2,
   horaAutomacoes: "09:12",
   pausado: false,
+  modoSombra: true,
+  maxMensagensMes: 2,
 };

@@ -112,6 +112,20 @@ export function tetoNaCompra(cfg: BaseCrm["config"], valorCompra: number): numbe
   return null;
 }
 
+/** Marca um código de oferta (aniversário, reativação) como usado numa compra. */
+export function usarOferta(base: BaseCrm, codigo: string, loja: string, compraValor?: number): CodigoResgate {
+  const hoje = hojeSp();
+  const cod = base.codigos.find((c) => c.codigo === codigo.trim().toUpperCase());
+  if (!cod) throw new Error("Código não encontrado.");
+  if (!cod.oferta) throw new Error("Esse código é de cashback, não de oferta.");
+  if (cod.usadoEm) throw new Error("Esse código já foi usado.");
+  if (cod.validade < hoje) throw new Error("Esse código venceu.");
+  cod.usadoEm = new Date().toISOString();
+  cod.usadoNaLoja = loja;
+  cod.compraValor = compraValor;
+  return cod;
+}
+
 const LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sem 0/O e 1/I
 
 export function gerarCodigo(base: BaseCrm): string {
@@ -148,6 +162,7 @@ export function resgatar(base: BaseCrm, pedido: PedidoResgate): MovimentoCashbac
     if (cod.clienteId !== pedido.clienteId) throw new Error("Esse código é de outra cliente.");
     if (cod.usadoEm) throw new Error("Esse código já foi usado.");
     if (cod.validade < hoje) throw new Error("Esse código venceu.");
+    if (cod.oferta && cod.valor === 0) throw new Error(`Esse código é da oferta "${cod.oferta}", não de cashback. Use "Usar código de oferta".`);
     if (valor > cod.valor + 0.009) throw new Error(`Esse código vale R$ ${cod.valor.toFixed(2)}.`);
   } else if (saldo < cfg.cashbackResgateMinimo) {
     throw new Error(`Saldo de R$ ${saldo.toFixed(2)} ainda não atinge o mínimo de R$ ${cfg.cashbackResgateMinimo.toFixed(2)} para resgate.`);

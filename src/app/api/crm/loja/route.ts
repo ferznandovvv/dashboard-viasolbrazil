@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { alterarBase, hojeSp, lerBase } from "@/lib/crm/base";
-import { creditosAbertos, resgatar, saldoDe } from "@/lib/crm/cashback";
+import { creditosAbertos, resgatar, saldoDe, usarOferta } from "@/lib/crm/cashback";
 import { resumir, salvarCliente } from "@/lib/crm/clientes";
 import { enfileirar } from "@/lib/crm/mensagens";
 import { formatarTelefone, normalizarTelefone } from "@/lib/crm/telefone";
@@ -59,7 +59,8 @@ export async function GET(req: NextRequest) {
 type Pedido =
   | { acao: "cadastrar"; nome: string; telefone: string; nascimento?: string; cpf?: string; loja: string; optIn: boolean }
   | { acao: "resgatar"; clienteId: string; valor: number; valorCompra?: number; loja: string; codigo?: string }
-  | { acao: "codigo"; codigo: string };
+  | { acao: "codigo"; codigo: string }
+  | { acao: "usar-oferta"; codigo: string; loja: string; valorCompra?: number };
 
 export async function POST(req: NextRequest) {
   if (!autorizado(req)) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
@@ -72,6 +73,11 @@ export async function POST(req: NextRequest) {
       if (cod.usadoEm) return NextResponse.json({ erro: "Esse código já foi usado." }, { status: 400 });
       if (cod.validade < hojeSp()) return NextResponse.json({ erro: "Esse código venceu." }, { status: 400 });
       return NextResponse.json({ codigo: cod, cliente: fichaCurta(base, cod.clienteId) });
+    }
+    if (p.acao === "usar-oferta") {
+      const r = await alterarBase((b) => usarOferta(b, p.codigo, p.loja, p.valorCompra));
+      const base = await lerBase();
+      return NextResponse.json({ codigo: r, cliente: fichaCurta(base, r.clienteId) });
     }
     if (p.acao === "cadastrar") {
       if (!normalizarTelefone(p.telefone)) return NextResponse.json({ erro: "Telefone inválido. Use DDD + número." }, { status: 400 });

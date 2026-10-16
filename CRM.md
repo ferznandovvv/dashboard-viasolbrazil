@@ -98,6 +98,27 @@ repetido, o adaptador da Cloud API (oficial) está pronto em
 `phone_number_id`. Lembre que fora da janela de 24h a oficial só aceita
 template aprovado, então as campanhas precisariam ser cadastradas na Meta.
 
+## Modo sombra, limite de contato e códigos
+
+O CRM nasce em **modo sombra**: as automações rodam e as mensagens entram
+na fila, mas nada sai. Leia em Mensagens o que teria saído, ajuste textos e
+regras, e desligue em Configurar → Envio quando estiver confortável.
+
+Cada cliente recebe no máximo **2 mensagens em 30 dias**, de qualquer
+campanha (o aviso de cashback da própria compra não conta). Aniversário e
+reativação mandam um **código único de 6 letras** amarrado à campanha; a
+vendedora digita no caixa ("Cliente trouxe um código de oferta") e a aba
+Análise mostra qual campanha trouxe cliente de verdade.
+
+## Análise
+
+A aba **Análise** calcula da base: % de clientes com celular e com
+aniversário, % de vendas com cliente identificado (por loja e por
+vendedora), taxa de recompra e em quantos dias ela acontece (pra calibrar a
+validade do cashback), faixas RFM (Ouro, Prata, Bronze, Nova, Parada) com
+receita de cada uma, resultado por campanha (resposta, SAIR, código usado,
+compra em 14 dias) e o extrato geral do cashback.
+
 ## Atendimento das lojas
 
 A aba **Atendimento** mede, por loja, quantas clientes escreveram, quantas

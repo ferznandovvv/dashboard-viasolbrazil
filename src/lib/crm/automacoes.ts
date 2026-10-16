@@ -128,7 +128,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       // A partir do dia 1 (a chave por ano garante uma vez só); quem já fez aniversário quando a campanha ligou fica de fora
       if (c.nascimento.slice(5, 7) !== mes || c.nascimento.slice(8, 10) < hoje.slice(8, 10)) continue;
     } else if (c.nascimento.slice(5) !== mmdd) continue;
-    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem === "Site" ? lojaNaCidade(c) : c.lojaOrigem, variaveis: { oferta: b.config.aniversarioOferta }, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
+    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem === "Site" ? lojaNaCidade(c) : c.lojaOrigem, variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
   }
 
   // Pós-venda
@@ -157,7 +157,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
     if ((porLoja.get(loja) ?? 0) >= REATIVACOES_POR_LOJA_DIA) continue;
     const oferta = ofertaReativacao(b, x.totalGasto);
     if (!oferta) continue; // sem faixa, sem gancho: não manda
-    const res = enfileirar(b, { cliente: x, campanha: "reativacao", loja, variaveis: { oferta }, chave: `reat-${x.id}-${hoje}` });
+    const res = enfileirar(b, { cliente: x, campanha: "reativacao", loja, variaveis: { oferta }, oferta, chave: `reat-${x.id}-${hoje}` });
     tentar("reativacao", res);
     if (res.mensagem) porLoja.set(loja, (porLoja.get(loja) ?? 0) + 1);
   }

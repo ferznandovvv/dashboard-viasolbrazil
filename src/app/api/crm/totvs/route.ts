@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { diagnostico, progresso, sincronizar } from "@/lib/crm/totvs";
+import { diagnostico, explorar, progresso, sincronizar } from "@/lib/crm/totvs";
 import { hojeSp, somarDias } from "@/lib/crm/base";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /** Andamento da sincronização em curso. */
 export async function GET() {
@@ -12,7 +12,8 @@ export async function GET() {
 
 type Pedido =
   | { acao: "sincronizar"; de?: string; ate?: string; creditar?: boolean; pessoasAlteradas?: boolean }
-  | { acao: "diag" };
+  | { acao: "diag" }
+  | { acao: "explorar" };
 
 /**
  * Dispara a sincronização (roda em segundo plano; a tela acompanha pelo GET)
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
   const p = (await req.json().catch(() => ({}))) as Pedido;
   try {
     if (p.acao === "diag") return NextResponse.json(await diagnostico());
+    if (p.acao === "explorar") return NextResponse.json(await explorar());
     if (p.acao === "sincronizar") {
       const hoje = hojeSp();
       const de = p.de ?? somarDias(hoje, -3);

@@ -49,9 +49,10 @@ export async function GET() {
     shopify: { configurado: shopifyConfigured(), ultima: base.config.ultimaSincShopify, resultado: base.config.ultimaSincShopifyResultado, desde: base.config.sincShopifyDesde, progresso: progressoShopify },
     totvs: { configurado: totvsConfigured(), ultima: base.config.ultimaSincTotvs, resultado: base.config.ultimaSincTotvsResultado, desde: base.config.sincVendasDesde, progresso },
     base: { clientes: base.clientes.length, comTelefone, vendas: base.vendas.length, saldoTotal },
-    fila: { emEspera: fila, enviadasMes, respondidasMes, errosSemana, pausado: base.config.pausado, dentroDaJanela: dentroDaJanela(base), provedor: adaptador?.nome ?? null },
+    fila: { emEspera: fila, enviadasMes, respondidasMes, errosSemana, pausado: base.config.pausado, modoSombra: base.config.modoSombra, dentroDaJanela: dentroDaJanela(base), provedor: adaptador?.nome ?? null },
     numeros,
     segmentos,
     ultimaAutomacao: base.config.ultimaAutomacao,
+    validade: base.config.cashbackValidadeDias,
   });
 }

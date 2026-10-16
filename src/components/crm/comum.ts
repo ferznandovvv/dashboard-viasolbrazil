@@ -26,10 +26,11 @@ export interface Resumo {
   totvs: { configurado: boolean; ultima?: string; resultado?: string; desde?: string; progresso: Progresso };
   shopify: { configurado: boolean; ultima?: string; resultado?: string; desde?: string; progresso: Progresso };
   base: { clientes: number; comTelefone: number; vendas: number; saldoTotal: number };
-  fila: { emEspera: number; enviadasMes: number; respondidasMes: number; errosSemana: number; pausado: boolean; dentroDaJanela: boolean; provedor: string | null };
+  fila: { emEspera: number; enviadasMes: number; respondidasMes: number; errosSemana: number; pausado: boolean; modoSombra: boolean; dentroDaJanela: boolean; provedor: string | null };
   numeros: { loja: string; sessao: string; ativo: boolean; hoje: number; teto: number; situacao: { conectado: boolean; detalhe?: string } | null }[];
   segmentos: { id: string; nome: string; dica: string; total: number }[];
   ultimaAutomacao?: string;
+  validade: number;
 }
 
 export interface Progresso {

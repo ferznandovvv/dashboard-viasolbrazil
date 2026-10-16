@@ -9,8 +9,9 @@ import { Mensagens } from "@/components/crm/Mensagens";
 import { Importar } from "@/components/crm/Importar";
 import { Configurar } from "@/components/crm/Configurar";
 import { Atendimento } from "@/components/crm/Atendimento";
+import { Analise } from "@/components/crm/Analise";
 
-type Aba = "geral" | "clientes" | "mensagens" | "atendimento" | "importar" | "configurar";
+type Aba = "geral" | "clientes" | "mensagens" | "atendimento" | "analise" | "importar" | "configurar";
 
 /** CRM das lojas físicas: clientes, cashback e mensagens de WhatsApp. */
 export default function Crm() {
@@ -69,6 +70,7 @@ export default function Crm() {
                 ["clientes", "Clientes"],
                 ["mensagens", "Mensagens"],
                 ["atendimento", "Atendimento"],
+                ["analise", "Análise"],
                 ["importar", "Importar"],
                 ["configurar", "Configurar"],
               ] as [Aba, string][]
@@ -82,6 +84,7 @@ export default function Crm() {
           {aba === "clientes" && <Clientes r={r} segmentoInicial={segmento} recarregar={carregar} />}
           {aba === "mensagens" && <Mensagens recarregar={carregar} />}
           {aba === "atendimento" && <Atendimento />}
+          {aba === "analise" && <Analise validade={r.validade} />}
           {aba === "importar" && <Importar r={r} recarregar={carregar} />}
           {aba === "configurar" && <Configurar recarregar={carregar} />}
         </>

@@ -45,9 +45,9 @@ export function VisaoGeral({ r, recarregar, irPara }: { r: Resumo; recarregar: (
         <div className={`tile ${r.fila.errosSemana ? "alerta" : ""}`}>
           <div className="label">Envio</div>
           <div className="value" style={{ fontSize: 20 }}>
-            {r.fila.pausado ? "Pausado" : !r.fila.provedor ? "Sem provedor" : r.fila.dentroDaJanela ? "Mandando" : "Fora do horário"}
+            {r.fila.modoSombra ? "Modo sombra" : r.fila.pausado ? "Pausado" : !r.fila.provedor ? "Sem provedor" : r.fila.dentroDaJanela ? "Mandando" : "Fora do horário"}
           </div>
-          <div className="muted">{r.fila.errosSemana ? `${r.fila.errosSemana} erros na semana` : r.fila.provedor ?? "configure na aba Configurar"}</div>
+          <div className="muted">{r.fila.modoSombra ? "as mensagens entram na fila mas nada sai; leia em Mensagens" : r.fila.errosSemana ? `${r.fila.errosSemana} erros na semana` : r.fila.provedor ?? "configure na aba Configurar"}</div>
         </div>
       </div>
 

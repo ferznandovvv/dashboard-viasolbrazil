@@ -3,7 +3,8 @@
  * sempre o mesmo texto do mesmo número) e entrada na fila.
  */
 
-import { brl, dataBr, novoId, primeiroNome } from "./base";
+import { brl, dataBr, novoId, primeiroNome, somarDias, hojeSp } from "./base";
+import { gerarCodigo } from "./cashback";
 import { CAMPANHAS, type BaseCrm, type Cliente, type Mensagem, type TipoCampanha } from "./tipos";
 
 export interface Variaveis {
@@ -98,8 +99,21 @@ export interface PedidoFila {
   chave?: string;
   /** Não mandar antes disto (ISO); padrão agora */
   naoAntesDe?: string;
-  /** Ignora regras de opt-in/marketing (só para teste manual) */
+  /** Ignora regras de opt-in/marketing e do limite mensal (só para envio manual) */
   forcar?: boolean;
+  /** Gera um código de resgate da oferta, amarrado à campanha, e o põe em {codigo} */
+  oferta?: string;
+}
+
+/** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
+const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas"];
+
+/** Mensagens mandadas (ou na fila) para a cliente nos últimos 30 dias, de campanhas que contam. */
+export function mensagensNoMes(base: BaseCrm, clienteId: string): number {
+  const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+  return base.mensagens.filter(
+    (m) => m.clienteId === clienteId && !FORA_DO_LIMITE.includes(m.campanha) && m.criadoEm >= desde && !["cancelada", "erro"].includes(m.status)
+  ).length;
 }
 
 /** Põe na fila. Devolve a mensagem ou o motivo de não ter entrado. */
@@ -110,15 +124,26 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
     if (c.optOut) return { motivo: "pediu para não receber" };
     if (!c.optIn) return { motivo: "sem aceite" };
     if (ehMarketing(p.campanha) && c.semResposta >= base.config.maxSemResposta) return { motivo: "sem resposta nas últimas campanhas" };
+    if (!FORA_DO_LIMITE.includes(p.campanha) && mensagensNoMes(base, c.id) >= base.config.maxMensagensMes) return { motivo: "já recebeu o máximo do mês" };
   }
   if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada")) return { motivo: "já enviada" };
   const lojaRef = p.loja ?? c.lojaOrigem;
   const loja = lojaDeEnvio(base, lojaRef);
   if (!loja) return { motivo: "nenhum número de WhatsApp configurado" };
-  const texto = p.texto?.trim() || textoDaCampanha(base, p.campanha, c, lojaRef ?? loja, p.variaveis);
-  if (!texto) return { motivo: "campanha desligada ou sem texto" };
+  const id = novoId();
+  // Oferta vira um código único: a vendedora digita no caixa e a gente sabe qual campanha trouxe a cliente
+  let codigo: string | undefined;
+  if (p.oferta) {
+    codigo = gerarCodigo(base);
+    base.codigos.push({ codigo, clienteId: c.id, valor: 0, oferta: p.oferta, campanha: p.campanha, mensagemId: id, criadoEm: new Date().toISOString(), validade: somarDias(hojeSp(), 45) });
+  }
+  const texto = p.texto?.trim() || textoDaCampanha(base, p.campanha, c, lojaRef ?? loja, { ...p.variaveis, codigo });
+  if (!texto) {
+    if (codigo) base.codigos.splice(base.codigos.findIndex((x) => x.codigo === codigo), 1);
+    return { motivo: "campanha desligada ou sem texto" };
+  }
   const m: Mensagem = {
-    id: novoId(),
+    id,
     clienteId: c.id,
     telefone: c.telefone,
     campanha: p.campanha,

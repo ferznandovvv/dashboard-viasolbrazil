@@ -166,6 +166,10 @@ export function Importar({ r, recarregar }: { r: Resumo; recarregar: () => Promi
           Mostra uma nota e um cadastro crus, como a API devolve, para conferir os nomes dos campos de telefone, aniversário e código do cliente. Use na primeira vez.
         </div>
         <Diag rota="/api/crm/totvs" />
+        <div className="muted" style={{ margin: "14px 0 8px" }}>
+          <b>Explorar a API:</b> tenta dezenas de caminhos prováveis (crédito de cliente, vale, voucher, desconto, promoção) e procura a documentação Swagger, pra descobrir se dá pra lançar crédito automático no cliente sem perguntar ao suporte. Demora um ou dois minutos.
+        </div>
+        <Diag rota="/api/crm/totvs" acao="explorar" rotulo="Explorar API" />
       </div>
 
       <div className="card">
@@ -179,7 +183,7 @@ export function Importar({ r, recarregar }: { r: Resumo; recarregar: () => Promi
   );
 }
 
-function Diag({ rota }: { rota: string }) {
+function Diag({ rota, acao = "diag", rotulo = "Consultar" }: { rota: string; acao?: string; rotulo?: string }) {
   const [saida, setSaida] = useState("");
   const [ocupado, setOcupado] = useState(false);
   return (
@@ -190,7 +194,7 @@ function Diag({ rota }: { rota: string }) {
         onClick={async () => {
           setOcupado(true);
           try {
-            const r = await api(rota, { method: "POST", body: JSON.stringify({ acao: "diag" }) });
+            const r = await api(rota, { method: "POST", body: JSON.stringify({ acao }) });
             setSaida(JSON.stringify(r, null, 2));
           } catch (e) {
             setSaida(e instanceof Error ? e.message : "Erro");
@@ -199,7 +203,7 @@ function Diag({ rota }: { rota: string }) {
           }
         }}
       >
-        {ocupado ? "Consultando…" : "Consultar"}
+        {ocupado ? "Consultando…" : rotulo}
       </button>
       {saida && <pre className="crm-pre">{saida}</pre>}
     </div>

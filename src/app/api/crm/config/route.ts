@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
           maxSemResposta: num(c.maxSemResposta, atual.maxSemResposta, 1, 20),
           horaAutomacoes: typeof c.horaAutomacoes === "string" && /^\d{2}:\d{2}$/.test(c.horaAutomacoes) ? c.horaAutomacoes : atual.horaAutomacoes,
           pausado: c.pausado !== undefined ? Boolean(c.pausado) : atual.pausado,
+          modoSombra: c.modoSombra !== undefined ? Boolean(c.modoSombra) : atual.modoSombra,
+          maxMensagensMes: num(c.maxMensagensMes, atual.maxMensagensMes, 1, 30),
           backupDir: c.backupDir !== undefined ? c.backupDir.trim() || undefined : atual.backupDir,
         };
         if (nova.intervaloMaxSeg < nova.intervaloMinSeg) nova.intervaloMaxSeg = nova.intervaloMinSeg;

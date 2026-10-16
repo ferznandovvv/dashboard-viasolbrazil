@@ -61,6 +61,7 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
     const base = await lerBase();
     const cfg = base.config;
     if (cfg.pausado) return { enviadas: 0, erros: 0, motivo: "pausado" };
+    if (cfg.modoSombra) return { enviadas: 0, erros: 0, motivo: "modo sombra: nada sai" };
     const adaptador = adaptadorDe(cfg);
     if (!adaptador) return { enviadas: 0, erros: 0, motivo: "sem provedor configurado" };
     if (!ignorarJanela && !dentroDaJanela(base)) return { enviadas: 0, erros: 0, motivo: "fora do horário de envio" };
