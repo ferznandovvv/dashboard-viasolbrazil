@@ -108,7 +108,13 @@ conversas em si, o botão "Abrir conversas" leva à WA-AKG.
 
 ## Shopify (site)
 
-Os pedidos pagos do site entram como vendas da loja **Site**, usando o mesmo
+Só entram pedidos **pagos, não cancelados, sem disputa e sem a análise de
+risco da Shopify mandando investigar ou cancelar**. Como fraude costuma
+entrar como pago e virar estorno dias depois, a sincronização diária olha 45
+dias para trás e remove da base o que deixou de valer, tirando o cashback
+junto se ainda não foi usado.
+
+Os pedidos entram como vendas da loja **Site**, usando o mesmo
 token da Shopify já configurado no painel. A cliente é identificada pelo
 telefone (do cadastro ou do endereço de entrega), com e-mail e id da Shopify
 como apoio, então quem compra no site e na loja vira uma pessoa só.
