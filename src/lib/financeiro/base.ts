@@ -14,6 +14,8 @@ import { CATEGORIAS_PADRAO, type BaseFinanceira } from "./tipos";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "financeiro");
 const ARQUIVO = join(PASTA, "base.json");
+/** Boletos e comprovantes anexados às contas */
+export const PASTA_ANEXOS = join(PASTA, "anexos");
 /** Cópias diárias guardadas na pasta de backup */
 const MANTER_COPIAS = 60;
 /** Entre uma cópia e outra, no máximo isto (a do dia é sobrescrita) */
@@ -98,6 +100,14 @@ export async function copiaDeSeguranca(base: BaseFinanceira, forcar = false): Pr
     const copias = (await readdir(dir)).filter((n) => /^financeiro-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
     for (const velha of copias.slice(0, Math.max(0, copias.length - MANTER_COPIAS))) {
       await rm(join(dir, velha), { force: true });
+    }
+    // Anexos: copia os que ainda não estão lá (nunca mudam depois de enviados)
+    const anexos = await readdir(PASTA_ANEXOS).catch(() => [] as string[]);
+    if (anexos.length) {
+      const destino = join(dir, "anexos");
+      await mkdir(destino, { recursive: true });
+      const ja = new Set(await readdir(destino));
+      for (const a of anexos) if (!ja.has(a)) await copyFile(join(PASTA_ANEXOS, a), join(destino, a));
     }
     return `ok — financeiro-${dia}.json`;
   } catch (e) {

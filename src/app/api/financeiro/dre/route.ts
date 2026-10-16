@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exigir } from "@/lib/financeiro/auth";
 import { receitaDoAno } from "@/lib/financeiro/receita";
+import { pedacos } from "@/lib/financeiro/rateio";
 import { GRUPOS, type Conta, type GrupoDre, type LinhaDre } from "@/lib/financeiro/tipos";
 import { todaySpKey } from "@/lib/types";
 
@@ -21,6 +22,8 @@ export async function GET(req: NextRequest) {
   const ano = Number(sp.get("ano")) || Number(hoje.slice(0, 4));
   const empresaId = sp.get("empresa") ?? "";
   const regime = sp.get("regime") === "caixa" ? "caixa" : "competencia";
+  /** DRE de uma loja só: a venda dela e a parte dela nas contas rateadas */
+  const unidade = sp.get("unidade") ?? "";
 
   // Ano corrente vai até o mês de hoje; anos passados, os 12 meses
   const ultimoMes = ano === Number(hoje.slice(0, 4)) ? Number(hoje.slice(5, 7)) : 12;
@@ -29,7 +32,7 @@ export async function GET(req: NextRequest) {
   const zeros = () => meses.map(() => 0);
 
   const empresas = base.empresas.filter((e) => !empresaId || e.id === empresaId);
-  const unidades = new Set(empresas.flatMap((e) => e.unidades));
+  const unidades = unidade ? new Set([unidade]) : new Set(empresas.flatMap((e) => e.unidades));
 
   // Receita: venda das unidades da(s) empresa(s)
   const receitaAno = await receitaDoAno(ano);
@@ -40,18 +43,25 @@ export async function GET(req: NextRequest) {
     for (const [u, v] of Object.entries(porUnidade)) if (unidades.has(u)) receita[i] += v;
   }
 
-  // Despesas por categoria, no mês do regime escolhido
+  // Despesas por categoria, no mês do regime escolhido. Conta rateada entra
+  // em cada empresa/loja só com a parte que é dela
   const ids = new Set(empresas.map((e) => e.id));
   const porCategoria = new Map<string, number[]>();
+  let semLoja = 0;
   const mesDe = (c: Conta) => (regime === "caixa" ? (c.status === "paga" ? c.pagoEm?.slice(0, 7) : undefined) : c.competencia);
   for (const c of base.contas) {
-    if (!ids.has(c.empresaId)) continue;
     const i = idx.get(mesDe(c) ?? "");
     if (i === undefined) continue;
     const v = c.status === "paga" ? c.valorPago ?? c.valor : c.valor;
-    const linha = porCategoria.get(c.categoriaId) ?? zeros();
-    linha[i] += v;
-    porCategoria.set(c.categoriaId, linha);
+    for (const p of pedacos(c, base)) {
+      if (unidade ? p.unidade !== unidade : !ids.has(p.empresaId)) {
+        if (unidade && !p.unidade && ids.has(p.empresaId)) semLoja += v * p.fracao;
+        continue;
+      }
+      const linha = porCategoria.get(c.categoriaId) ?? zeros();
+      linha[i] += v * p.fracao;
+      porCategoria.set(c.categoriaId, linha);
+    }
   }
 
   const somaVet = (...vs: number[][]) => meses.map((_, i) => vs.reduce((s, v) => s + v[i], 0));
@@ -102,6 +112,8 @@ export async function GET(req: NextRequest) {
     meses,
     linhas,
     avisos: receitaAno.avisos,
+    /** No DRE por loja: despesas da empresa lançadas sem loja, que ficaram de fora */
+    semLoja,
     unidades: Array.from(unidades),
   });
 }

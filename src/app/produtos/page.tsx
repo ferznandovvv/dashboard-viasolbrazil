@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavPrincipal } from "@/components/NavPrincipal";
 import { Produtos } from "@/components/produtos";
 
 /**
@@ -17,9 +17,7 @@ export default function PaginaProdutos() {
             <span className="tag">produtos e estoque</span>
           </div>
         </div>
-        <Link href="/" className="updated">
-          ← voltar para vendas
-        </Link>
+        <NavPrincipal atual="/produtos" />
       </div>
 
       <Produtos />

@@ -5,6 +5,7 @@ import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
 import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
+import { NavPrincipal } from "@/components/NavPrincipal";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli";
@@ -338,6 +339,7 @@ export default function Dashboard() {
             <span className="tag">vendas</span>
           </div>
         </div>
+        <NavPrincipal atual="/" />
         {data && (
           <span className="updated">
             {fmtDay(data.from)} – {fmtDay(data.to)} · atualizado{" "}
@@ -1134,10 +1136,6 @@ export default function Dashboard() {
         </div>
       )}
       <div className="rodape">
-        <a href="/produtos">produtos e estoque</a>
-        <span aria-hidden="true"> · </span>
-        <a href="/financeiro">financeiro</a>
-        <span aria-hidden="true"> · </span>
         <a href="/configurar">configuração</a>
         <span aria-hidden="true"> · </span>
         <a href="/loja">tela das lojas</a>

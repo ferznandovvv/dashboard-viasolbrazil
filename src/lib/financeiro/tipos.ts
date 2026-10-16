@@ -63,6 +63,20 @@ export type UsuarioPublico = Omit<Usuario, "hash" | "salt">;
 
 export const FORMAS = ["Boleto", "PIX", "Cartão de crédito", "Transferência", "Débito automático", "Dinheiro"];
 
+/** Parte de uma conta dividida entre lojas (valor em R$, somando o valor da conta). */
+export interface ParteRateio {
+  unidade: string;
+  valor: number;
+}
+
+export interface Anexo {
+  id: string;
+  /** Nome original do arquivo */
+  nome: string;
+  tipo: string;
+  tamanho: number;
+}
+
 export interface Conta {
   id: string;
   descricao: string;
@@ -80,6 +94,13 @@ export interface Conta {
   /** Liga as parcelas/repetições lançadas juntas */
   lote?: string;
   observacao: string;
+  /**
+   * Lojas que pagam esta conta. Uma loja só = conta daquela loja; várias =
+   * rateio. Vazio = despesa geral da empresa, sem loja.
+   */
+  rateio?: ParteRateio[];
+  /** Boleto, nota, comprovante de pagamento */
+  anexos?: Anexo[];
   status: "aberta" | "paga";
   pagoEm?: string;
   valorPago?: number;

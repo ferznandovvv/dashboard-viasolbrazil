@@ -11,10 +11,12 @@ interface Resposta {
   linhas: LinhaDre[];
   avisos: string[];
   unidades: string[];
+  semLoja?: number;
 }
 
-/** Número inteiro com milhar, sem "R$", para caberem 12 meses lado a lado. */
-const num = (v: number) => (Math.round(v) === 0 ? "—" : Math.round(v).toLocaleString("pt-BR"));
+/** Valor em reais, sem centavos, para caberem 12 meses lado a lado. */
+const num = (v: number) =>
+  Math.round(v) === 0 ? "—" : `${v < 0 ? "−" : ""}R$ ${Math.round(Math.abs(v)).toLocaleString("pt-BR")}`;
 const pct = (v: number) => (v === 0 ? "—" : `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
 
 /** DRE do ano, mês a mês, por competência ou por caixa. */
@@ -22,6 +24,7 @@ export function Dre({ cad }: { cad: Cadastros }) {
   const anoAtual = Number(hojeSp().slice(0, 4));
   const [ano, setAno] = useState(anoAtual);
   const [empresa, setEmpresa] = useState("");
+  const [loja, setLoja] = useState("");
   const [regime, setRegime] = useState<"competencia" | "caixa">("competencia");
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -32,14 +35,14 @@ export function Dre({ cad }: { cad: Cadastros }) {
     let vivo = true;
     setCarregando(true);
     setErro("");
-    api<Resposta>(`/api/financeiro/dre?${new URLSearchParams({ ano: String(ano), empresa, regime })}`)
+    api<Resposta>(`/api/financeiro/dre?${new URLSearchParams({ ano: String(ano), empresa, regime, unidade: loja })}`)
       .then((j) => vivo && setDados(j))
       .catch((e) => vivo && setErro(e.message))
       .finally(() => vivo && setCarregando(false));
     return () => {
       vivo = false;
     };
-  }, [ano, empresa, regime]);
+  }, [ano, empresa, regime, loja]);
 
   const alternar = (g: GrupoDre) =>
     setAbertos((a) => {
@@ -66,7 +69,15 @@ export function Dre({ cad }: { cad: Cadastros }) {
             <option key={a}>{a}</option>
           ))}
         </select>
-        {empresas.length > 1 && (
+        <select className="fin-select" value={loja} onChange={(e) => setLoja(e.target.value)}>
+          <option value="">Todas as lojas</option>
+          {cad.unidades.map((u) => (
+            <option key={u} value={u}>
+              Só {u}
+            </option>
+          ))}
+        </select>
+        {empresas.length > 1 && !loja && (
           <select className="fin-select" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
             <option value="">Todas as empresas</option>
             {empresas.map((e) => (
@@ -123,11 +134,11 @@ export function Dre({ cad }: { cad: Cadastros }) {
                         </td>
                         {l.valores.map((v, i) => (
                           <td key={i} className={`n${(l.tipo === "subtotal" || l.tipo === "margem") && v < 0 ? " neg" : ""}`}>
-                            {despesa && v ? `−${num(v)}` : fmt(v)}
+                            {despesa ? num(-v) : fmt(v)}
                           </td>
                         ))}
                         <td className={`n total${(l.tipo === "subtotal" || l.tipo === "margem") && l.total < 0 ? " neg" : ""}`}>
-                          {despesa && l.total ? `−${num(l.total)}` : fmt(l.total)}
+                          {despesa ? num(-l.total) : fmt(l.total)}
                         </td>
                       </tr>
                     </Fragment>
@@ -138,10 +149,17 @@ export function Dre({ cad }: { cad: Cadastros }) {
           </div>
           <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
             {regime === "competencia"
-              ? "Competência: cada despesa entra no mês a que se refere, paga ou não."
-              : "Caixa: só o que já foi pago, no mês do pagamento."}{" "}
+              ? "Competência: cada despesa entra no mês a que ela se refere (o aluguel de outubro conta em outubro), já paga ou não. Mostra se o mês deu lucro."
+              : "Caixa: só o que já saiu do banco, no mês em que foi pago (o aluguel de outubro pago em 5/11 conta em novembro). Mostra o dinheiro que entrou e saiu."}{" "}
             A receita é a venda do mês ({dados.unidades.length ? dados.unidades.join(", ") : "nenhuma loja ligada à empresa"}).
             Clique num grupo para ver as categorias.
+            {loja && (dados.semLoja ?? 0) > 0 && (
+              <>
+                {" "}
+                Despesas lançadas como &quot;Geral (sem loja)&quot; não entram no DRE de uma loja só (
+                {num(dados.semLoja ?? 0)} no ano).
+              </>
+            )}
           </div>
         </div>
       )}

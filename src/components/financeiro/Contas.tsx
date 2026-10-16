@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Conta, UsuarioPublico } from "@/lib/financeiro/tipos";
+import { Agenda } from "./Agenda";
 import { type Cadastros, api, brl, dataBr, hojeSp, lerValor, nomeMesLongo, valorParaCampo } from "./comum";
 
 type ContaTela = Conta & { criadoPorNome: string; pagoPorNome: string };
@@ -14,20 +15,29 @@ interface Resposta {
 }
 
 type Status = "abertas" | "vencidas" | "pagas" | "todas";
+type Vista = "agenda" | "lista";
+const RATEAR = "__ratear";
 
 interface Formulario {
   id?: string;
+  /** conta = a pagar; pago = pagamento já feito (PIX, cartão) */
+  modo: "conta" | "pago";
   descricao: string;
   fornecedor: string;
   empresaId: string;
   categoriaId: string;
   valor: string;
-  vencimento: string;
+  data: string;
   competencia: string;
   forma: string;
   observacao: string;
   repetir: "nao" | "parcelado" | "mensal";
   vezes: string;
+  /** "" = sem loja; nome da loja; ou RATEAR */
+  loja: string;
+  /** No rateio: loja → valor digitado */
+  partes: Record<string, string>;
+  anexos: Conta["anexos"];
 }
 
 const mesAtual = () => hojeSp().slice(0, 7);
@@ -36,20 +46,44 @@ const somarMes = (ym: string, n: number) => {
   const d = new Date(Date.UTC(y, m - 1 + n, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
+const lerVista = (): Vista => {
+  try {
+    return localStorage.getItem("fin-vista") === "lista" ? "lista" : "agenda";
+  } catch {
+    return "agenda";
+  }
+};
 
-/** Contas a pagar: lançar, acompanhar o vencimento e dar baixa. */
+/** Contas a pagar: agenda do mês, lançar (a pagar ou já pago), ratear entre lojas e dar baixa. */
 export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPublico }) {
   const empresasAtivas = cad.empresas.filter((e) => e.ativa);
   const categoriasAtivas = cad.categorias.filter((c) => c.ativa);
+  const [vista, setVista] = useState<Vista>("agenda");
   const [empresa, setEmpresa] = useState("");
   const [status, setStatus] = useState<Status>("abertas");
   const [mes, setMes] = useState(mesAtual());
+  const [dia, setDia] = useState("");
   const [q, setQ] = useState("");
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState("");
   const [form, setForm] = useState<Formulario | null>(null);
+  const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [pagando, setPagando] = useState<{ id: string; pagoEm: string; valor: string } | null>(null);
+  const anexarEm = useRef<string>("");
+  const seletor = useRef<HTMLInputElement>(null);
+
+  useEffect(() => setVista(lerVista()), []);
+  const trocarVista = (v: Vista) => {
+    setVista(v);
+    setDia("");
+    if (v === "agenda" && !mes) setMes(mesAtual());
+    try {
+      localStorage.setItem("fin-vista", v);
+    } catch {
+      /* só conveniência */
+    }
+  };
 
   const carregar = useCallback(async () => {
     const qs = new URLSearchParams({ status, mes, empresa, q });
@@ -68,36 +102,66 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
   const nomeEmpresa = (id: string) => cad.empresas.find((e) => e.id === id)?.nome ?? "—";
   const nomeCategoria = (id: string) => cad.categorias.find((c) => c.id === id)?.nome ?? "—";
+  const donaDaLoja = (u: string) => empresasAtivas.find((e) => e.unidades.includes(u))?.id ?? "";
 
-  const novo = (): Formulario => ({
+  const novo = (modo: Formulario["modo"]): Formulario => ({
+    modo,
     descricao: "",
     fornecedor: "",
     empresaId: empresa || (empresasAtivas.length === 1 ? empresasAtivas[0].id : ""),
     categoriaId: "",
     valor: "",
-    vencimento: hojeSp(),
+    data: dia || hojeSp(),
     competencia: "",
-    forma: "Boleto",
+    forma: modo === "pago" ? "PIX" : "Boleto",
     observacao: "",
     repetir: "nao",
     vezes: "2",
+    loja: "",
+    partes: {},
+    anexos: [],
   });
 
-  const editar = (c: ContaTela) =>
+  const editar = (c: ContaTela) => {
+    setArquivo(null);
+    const partes = Object.fromEntries((c.rateio ?? []).map((p) => [p.unidade, valorParaCampo(p.valor)]));
     setForm({
       id: c.id,
+      modo: c.status === "paga" ? "pago" : "conta",
       descricao: c.descricao,
       fornecedor: c.fornecedor,
       empresaId: c.empresaId,
       categoriaId: c.categoriaId,
       valor: valorParaCampo(c.valor),
-      vencimento: c.vencimento,
+      data: c.vencimento,
       competencia: c.competencia,
       forma: c.forma,
       observacao: c.observacao,
       repetir: "nao",
       vezes: "1",
+      loja: !c.rateio?.length ? "" : c.rateio.length === 1 ? c.rateio[0].unidade : RATEAR,
+      partes,
+      anexos: c.anexos ?? [],
     });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const rateioDoForm = (f: Formulario) => {
+    const valor = lerValor(f.valor);
+    if (!f.loja) return [];
+    if (f.loja !== RATEAR) return [{ unidade: f.loja, valor }];
+    return Object.entries(f.partes)
+      .map(([unidade, v]) => ({ unidade, valor: lerValor(v) }))
+      .filter((p) => p.valor > 0);
+  };
+
+  const enviarAnexo = async (contaId: string, f: File) => {
+    const corpo = new FormData();
+    corpo.append("conta", contaId);
+    corpo.append("arquivo", f);
+    const r = await fetch("/api/financeiro/anexos", { method: "POST", body: corpo });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { erro?: string }).erro ?? "Falha ao anexar.");
+  };
 
   const salvar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,24 +169,37 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     setSalvando(true);
     setErro("");
     const corpo = {
-      ...form,
+      descricao: form.descricao,
+      fornecedor: form.fornecedor,
+      empresaId: form.empresaId,
+      categoriaId: form.categoriaId,
       valor: lerValor(form.valor),
-      competencia: form.competencia || form.vencimento.slice(0, 7),
+      vencimento: form.data,
+      competencia: form.competencia || form.data.slice(0, 7),
+      forma: form.forma,
+      observacao: form.observacao,
+      rateio: rateioDoForm(form),
       vezes: form.repetir === "nao" ? 1 : Number(form.vezes) || 1,
       repetir: form.repetir === "nao" ? undefined : form.repetir,
+      jaPago: form.modo === "pago",
     };
     try {
+      let contaId = form.id;
       if (form.id) {
         await api(`/api/financeiro/contas/${form.id}`, {
           method: "PATCH",
           body: JSON.stringify({ acao: "editar", ...corpo }),
         });
       } else {
-        await api("/api/financeiro/contas", { method: "POST", body: JSON.stringify(corpo) });
-        // Vai para o mês da conta lançada, para ela aparecer na lista
-        setMes(form.vencimento.slice(0, 7));
+        const r = await api<{ ids: string[] }>("/api/financeiro/contas", { method: "POST", body: JSON.stringify(corpo) });
+        contaId = r.ids[0];
+        // Vai para o mês da conta lançada, para ela aparecer
+        setMes(form.data.slice(0, 7));
+        if (form.modo === "pago" && status === "abertas") setStatus("todas");
       }
+      if (arquivo && contaId) await enviarAnexo(contaId, arquivo);
       setForm(null);
+      setArquivo(null);
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro");
@@ -165,15 +242,81 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       .catch((e) => setErro(e.message));
   };
 
+  const anexar = (contaId: string) => {
+    anexarEm.current = contaId;
+    seletor.current?.click();
+  };
+  const aoEscolherArquivo = async (f?: File) => {
+    if (!f || !anexarEm.current) return;
+    try {
+      await enviarAnexo(anexarEm.current, f);
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    } finally {
+      if (seletor.current) seletor.current.value = "";
+    }
+  };
+  const tirarAnexo = async (id: string) => {
+    if (!confirm("Tirar este anexo da conta?")) return;
+    await api(`/api/financeiro/anexos/${id}`, { method: "DELETE" }).catch((e) => setErro(e.message));
+    setForm((f) => (f ? { ...f, anexos: (f.anexos ?? []).filter((a) => a.id !== id) } : f));
+    await carregar();
+  };
+
   const podeExcluir = (c: ContaTela) => usuario.papel === "admin" || c.criadoPor === usuario.id;
   const categoriasPorGrupo = cad.grupos
     .map((g) => ({ g, cats: categoriasAtivas.filter((c) => c.grupo === g.id) }))
     .filter((x) => x.cats.length);
-  const campo = (k: keyof Formulario, v: string) => setForm((f) => (f ? { ...f, [k]: v } : f));
+  const campo = <K extends keyof Formulario>(k: K, v: Formulario[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
+
+  const descreverRateio = (c: ContaTela) => {
+    if (!c.rateio?.length) return "";
+    if (c.rateio.length === 1) return c.rateio[0].unidade;
+    const total = c.rateio.reduce((s, p) => s + p.valor, 0);
+    return "rateio: " + c.rateio.map((p) => `${p.unidade} ${Math.round((p.valor / total) * 100)}%`).join(" · ");
+  };
+
+  // Rateio na tela
+  const valorForm = form ? lerValor(form.valor) : 0;
+  const somaPartes = form ? Object.values(form.partes).reduce((s, v) => s + lerValor(v), 0) : 0;
+  const lojasRateio = form ? Object.keys(form.partes) : [];
+  const alternarLojaRateio = (u: string) =>
+    setForm((f) => {
+      if (!f) return f;
+      const partes = { ...f.partes };
+      if (u in partes) delete partes[u];
+      else partes[u] = "";
+      return { ...f, partes };
+    });
+  const dividirIgual = () =>
+    setForm((f) => {
+      if (!f) return f;
+      const lojas = Object.keys(f.partes);
+      if (!lojas.length) return f;
+      const cada = Math.floor((lerValor(f.valor) / lojas.length) * 100) / 100;
+      const resto = Math.round((lerValor(f.valor) - cada * lojas.length) * 100) / 100;
+      const partes = Object.fromEntries(lojas.map((u, i) => [u, valorParaCampo(i === lojas.length - 1 ? cada + resto : cada)]));
+      return { ...f, partes };
+    });
 
   const r = dados?.resumo;
+  const contasMes = (dados?.contas ?? []).filter((c) => !mes || c.vencimento.startsWith(mes));
+  const anteriores = (dados?.contas ?? []).filter((c) => mes && !c.vencimento.startsWith(mes));
+  const lista = vista === "agenda" && dia ? (dados?.contas ?? []).filter((c) => c.vencimento === dia) : dados?.contas ?? [];
+  const totalLista = lista.reduce((s, c) => s + (c.status === "paga" ? c.valorPago ?? c.valor : c.valor), 0);
+  const pago = form?.modo === "pago";
+
   return (
     <div>
+      <input
+        ref={seletor}
+        type="file"
+        accept="image/*,application/pdf"
+        hidden
+        onChange={(e) => aoEscolherArquivo(e.target.files?.[0])}
+      />
+
       {r && (
         <div className="tiles fin-resumo">
           <button className={`tile${r.vencidas.qtd ? " alerta" : ""}`} onClick={() => setStatus("vencidas")}>
@@ -200,6 +343,14 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       )}
 
       <div className="fin-barra">
+        <div className="seg" role="group" aria-label="Ver como">
+          <button className={vista === "agenda" ? "on" : ""} onClick={() => trocarVista("agenda")}>
+            Agenda
+          </button>
+          <button className={vista === "lista" ? "on" : ""} onClick={() => trocarVista("lista")}>
+            Lista
+          </button>
+        </div>
         <div className="seg" role="group" aria-label="Situação">
           {(["abertas", "vencidas", "pagas", "todas"] as Status[]).map((s) => (
             <button key={s} className={status === s ? "on" : ""} onClick={() => setStatus(s)}>
@@ -208,16 +359,32 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
           ))}
         </div>
         <div className="fin-mes">
-          <button className="mini ghost" onClick={() => setMes(somarMes(mes || mesAtual(), -1))} aria-label="Mês anterior">
+          <button
+            className="mini ghost"
+            onClick={() => {
+              setDia("");
+              setMes(somarMes(mes || mesAtual(), -1));
+            }}
+            aria-label="Mês anterior"
+          >
             ‹
           </button>
           <span>{mes ? nomeMesLongo(mes) : "todos os meses"}</span>
-          <button className="mini ghost" onClick={() => setMes(somarMes(mes || mesAtual(), 1))} aria-label="Próximo mês">
+          <button
+            className="mini ghost"
+            onClick={() => {
+              setDia("");
+              setMes(somarMes(mes || mesAtual(), 1));
+            }}
+            aria-label="Próximo mês"
+          >
             ›
           </button>
-          <button className="link" onClick={() => setMes(mes ? "" : mesAtual())}>
-            {mes ? "ver todos" : "só este mês"}
-          </button>
+          {vista === "lista" && (
+            <button className="link" onClick={() => setMes(mes ? "" : mesAtual())}>
+              {mes ? "ver todos" : "só este mês"}
+            </button>
+          )}
         </div>
         {empresasAtivas.length > 1 && (
           <select className="fin-select" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
@@ -230,8 +397,23 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
           </select>
         )}
         <input className="busca fin-busca" placeholder="Buscar (descrição, fornecedor…)" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button className="mini" onClick={() => setForm(novo())}>
-          + Lançar conta
+        <button
+          className="mini"
+          onClick={() => {
+            setArquivo(null);
+            setForm(novo("conta"));
+          }}
+        >
+          + Conta a pagar
+        </button>
+        <button
+          className="mini ghost"
+          onClick={() => {
+            setArquivo(null);
+            setForm(novo("pago"));
+          }}
+        >
+          + Pagamento já feito
         </button>
       </div>
 
@@ -239,7 +421,25 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
       {form && (
         <form className="card fin-form" onSubmit={salvar}>
-          <h2>{form.id ? "Editar conta" : "Lançar conta a pagar"}</h2>
+          <div className="fin-cab">
+            <h2>{form.id ? "Editar" : pago ? "Lançar pagamento já feito" : "Lançar conta a pagar"}</h2>
+            {!form.id && (
+              <div className="seg" role="group">
+                <button type="button" className={!pago ? "on" : ""} onClick={() => setForm({ ...form, modo: "conta", forma: "Boleto" })}>
+                  Conta a pagar
+                </button>
+                <button type="button" className={pago ? "on" : ""} onClick={() => setForm({ ...form, modo: "pago", forma: "PIX" })}>
+                  Já paguei
+                </button>
+              </div>
+            )}
+          </div>
+          {pago && !form.id && (
+            <p className="fin-sub" style={{ margin: "0 0 10px" }}>
+              Comprovante de PIX, compra no cartão, transferência: entra direto como pago. Parcelado no cartão, cada parcela
+              fica paga no mês dela.
+            </p>
+          )}
           <div className="fin-grid">
             <label className="config-campo fin-largo">
               <span>Descrição</span>
@@ -280,16 +480,15 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
               <input inputMode="decimal" value={form.valor} onChange={(e) => campo("valor", e.target.value)} placeholder="0,00" />
             </label>
             <label className="config-campo">
-              <span>Vencimento{form.repetir !== "nao" ? " (da 1ª)" : ""}</span>
-              <input type="date" value={form.vencimento} onChange={(e) => campo("vencimento", e.target.value)} />
+              <span>
+                {pago ? "Data do pagamento" : "Vencimento"}
+                {form.repetir !== "nao" ? " (da 1ª)" : ""}
+              </span>
+              <input type="date" value={form.data} onChange={(e) => campo("data", e.target.value)} />
             </label>
             <label className="config-campo">
               <span>Competência (mês do DRE)</span>
-              <input
-                type="month"
-                value={form.competencia || form.vencimento.slice(0, 7)}
-                onChange={(e) => campo("competencia", e.target.value)}
-              />
+              <input type="month" value={form.competencia || form.data.slice(0, 7)} onChange={(e) => campo("competencia", e.target.value)} />
             </label>
             <label className="config-campo">
               <span>Forma de pagamento</span>
@@ -302,8 +501,8 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
             {!form.id && (
               <label className="config-campo">
                 <span>Repetir</span>
-                <select value={form.repetir} onChange={(e) => campo("repetir", e.target.value)}>
-                  <option value="nao">Não, conta única</option>
+                <select value={form.repetir} onChange={(e) => campo("repetir", e.target.value as Formulario["repetir"])}>
+                  <option value="nao">{pago ? "Não, à vista" : "Não, conta única"}</option>
                   <option value="parcelado">Parcelado (1/3, 2/3…)</option>
                   <option value="mensal">Todo mês (conta fixa)</option>
                 </select>
@@ -315,14 +514,105 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 <input inputMode="numeric" value={form.vezes} onChange={(e) => campo("vezes", e.target.value)} />
               </label>
             )}
+            <label className="config-campo">
+              <span>Loja</span>
+              <select
+                value={form.loja}
+                onChange={(e) => {
+                  const loja = e.target.value;
+                  setForm({
+                    ...form,
+                    loja,
+                    // Loja escolhida e empresa em branco: a empresa dona da loja
+                    empresaId: form.empresaId || (loja && loja !== RATEAR ? donaDaLoja(loja) : ""),
+                  });
+                }}
+              >
+                <option value="">Geral (sem loja)</option>
+                {cad.unidades.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+                <option value={RATEAR}>Ratear entre lojas…</option>
+              </select>
+            </label>
+          </div>
+
+          {form.loja === RATEAR && (
+            <div className="fin-rateio">
+              <div className="fin-sub" style={{ marginBottom: 6 }}>
+                Marque as lojas que dividem esta conta e quanto cada uma paga:
+              </div>
+              <div className="filters" style={{ marginBottom: 8 }}>
+                {cad.unidades.map((u) => (
+                  <button key={u} type="button" className={u in form.partes ? "active" : ""} onClick={() => alternarLojaRateio(u)}>
+                    {u}
+                  </button>
+                ))}
+              </div>
+              {lojasRateio.length > 0 && (
+                <>
+                  <div className="fin-rateio-linhas">
+                    {lojasRateio.map((u) => {
+                      const v = lerValor(form.partes[u] ?? "");
+                      return (
+                        <label key={u} className="fin-rateio-linha">
+                          <span>{u}</span>
+                          <input
+                            inputMode="decimal"
+                            value={form.partes[u]}
+                            placeholder="0,00"
+                            onChange={(e) => setForm({ ...form, partes: { ...form.partes, [u]: e.target.value } })}
+                          />
+                          <span className="fin-sub">{valorForm > 0 && v > 0 ? `${Math.round((v / valorForm) * 100)}%` : ""}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="fin-rateio-pe">
+                    <button type="button" className="mini ghost" onClick={dividirIgual}>
+                      Dividir igual
+                    </button>
+                    <span className={Math.abs(somaPartes - valorForm) > 0.05 ? "err-msg" : "fin-sub"}>
+                      Soma {brl.format(somaPartes)} de {brl.format(valorForm)}
+                      {Math.abs(somaPartes - valorForm) > 0.05 &&
+                        ` — ${somaPartes < valorForm ? "faltam" : "sobram"} ${brl.format(Math.abs(valorForm - somaPartes))}`}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="fin-grid">
             <label className="config-campo fin-largo">
               <span>Observação</span>
               <input value={form.observacao} onChange={(e) => campo("observacao", e.target.value)} />
             </label>
+            <label className="config-campo">
+              <span>{pago ? "Comprovante" : "Boleto / nota"} (opcional)</span>
+              <input type="file" accept="image/*,application/pdf" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+            </label>
           </div>
+          {(form.anexos?.length ?? 0) > 0 && (
+            <div className="fin-sub" style={{ marginBottom: 10 }}>
+              Anexos:{" "}
+              {form.anexos!.map((a) => (
+                <span key={a.id} className="fin-anexo">
+                  <a href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer">
+                    📎 {a.nome}
+                  </a>
+                  <button type="button" className="link fin-excluir" onClick={() => tirarAnexo(a.id)}>
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="config-acoes">
             <button className="buscar" style={{ width: "auto" }} disabled={salvando}>
-              {salvando ? "Salvando…" : form.id ? "Salvar alterações" : "Lançar"}
+              {salvando ? "Salvando…" : form.id ? "Salvar alterações" : pago ? "Lançar como pago" : "Lançar"}
             </button>
             <button type="button" className="exportar" onClick={() => setForm(null)}>
               Cancelar
@@ -331,11 +621,35 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
         </form>
       )}
 
+      {vista === "agenda" && dados && mes && (
+        <div className="card">
+          {anteriores.length > 0 && (
+            <button className="fin-anteriores" onClick={() => trocarVista("lista")}>
+              ⚠ {anteriores.length} {anteriores.length === 1 ? "conta vencida" : "contas vencidas"} de meses anteriores ·{" "}
+              {brl.format(anteriores.reduce((s, c) => s + c.valor, 0))} — ver na lista
+            </button>
+          )}
+          <Agenda mes={mes} hoje={dados.hoje} contas={contasMes} dia={dia} aoEscolherDia={setDia} />
+        </div>
+      )}
+
       <div className="card">
+        {vista === "agenda" && (
+          <div className="fin-cab">
+            <h2>{dia ? `Dia ${dataBr(dia)}` : `${mes ? nomeMesLongo(mes) : "Todas"}`}</h2>
+            {dia && (
+              <button className="link" onClick={() => setDia("")}>
+                ver o mês inteiro
+              </button>
+            )}
+          </div>
+        )}
         {!dados ? (
           <div className="empty">Carregando…</div>
-        ) : dados.contas.length === 0 ? (
-          <div className="empty">Nenhuma conta {status === "pagas" ? "paga" : "em aberto"} aqui.</div>
+        ) : lista.length === 0 ? (
+          <div className="empty">
+            Nada {status === "pagas" ? "pago" : status === "todas" ? "lançado" : "em aberto"} {dia ? "neste dia" : "aqui"}.
+          </div>
         ) : (
           <div className="tbl-wrap">
             <table className="prod-tbl fin-tbl">
@@ -351,9 +665,10 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 </tr>
               </thead>
               <tbody>
-                {dados.contas.map((c) => {
+                {lista.map((c) => {
                   const vencida = c.status === "aberta" && c.vencimento < dados.hoje;
                   const hoje = c.status === "aberta" && c.vencimento === dados.hoje;
+                  const rateio = descreverRateio(c);
                   return (
                     <tr key={c.id} className={c.status === "paga" ? "paga" : ""}>
                       <td className={vencida ? "vencida" : ""}>{dataBr(c.vencimento)}</td>
@@ -361,9 +676,14 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                         <div className="fin-desc">
                           {c.descricao}
                           {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
+                          {(c.anexos ?? []).map((a) => (
+                            <a key={a.id} className="fin-clipe" href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer" title={a.nome}>
+                              📎
+                            </a>
+                          ))}
                         </div>
-                        {(c.fornecedor || c.forma) && (
-                          <div className="fin-sub">{[c.fornecedor, c.forma].filter(Boolean).join(" · ")}</div>
+                        {(c.fornecedor || c.forma || rateio) && (
+                          <div className="fin-sub">{[c.fornecedor, c.forma, rateio].filter(Boolean).join(" · ")}</div>
                         )}
                       </td>
                       {empresasAtivas.length > 1 && <td className="fin-sub">{nomeEmpresa(c.empresaId)}</td>}
@@ -399,10 +719,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                         ) : (
                           <>
                             {c.status === "aberta" ? (
-                              <button
-                                className="mini"
-                                onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}
-                              >
+                              <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
                                 Pagar
                               </button>
                             ) : (
@@ -410,6 +727,9 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                                 Desfazer
                               </button>
                             )}
+                            <button className="link" onClick={() => anexar(c.id)} title="Anexar boleto ou comprovante">
+                              anexar
+                            </button>
                             <button className="link" onClick={() => editar(c)}>
                               editar
                             </button>
@@ -428,11 +748,10 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
             </table>
           </div>
         )}
-        {dados && dados.contas.length > 0 && (
+        {lista.length > 0 && (
           <div className="rank-aviso" style={{ margin: "12px 0 0" }}>
-            {dados.contas.length} {dados.contas.length === 1 ? "conta" : "contas"} · total{" "}
-            <b>{brl.format(dados.totalLista)}</b>
-            {mes && status !== "pagas" && " · as vencidas de meses anteriores aparecem junto, para não serem esquecidas"}
+            {lista.length} {lista.length === 1 ? "conta" : "contas"} · total <b>{brl.format(totalLista)}</b>
+            {vista === "lista" && mes && status !== "pagas" && anteriores.length > 0 && " · as vencidas de meses anteriores aparecem junto, para não serem esquecidas"}
           </div>
         )}
       </div>

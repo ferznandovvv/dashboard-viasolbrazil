@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavPrincipal } from "@/components/NavPrincipal";
 import { useCallback, useEffect, useState } from "react";
 import type { UsuarioPublico } from "@/lib/financeiro/tipos";
 import { type Cadastros as DadosCadastros, api } from "@/components/financeiro/comum";
@@ -55,18 +55,15 @@ export default function Financeiro() {
             <span className="tag">financeiro</span>
           </div>
         </div>
-        <span className="updated">
-          {u && (
-            <>
-              {u.nome} ·{" "}
-              <button className="link" onClick={sair}>
-                sair
-              </button>{" "}
-              ·{" "}
-            </>
-          )}
-          <Link href="/">← vendas</Link>
-        </span>
+        <NavPrincipal atual="/financeiro" />
+        {u && (
+          <span className="updated">
+            {u.nome} ·{" "}
+            <button className="link" onClick={sair}>
+              sair
+            </button>
+          </span>
+        )}
       </div>
 
       {!sessao ? (
