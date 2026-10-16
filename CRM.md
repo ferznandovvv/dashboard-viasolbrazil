@@ -90,6 +90,21 @@ repetido, o adaptador da Cloud API (oficial) está pronto em
 `phone_number_id`. Lembre que fora da janela de 24h a oficial só aceita
 template aprovado, então as campanhas precisariam ser cadastradas na Meta.
 
+## Shopify (site)
+
+Os pedidos pagos do site entram como vendas da loja **Site**, usando o mesmo
+token da Shopify já configurado no painel. A cliente é identificada pelo
+telefone (do cadastro ou do endereço de entrega), com e-mail e id da Shopify
+como apoio, então quem compra no site e na loja vira uma pessoa só.
+
+O aceite de mensagens vem do consentimento de marketing por SMS que ela deu
+no checkout. Quem não aceitou fica na base, com histórico e saldo, mas não
+recebe nada até aceitar numa loja. Se a Shopify devolver telefone e e-mail
+como `null` no diagnóstico, o app precisa da permissão `read_customers`.
+
+Cashback de compra no site é opcional (Configurar → Cashback). Faz sentido
+se a ideia é trazer a cliente do site para a loja.
+
 ## Caixa da loja
 
 `/crm/loja?k=CODIGO` (o mesmo `TV_CODE` da tela de metas). No celular ou

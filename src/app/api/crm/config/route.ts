@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
           cashbackValidadeDias: num(c.cashbackValidadeDias, atual.cashbackValidadeDias, 1, 3650),
           cashbackCompraMinima: num(c.cashbackCompraMinima, atual.cashbackCompraMinima),
           cashbackResgateMinimo: num(c.cashbackResgateMinimo, atual.cashbackResgateMinimo),
+          cashbackSite: c.cashbackSite !== undefined ? Boolean(c.cashbackSite) : atual.cashbackSite,
           cashbackMaxPctDaCompra: num(c.cashbackMaxPctDaCompra, atual.cashbackMaxPctDaCompra, 0, 100),
           avisoVencimentoDias: num(c.avisoVencimentoDias, atual.avisoVencimentoDias, 1, 60),
           posVendaDias: num(c.posVendaDias, atual.posVendaDias, 1, 60),

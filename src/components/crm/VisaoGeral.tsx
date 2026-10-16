@@ -22,7 +22,6 @@ export function VisaoGeral({ r, recarregar, irPara }: { r: Resumo; recarregar: (
     }
   };
 
-  const p = r.totvs.progresso;
   return (
     <div>
       <div className="tiles">
@@ -94,35 +93,22 @@ export function VisaoGeral({ r, recarregar, irPara }: { r: Resumo; recarregar: (
             ))}
           </div>
 
-          <div className="card">
-            <h2>TOTVS</h2>
-            {!r.totvs.configurado ? (
-              <div className="muted">TOTVS não configurado (veja /configurar).</div>
-            ) : (
-              <>
-                <div className="muted" style={{ marginBottom: 8 }}>
-                  {p.rodando ? (
-                    <>
-                      Sincronizando: {p.etapa}… ({p.vendasNovas} vendas, {p.clientesNovos} clientes novos)
-                    </>
-                  ) : r.totvs.ultima ? (
-                    <>
-                      Última sincronização {dataHora(r.totvs.ultima)}. {r.totvs.resultado}
-                      {r.totvs.desde && <> Vendas carregadas desde {r.totvs.desde.slice(8, 10)}/{r.totvs.desde.slice(5, 7)}/{r.totvs.desde.slice(0, 4)}.</>}
-                    </>
-                  ) : (
-                    "Ainda não sincronizou. Roda sozinho todo dia às 8h30; o botão abaixo puxa os últimos 3 dias agora."
-                  )}
-                </div>
-                <div className="config-acoes">
-                  <button className="mini" disabled={p.rodando || Boolean(ocupado)} onClick={() => acao("sinc", () => api("/api/crm/totvs", { method: "POST", body: JSON.stringify({ acao: "sincronizar", creditar: true }) }))}>
-                    Sincronizar últimos 3 dias
-                  </button>
-                  <CargaHistorica desabilitado={p.rodando || Boolean(ocupado)} aoRodar={(de, ate) => acao("carga", () => api("/api/crm/totvs", { method: "POST", body: JSON.stringify({ acao: "sincronizar", de, ate, creditar: false }) }))} />
-                </div>
-              </>
-            )}
-          </div>
+          <CardFonte
+            titulo="TOTVS (lojas)"
+            fonte={r.totvs}
+            rota="/api/crm/totvs"
+            dicaVazia="Ainda não sincronizou. Roda sozinho todo dia às 8h30; o botão abaixo puxa os últimos 3 dias agora."
+            ocupado={Boolean(ocupado)}
+            acao={acao}
+          />
+          <CardFonte
+            titulo="Shopify (site)"
+            fonte={r.shopify}
+            rota="/api/crm/shopify"
+            dicaVazia="Ainda não sincronizou. Roda sozinho todo dia às 8h45. Pedidos pagos entram como vendas da loja Site; cashback só se ligado em Configurar."
+            ocupado={Boolean(ocupado)}
+            acao={acao}
+          />
 
           <div className="card">
             <h2>Operação</h2>
@@ -141,6 +127,41 @@ export function VisaoGeral({ r, recarregar, irPara }: { r: Resumo; recarregar: (
         </div>
       </div>
       {aviso && <div className="card crm-aviso">{aviso}</div>}
+    </div>
+  );
+}
+
+function CardFonte({ titulo, fonte, rota, dicaVazia, ocupado, acao }: { titulo: string; fonte: Resumo["totvs"]; rota: string; dicaVazia: string; ocupado: boolean; acao: (nome: string, fn: () => Promise<unknown>) => Promise<void> }) {
+  const p = fonte.progresso;
+  return (
+    <div className="card">
+      <h2>{titulo}</h2>
+      {!fonte.configurado ? (
+        <div className="muted">Não configurado (veja /configurar).</div>
+      ) : (
+        <>
+          <div className="muted" style={{ marginBottom: 8 }}>
+            {p.rodando ? (
+              <>
+                Sincronizando: {p.etapa}… ({p.vendasNovas} vendas, {p.clientesNovos} clientes novos)
+              </>
+            ) : fonte.ultima ? (
+              <>
+                Última sincronização {dataHora(fonte.ultima)}. {fonte.resultado}
+                {fonte.desde && <> Vendas carregadas desde {fonte.desde.slice(8, 10)}/{fonte.desde.slice(5, 7)}/{fonte.desde.slice(0, 4)}.</>}
+              </>
+            ) : (
+              dicaVazia
+            )}
+          </div>
+          <div className="config-acoes">
+            <button className="mini" disabled={p.rodando || ocupado} onClick={() => acao("sinc", () => api(rota, { method: "POST", body: JSON.stringify({ acao: "sincronizar", creditar: true }) }))}>
+              Sincronizar últimos 3 dias
+            </button>
+            <CargaHistorica desabilitado={p.rodando || ocupado} aoRodar={(de, ate) => acao("carga", () => api(rota, { method: "POST", body: JSON.stringify({ acao: "sincronizar", de, ate, creditar: false }) }))} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

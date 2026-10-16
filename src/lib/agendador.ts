@@ -8,6 +8,7 @@
 import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
 import { sincronizarDiaria } from "./crm/totvs";
+import { sincronizarShopifyDiaria } from "./crm/shopify";
 import { rodarAutomacoes } from "./crm/automacoes";
 import { processarFila } from "./crm/fila";
 import { lerBase as lerBaseCrm } from "./crm/base";
@@ -18,6 +19,7 @@ const HORARIOS = [
   { hora: "06:58", tarefa: continuarEstoque, nome: "estoque" },
   // CRM: puxa as vendas de ontem do TOTVS e, em seguida, gera as mensagens do dia
   { hora: "08:30", tarefa: sincronizarDiaria, nome: "crm sincronização" },
+  { hora: "08:45", tarefa: sincronizarShopifyDiaria, nome: "crm shopify" },
 ];
 
 function horaSp(): { dia: string; hora: string } {

@@ -16,6 +16,7 @@ export interface DadosCliente {
   nascimento?: string;
   lojaOrigem?: string;
   codigoTotvs?: string;
+  codigoShopify?: string;
   optIn?: boolean;
   obs?: string;
 }
@@ -30,13 +31,16 @@ const chaveNome = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** Acha a cliente por telefone, CPF ou código TOTVS (nome sozinho não basta). */
+/** Acha a cliente por telefone, CPF, código TOTVS, id Shopify ou e-mail (nome sozinho não basta). */
 export function acharCliente(base: BaseCrm, d: Partial<DadosCliente>): Cliente | undefined {
   const tel = normalizarTelefone(d.telefone);
   const cpf = normalizarCpf(d.cpf);
   const cod = limpo(d.codigoTotvs);
-  return base.clientes.find(
-    (c) => (tel && c.telefone === tel) || (cpf && c.cpf === cpf) || (cod && c.codigoTotvs === cod)
+  const shop = limpo(d.codigoShopify);
+  const email = limpo(d.email).toLowerCase();
+  return (
+    base.clientes.find((c) => (tel && c.telefone === tel) || (cpf && c.cpf === cpf) || (cod && c.codigoTotvs === cod) || (shop && c.codigoShopify === shop)) ??
+    (email ? base.clientes.find((c) => c.email?.toLowerCase() === email) : undefined)
   );
 }
 
@@ -52,7 +56,7 @@ export function acharPorNome(base: BaseCrm, nome: string): Cliente | undefined {
  * Cria ou completa uma cliente. Nunca apaga dado que já existe com dado vazio;
  * dado novo preenche o que faltava. Devolve a cliente e se foi criada agora.
  */
-export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | "csv" | "loja" | "painel"): { cliente: Cliente; nova: boolean } {
+export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | "shopify" | "csv" | "loja" | "painel"): { cliente: Cliente; nova: boolean } {
   const agora = new Date().toISOString();
   const tel = normalizarTelefone(d.telefone);
   const cpf = normalizarCpf(d.cpf);
@@ -68,6 +72,7 @@ export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | 
     c.nascimento ??= nasc;
     c.lojaOrigem ??= limpo(d.lojaOrigem) || undefined;
     c.codigoTotvs ??= limpo(d.codigoTotvs) || undefined;
+    c.codigoShopify ??= limpo(d.codigoShopify) || undefined;
     if (d.optIn) c.optIn = true;
     if (limpo(d.obs)) c.obs = limpo(d.obs);
     c.atualizadoEm = agora;
@@ -83,8 +88,10 @@ export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | 
     nascimento: nasc,
     lojaOrigem: limpo(d.lojaOrigem) || undefined,
     codigoTotvs: limpo(d.codigoTotvs) || undefined,
+    codigoShopify: limpo(d.codigoShopify) || undefined,
     // Quem veio do TOTVS comprou na loja e deu o telefone no caixa; quem veio
-    // da tela da loja marca o aceite explicitamente
+    // da tela da loja marca o aceite explicitamente; da Shopify vale o aceite
+    // de marketing que a cliente deu no checkout
     optIn: d.optIn ?? origem === "totvs",
     semResposta: 0,
     criadoEm: agora,

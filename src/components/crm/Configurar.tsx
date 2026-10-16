@@ -69,6 +69,7 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
             <label className="config-campo"><span>Máximo da compra pago com cashback (%)</span><input value={cfg.cashbackMaxPctDaCompra} onChange={n("cashbackMaxPctDaCompra")} /><small>0 desliga o teto</small></label>
             <label className="config-campo"><span>Avisar vencimento com (dias)</span><input value={cfg.avisoVencimentoDias} onChange={n("avisoVencimentoDias")} /></label>
           </div>
+          <label className="fin-check"><input type="checkbox" checked={cfg.cashbackSite} onChange={(e) => setCfg({ ...cfg, cashbackSite: e.target.checked })} /> Compras no site (Shopify) também geram cashback para usar nas lojas</label>
           <h2 style={{ marginTop: 10 }}>Campanhas automáticas</h2>
           <div className="fin-grid">
             <label className="config-campo"><span>Pós-venda: dias depois da compra</span><input value={cfg.posVendaDias} onChange={n("posVendaDias")} /></label>

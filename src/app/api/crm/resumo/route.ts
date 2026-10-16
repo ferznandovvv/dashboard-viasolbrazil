@@ -6,6 +6,7 @@ import { SEGMENTOS, listarSegmento } from "@/lib/crm/clientes";
 import { dentroDaJanela, enviadasHoje } from "@/lib/crm/fila";
 import { progresso } from "@/lib/crm/totvs";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
+import { LOJA_SITE, progressoShopify, shopifyConfigured } from "@/lib/crm/shopify";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,8 @@ export async function GET() {
   return NextResponse.json({
     local: true,
     hoje,
-    lojas: Object.values(LOJAS),
+    lojas: [...Object.values(LOJAS), LOJA_SITE],
+    shopify: { configurado: shopifyConfigured(), ultima: base.config.ultimaSincShopify, resultado: base.config.ultimaSincShopifyResultado, desde: base.config.sincShopifyDesde, progresso: progressoShopify },
     totvs: { configurado: totvsConfigured(), ultima: base.config.ultimaSincTotvs, resultado: base.config.ultimaSincTotvsResultado, desde: base.config.sincVendasDesde, progresso },
     base: { clientes: base.clientes.length, comTelefone, vendas: base.vendas.length, saldoTotal },
     fila: { emEspera: fila, enviadasMes, respondidasMes, errosSemana, pausado: base.config.pausado, dentroDaJanela: dentroDaJanela(base), provedor: adaptador?.nome ?? null },

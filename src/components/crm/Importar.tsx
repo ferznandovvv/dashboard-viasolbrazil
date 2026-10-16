@@ -165,13 +165,21 @@ export function Importar({ r, recarregar }: { r: Resumo; recarregar: () => Promi
         <div className="muted" style={{ marginBottom: 10 }}>
           Mostra uma nota e um cadastro crus, como a API devolve, para conferir os nomes dos campos de telefone, aniversário e código do cliente. Use na primeira vez.
         </div>
-        <Diag />
+        <Diag rota="/api/crm/totvs" />
+      </div>
+
+      <div className="card">
+        <h2>Diagnóstico da Shopify</h2>
+        <div className="muted" style={{ marginBottom: 10 }}>
+          Mostra um pedido cru. Confira se telefone da cliente e o aceite de SMS vêm preenchidos; se vierem null, o app da Shopify precisa da permissão de leitura de clientes.
+        </div>
+        <Diag rota="/api/crm/shopify" />
       </div>
     </div>
   );
 }
 
-function Diag() {
+function Diag({ rota }: { rota: string }) {
   const [saida, setSaida] = useState("");
   const [ocupado, setOcupado] = useState(false);
   return (
@@ -182,7 +190,7 @@ function Diag() {
         onClick={async () => {
           setOcupado(true);
           try {
-            const r = await api("/api/crm/totvs", { method: "POST", body: JSON.stringify({ acao: "diag" }) });
+            const r = await api(rota, { method: "POST", body: JSON.stringify({ acao: "diag" }) });
             setSaida(JSON.stringify(r, null, 2));
           } catch (e) {
             setSaida(e instanceof Error ? e.message : "Erro");

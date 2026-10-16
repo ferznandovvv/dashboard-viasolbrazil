@@ -17,6 +17,8 @@ export interface Cliente {
   lojaOrigem?: string;
   /** Código do cliente no TOTVS, quando veio de lá */
   codigoTotvs?: string;
+  /** Id do cliente na Shopify (gid numérico), quando comprou no site */
+  codigoShopify?: string;
   /** Aceitou receber mensagens no WhatsApp (LGPD) */
   optIn: boolean;
   /** Pediu para não receber mais (respondeu SAIR ou foi marcado na tela) */
@@ -42,7 +44,7 @@ export interface Venda {
   data: string;
   valor: number;
   pecas?: number;
-  origem: "totvs" | "csv" | "manual";
+  origem: "totvs" | "shopify" | "csv" | "manual";
 }
 
 export type TipoMovimento = "credito" | "resgate" | "expiracao" | "ajuste";
@@ -160,6 +162,8 @@ export interface ConfigCrm {
   cashbackCompraMinima: number;
   /** Só pode resgatar se o saldo for pelo menos isto */
   cashbackResgateMinimo: number;
+  /** Compras no site (Shopify) também geram cashback para usar na loja */
+  cashbackSite: boolean;
   /** Máximo do valor da compra que pode ser pago com cashback (0 a 100) */
   cashbackMaxPctDaCompra: number;
   /** Dias antes do vencimento para avisar */
@@ -203,6 +207,9 @@ export interface ConfigCrm {
   ultimaSincTotvsResultado?: string;
   /** Até onde as vendas já foram importadas do TOTVS (YYYY-MM-DD) */
   sincVendasDesde?: string;
+  ultimaSincShopify?: string;
+  ultimaSincShopifyResultado?: string;
+  sincShopifyDesde?: string;
   backupDir?: string;
   migracoes?: string[];
 }
@@ -289,6 +296,7 @@ export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   cashbackValidadeDias: 60,
   cashbackCompraMinima: 0,
   cashbackResgateMinimo: 20,
+  cashbackSite: false,
   cashbackMaxPctDaCompra: 30,
   avisoVencimentoDias: 7,
   posVendaDias: 5,
