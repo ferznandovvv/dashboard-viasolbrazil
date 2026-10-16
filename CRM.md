@@ -120,9 +120,10 @@ token da Shopify já configurado no painel. A cliente é identificada pelo
 telefone (do cadastro ou do endereço de entrega), com e-mail e id da Shopify
 como apoio, então quem compra no site e na loja vira uma pessoa só.
 
-Quem compra no site já aceita contato no cadastro, então entra como "aceita
-mensagens"; só fica de fora quem pediu explicitamente para sair do SMS na
-Shopify. Enquanto o site estiver no Edrone, cliente que **só** comprou no
+Quem compra, na loja ou no site, já aceita contato no cadastro, então toda
+cliente entra como "aceita mensagens"; só fica de fora quem pediu para sair
+(respondeu SAIR, foi marcada na ficha, ou cancelou o SMS na Shopify) e quem
+tem "funcionária", "colaboradora" ou "vendedora" no nome do cadastro. Enquanto o site estiver no Edrone, cliente que **só** comprou no
 site não entra nas automações (aniversário, pós-venda, reativação); mensagem
 avulsa para um segmento sempre funciona. Dá pra ligar em Configurar →
 Cashback. Se a Shopify devolver telefone e e-mail como `null` no

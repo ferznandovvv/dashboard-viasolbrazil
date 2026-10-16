@@ -9,6 +9,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { type BaseCrm, CONFIG_PADRAO, MODELOS_PADRAO } from "./tipos";
+import { normalizarTelefone } from "./telefone";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm");
 const ARQUIVO = join(PASTA, "base.json");
@@ -56,6 +57,23 @@ async function gravar(base: BaseCrm): Promise<void> {
 /** Ajustes que entram com versões novas e precisam valer para a base que já existe. */
 const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
   { id: "atendimento", aplicar: (b) => void (b.atendimento ??= []) },
+  {
+    // Todo mundo que compra aceita contato: quem entrou antes dessa regra ganha o aceite.
+    // Telefone que não é telefone sai. Funcionária identificada pelo nome não recebe mensagem.
+    id: "aceite-geral",
+    aplicar: (b) => {
+      const funcionaria = /FUNCION[AÁ]RI|COLABORADOR|VENDEDOR[A]?\b|GERENTE|USO INTERNO/i;
+      for (const c of b.clientes) {
+        if (!c.optOut) c.optIn = true;
+        if (c.telefone && !normalizarTelefone(c.telefone)) c.telefone = undefined;
+        if (funcionaria.test(c.nome) && !c.optOut) {
+          c.optOut = true;
+          c.optOutEm = new Date().toISOString();
+          c.obs = [c.obs, "Funcionária (pelo nome no cadastro)"].filter(Boolean).join(" · ");
+        }
+      }
+    },
+  },
   {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",

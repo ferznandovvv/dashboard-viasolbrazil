@@ -69,6 +69,8 @@ interface PessoaLida {
 
 /** Cadastro genérico do PDV ("CONSUMIDOR FINAL" e afins): não é uma pessoa, não entra. */
 export const NOME_GENERICO = /CONSUMIDOR|N[AÃ]O IDENTIFICAD|CLIENTE (PADR|BALC|DIVERSOS|AVULSO)|VENDA (BALC|AVULSA)|^CLIENTE$|^TESTE/i;
+/** Cadastro de funcionária com nome marcado: compra, mas não é cliente para mensagens. */
+export const NOME_FUNCIONARIA = /FUNCION[AÁ]RI|COLABORADOR|VENDEDOR[A]?\b|GERENTE|USO INTERNO/i;
 
 /** Lê uma pessoa da API, tentando os nomes de campo prováveis. */
 function lerPessoa(p: Obj): PessoaLida {
@@ -101,7 +103,7 @@ function lerPessoa(p: Obj): PessoaLida {
   };
 }
 
-const pessoaValida = (p: PessoaLida) => Boolean(p.nome) && p.ehCliente && !NOME_GENERICO.test(p.nome!);
+const pessoaValida = (p: PessoaLida) => Boolean(p.nome) && p.ehCliente && !NOME_GENERICO.test(p.nome!) && !NOME_FUNCIONARIA.test(p.nome!);
 
 /** O que pedir junto do cadastro: telefones e e-mails vêm null sem isto. */
 let expandPessoa: string | null | undefined; // undefined = ainda não sabemos o que a API aceita

@@ -89,10 +89,9 @@ export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | 
     lojaOrigem: limpo(d.lojaOrigem) || undefined,
     codigoTotvs: limpo(d.codigoTotvs) || undefined,
     codigoShopify: limpo(d.codigoShopify) || undefined,
-    // Quem veio do TOTVS comprou na loja e deu o telefone no caixa; quem veio
-    // da tela da loja marca o aceite explicitamente; da Shopify vale o aceite
-    // de marketing que a cliente deu no checkout
-    optIn: d.optIn ?? origem === "totvs",
+    // Quem compra na loja ou no site aceita contato no cadastro; só fica de
+    // fora quem pedir (optOut) ou, na Shopify, quem cancelou o SMS
+    optIn: d.optIn ?? true,
     semResposta: 0,
     criadoEm: agora,
     atualizadoEm: agora,

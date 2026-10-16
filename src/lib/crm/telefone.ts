@@ -12,6 +12,10 @@ export function normalizarTelefone(bruto: string | null | undefined): string | u
   if (d.length === 10 && /^[1-9]{2}[6-9]/.test(d)) d = `${d.slice(0, 2)}9${d.slice(2)}`; // celular antigo sem o 9
   if (d.length < 10 || d.length > 11) return undefined;
   if (!/^[1-9]{2}/.test(d)) return undefined;
+  // Celular: DDD + 9 + 8 dígitos. Fixo: DDD + [2-5] + 7 dígitos. O resto é lixo de cadastro.
+  if (d.length === 11 && d[2] !== "9") return undefined;
+  if (d.length === 10 && !/^[2-5]/.test(d[2])) return undefined;
+  if (/^(\d)\1{7,}$/.test(d.slice(2))) return undefined; // 99999999999 e afins
   return `55${d}`;
 }
 

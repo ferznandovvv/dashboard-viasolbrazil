@@ -86,7 +86,6 @@ export function Clientes({ r, segmentoInicial, recarregar }: { r: Resumo; segmen
                   <th>Última compra</th>
                   <th className="n">Saldo</th>
                   <th>Aniversário</th>
-                  <th>WhatsApp</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,9 +101,9 @@ export function Clientes({ r, segmentoInicial, recarregar }: { r: Resumo; segmen
                       {c.saldo ? brl.format(c.saldo) : ""}
                       {c.vencendo > 0 && <div className="fin-sub">vence {dataBrAno(c.vencendoEm)}</div>}
                     </td>
-                    <td>{c.nascimento ? c.nascimento.slice(8, 10) + "/" + c.nascimento.slice(5, 7) : ""}</td>
                     <td>
-                      {c.optOut ? <span className="badge err">não receber</span> : !c.optIn ? <span className="badge">sem aceite</span> : c.podeMarketing ? <span className="badge on">ok</span> : <span className="badge">só avisos</span>}
+                      {c.nascimento ? c.nascimento.slice(8, 10) + "/" + c.nascimento.slice(5, 7) : ""}
+                      {c.optOut && <span className="badge err" style={{ marginLeft: 8 }}>não receber</span>}
                     </td>
                   </tr>
                 ))}
