@@ -133,6 +133,8 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
 export interface EventoRecebido {
   tipo: "mensagem" | "status";
   sessao: string;
+  /** Nome da sessão, quando o evento trouxer */
+  sessaoNome?: string;
   telefone: string;
   texto?: string;
   idExterno?: string;
@@ -145,7 +147,13 @@ const OPT_OUT = /^\s*(sair|parar|pare|stop|cancelar|cancela|remover|descadastrar
 /** Processa o que o webhook trouxe. Devolve o que fez (para o log). */
 export async function receberEvento(ev: EventoRecebido): Promise<string> {
   const base = await lerBase();
-  const loja = base.config.numeros.find((n) => n.sessao === ev.sessao)?.loja;
+  // O evento traz o código interno da sessão; a configuração pode ter o nome. Casamos pelos dois.
+  const acharLoja = (chave?: string) => (chave ? base.config.numeros.find((n) => n.sessao.toLowerCase() === chave.toLowerCase())?.loja : undefined);
+  let loja = acharLoja(ev.sessao) ?? acharLoja(ev.sessaoNome);
+  if (!loja) {
+    const nome = await adaptadorDe(base.config)?.nomeDaSessao?.(ev.sessao);
+    loja = acharLoja(nome);
+  }
 
   if (ev.tipo === "status" && ev.idExterno) {
     const mapa: Record<string, Mensagem["status"]> = { DELIVERED: "entregue", READ: "lida", PLAYED: "lida" };
