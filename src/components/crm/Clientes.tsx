@@ -60,7 +60,7 @@ export function Clientes({ r, segmentoInicial, recarregar }: { r: Resumo; segmen
         <button className="mini ghost" onClick={() => setNova(true)}>
           Nova cliente
         </button>
-        {segmento !== "todos" && segmento !== "sem_telefone" && segmento !== "opt_out" && (
+        {segmento !== "todos" && segmento !== "sem_telefone" && segmento !== "opt_out" && segmento !== "funcionarias" && (
           <button className="mini" onClick={() => setAvulsa(true)}>
             Mandar mensagem para este segmento
           </button>
@@ -311,7 +311,11 @@ function FichaCliente({ id, lojas, fechar, aoMudar }: { id: string; lojas: strin
                 {f.vendas.slice(0, 30).map((v) => (
                   <tr key={v.id}>
                     <td>{dataBrAno(v.data.slice(0, 10))}</td>
-                    <td>{v.loja}{v.pecas ? <span className="fin-sub"> {v.pecas} pç</span> : null}</td>
+                    <td>
+                      {v.loja}
+                      {v.pecas ? <span className="fin-sub"> {v.pecas} pç</span> : null}
+                      {v.vendedoraCpf && c.cpf && v.vendedoraCpf === c.cpf && <span className="fin-status vencida"> vendeu para si mesma</span>}
+                    </td>
                     <td className="n">{brl.format(v.valor)}</td>
                   </tr>
                 ))}

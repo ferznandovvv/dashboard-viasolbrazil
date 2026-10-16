@@ -108,6 +108,7 @@ export function salvarCliente(base: BaseCrm, d: DadosCliente, origem: "totvs" | 
 export function registrarVenda(base: BaseCrm, v: Venda): boolean {
   const existente = base.vendas.find((x) => x.id === v.id);
   if (existente) {
+    existente.vendedoraCpf ??= v.vendedoraCpf;
     // Venda que chegou antes sem cliente e agora conseguimos ligar
     if (!existente.clienteId && v.clienteId) {
       existente.clienteId = v.clienteId;
@@ -175,6 +176,7 @@ export type Segmento =
   | "com_saldo"
   | "compraram_recente"
   | "sem_telefone"
+  | "funcionarias"
   | "opt_out";
 
 export const SEGMENTOS: { id: Segmento; nome: string; dica: string }[] = [
@@ -185,6 +187,7 @@ export const SEGMENTOS: { id: Segmento; nome: string; dica: string }[] = [
   { id: "com_saldo", nome: "Com saldo", dica: "Têm cashback disponível" },
   { id: "compraram_recente", nome: "Compraram nos últimos 30 dias", dica: "" },
   { id: "sem_telefone", nome: "Sem telefone", dica: "Não dá pra mandar mensagem; completar no caixa" },
+  { id: "funcionarias", nome: "Funcionárias", dica: "Cadastro com nome de funcionária ou venda registrada pela própria vendedora no CPF dela" },
   { id: "opt_out", nome: "Pediram para não receber", dica: "" },
 ];
 
@@ -209,6 +212,8 @@ export function noSegmento(base: BaseCrm, r: ClienteResumo, seg: Segmento, hoje 
       return Boolean(r.ultimaCompra) && diasEntre(r.ultimaCompra!, hoje) <= 30;
     case "sem_telefone":
       return !r.telefone;
+    case "funcionarias":
+      return Boolean(r.obs && /Funcionária/.test(r.obs));
     case "opt_out":
       return Boolean(r.optOut);
   }

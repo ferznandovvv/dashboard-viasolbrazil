@@ -204,6 +204,7 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promi
           data: `${data}T${inv.exitTime ?? "12:00:00"}-03:00`,
           valor: Number(inv.totalValue ?? 0),
           pecas: num(inv, "quantity"),
+          vendedoraCpf: str(inv, "sellerCpf")?.replace(/\D/g, "").padStart(11, "0") || undefined,
           nomeNaNota: nomeNota,
           codigoClienteTotvs: generica ? undefined : codigoCliente,
           cpfNaNota: str(inv, "personCpfCnpj", "cpfCnpj", "personDocument", "customerCpf")?.replace(/\D/g, "") || undefined,
@@ -283,6 +284,13 @@ async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: b
       if (c) {
         venda.clienteId = c.id;
         c.lojaOrigem ??= venda.loja;
+        // A vendedora da nota é a própria cliente: é funcionária comprando (ou
+        // passando venda no nome dela). Fica fora das mensagens e marcada na ficha.
+        if (venda.vendedoraCpf && c.cpf && venda.vendedoraCpf === c.cpf && !c.optOut) {
+          c.optOut = true;
+          c.optOutEm = new Date().toISOString();
+          c.obs = [c.obs, "Funcionária (vendeu para o próprio CPF)"].filter(Boolean).join(" · ");
+        }
       }
       if (registrarVenda(b, venda)) progresso.vendasNovas++;
     }

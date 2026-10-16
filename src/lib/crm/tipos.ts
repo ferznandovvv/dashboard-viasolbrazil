@@ -44,6 +44,8 @@ export interface Venda {
   data: string;
   valor: number;
   pecas?: number;
+  /** CPF da vendedora que registrou a venda no PDV (só dígitos) */
+  vendedoraCpf?: string;
   origem: "totvs" | "shopify" | "csv" | "manual";
 }
 
