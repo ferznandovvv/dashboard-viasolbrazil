@@ -110,6 +110,21 @@ export interface Conta {
   alteradoEm?: string;
 }
 
+/** Um lançamento anterior, usado para completar o formulário. */
+export interface Sugestao {
+  fornecedor: string;
+  descricao: string;
+  empresaId: string;
+  categoriaId: string;
+  forma: string;
+  valor: number;
+  rateio?: ParteRateio[];
+  /** Vencimento do último lançamento assim */
+  em: string;
+  /** Quantas vezes já foi lançado */
+  vezes: number;
+}
+
 export interface BaseFinanceira {
   versao: 1;
   empresas: Empresa[];
@@ -121,6 +136,8 @@ export interface BaseFinanceira {
     backupDir?: string;
     /** Assina o cookie de sessão */
     segredo: string;
+    /** Ajustes automáticos já aplicados nesta base */
+    migracoes?: string[];
   };
 }
 

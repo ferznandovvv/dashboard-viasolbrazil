@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Conta, UsuarioPublico } from "@/lib/financeiro/tipos";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import type { Conta, Sugestao, UsuarioPublico } from "@/lib/financeiro/tipos";
 import { Agenda } from "./Agenda";
 import { type Cadastros, api, brl, dataBr, hojeSp, lerValor, nomeMesLongo, valorParaCampo } from "./comum";
 
@@ -12,6 +12,7 @@ interface Resposta {
   resumo: Record<"vencidas" | "hoje" | "proximos7" | "pagasMes", { qtd: number; total: number }>;
   contas: ContaTela[];
   totalLista: number;
+  porEmpresa: { empresaId: string; nome: string; aPagar: number; qtd: number; vencido: number; pago: number }[];
 }
 
 type Status = "abertas" | "vencidas" | "pagas" | "todas";
@@ -70,6 +71,8 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [pagando, setPagando] = useState<{ id: string; pagoEm: string; valor: string } | null>(null);
+  const [sugestoes, setSugestoes] = useState<{ porFornecedor: Sugestao[]; porDescricao: Sugestao[] } | null>(null);
+  const [preenchido, setPreenchido] = useState("");
   const anexarEm = useRef<string>("");
   const seletor = useRef<HTMLInputElement>(null);
 
@@ -99,6 +102,64 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     const t = setTimeout(carregar, q ? 300 : 0);
     return () => clearTimeout(t);
   }, [carregar, q]);
+
+  // Ao abrir um lançamento novo, busca o que já foi lançado para completar
+  const abrindoNovo = !!form && !form.id;
+  useEffect(() => {
+    if (!abrindoNovo) return;
+    api<{ porFornecedor: Sugestao[]; porDescricao: Sugestao[] }>("/api/financeiro/sugestoes")
+      .then(setSugestoes)
+      .catch(() => {});
+  }, [abrindoNovo]);
+
+  /**
+   * Digitou um fornecedor ou uma descrição que já existe: completa o resto
+   * com o último lançamento igual — só o que ainda está em branco.
+   */
+  const completar = (campoDigitado: "fornecedor" | "descricao", texto: string) => {
+    if (!form) return;
+    const novo = { ...form, [campoDigitado]: texto };
+    const lista = campoDigitado === "fornecedor" ? sugestoes?.porFornecedor : sugestoes?.porDescricao;
+    const s = form.id ? undefined : lista?.find((x) => x[campoDigitado].trim().toLowerCase() === texto.trim().toLowerCase());
+    if (!s) {
+      setForm(novo);
+      return;
+    }
+    const empresaValida = cad.empresas.some((e) => e.id === s.empresaId && e.ativa);
+    const categoriaValida = cad.categorias.some((c) => c.id === s.categoriaId && c.ativa);
+    const rateio = s.rateio ?? [];
+    setPreenchido(`Completei com o último lançamento igual (${dataBr(s.em)}) — confira o valor.`);
+    setForm({
+      ...novo,
+      descricao: novo.descricao || s.descricao,
+      fornecedor: novo.fornecedor || s.fornecedor,
+      empresaId: empresaValida ? s.empresaId : novo.empresaId,
+      categoriaId: categoriaValida ? s.categoriaId : novo.categoriaId,
+      // Pagamento já feito não volta a ser "Boleto" só porque a conta era boleto
+      forma: form.modo === "pago" && s.forma === "Boleto" ? form.forma : s.forma || form.forma,
+      valor: novo.valor || valorParaCampo(s.valor),
+      loja: rateio.length > 1 ? RATEAR : rateio[0]?.unidade ?? "",
+      partes: rateio.length > 1 ? Object.fromEntries(rateio.map((p) => [p.unidade, valorParaCampo(p.valor)])) : {},
+    });
+  };
+
+  /** Lançar de novo uma conta igual (outro mês, outro comprovante). */
+  const copiar = (c: ContaTela) => {
+    setArquivo(null);
+    setPreenchido(`Copiado de "${c.descricao}" (${dataBr(c.vencimento)}): ajuste a data e o valor.`);
+    setForm({
+      ...novo("conta"),
+      descricao: c.descricao,
+      fornecedor: c.fornecedor,
+      empresaId: c.empresaId,
+      categoriaId: c.categoriaId,
+      valor: valorParaCampo(c.valor),
+      forma: c.forma,
+      loja: !c.rateio?.length ? "" : c.rateio.length === 1 ? c.rateio[0].unidade : RATEAR,
+      partes: Object.fromEntries((c.rateio ?? []).map((p) => [p.unidade, valorParaCampo(p.valor)])),
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const nomeEmpresa = (id: string) => cad.empresas.find((e) => e.id === id)?.nome ?? "—";
   const nomeCategoria = (id: string) => cad.categorias.find((c) => c.id === id)?.nome ?? "—";
@@ -140,6 +201,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       repetir: "nao",
       vezes: "1",
       loja: !c.rateio?.length ? "" : c.rateio.length === 1 ? c.rateio[0].unidade : RATEAR,
+
       partes,
       anexos: c.anexos ?? [],
     });
@@ -149,7 +211,10 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
   const rateioDoForm = (f: Formulario) => {
     const valor = lerValor(f.valor);
     if (!f.loja) return [];
-    if (f.loja !== RATEAR) return [{ unidade: f.loja, valor }];
+    if (f.loja !== RATEAR) {
+      const lojas = cad.empresas.find((e) => e.id === f.empresaId)?.unidades ?? [];
+      return lojas.includes(f.loja) ? [{ unidade: f.loja, valor }] : [];
+    }
     return Object.entries(f.partes)
       .map(([unidade, v]) => ({ unidade, valor: lerValor(v) }))
       .filter((p) => p.valor > 0);
@@ -277,6 +342,9 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     return "rateio: " + c.rateio.map((p) => `${p.unidade} ${Math.round((p.valor / total) * 100)}%`).join(" · ");
   };
 
+  // Loja: empresa de uma loja só já é daquela loja; com várias, escolhe
+  const lojasDaEmpresa = form ? cad.empresas.find((e) => e.id === form.empresaId)?.unidades ?? [] : [];
+
   // Rateio na tela
   const valorForm = form ? lerValor(form.valor) : 0;
   const somaPartes = form ? Object.values(form.partes).reduce((s, v) => s + lerValor(v), 0) : 0;
@@ -289,6 +357,20 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       else partes[u] = "";
       return { ...f, partes };
     });
+  /** Mudou o valor com rateio fechado: as partes acompanham na mesma proporção. */
+  const trocarValor = (texto: string) =>
+    setForm((f) => {
+      if (!f) return f;
+      const antes = lerValor(f.valor);
+      const depois = lerValor(texto);
+      const soma = Object.values(f.partes).reduce((s, v) => s + lerValor(v), 0);
+      if (f.loja !== RATEAR || !(antes > 0) || !(depois > 0) || Math.abs(soma - antes) > 0.05) return { ...f, valor: texto };
+      const partes = Object.fromEntries(
+        Object.entries(f.partes).map(([u, v]) => [u, valorParaCampo(Math.round((lerValor(v) / antes) * depois * 100) / 100)])
+      );
+      return { ...f, valor: texto, partes };
+    });
+
   const dividirIgual = () =>
     setForm((f) => {
       if (!f) return f;
@@ -304,7 +386,16 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
   const contasMes = (dados?.contas ?? []).filter((c) => !mes || c.vencimento.startsWith(mes));
   const anteriores = (dados?.contas ?? []).filter((c) => mes && !c.vencimento.startsWith(mes));
   const lista = vista === "agenda" && dia ? (dados?.contas ?? []).filter((c) => c.vencimento === dia) : dados?.contas ?? [];
-  const totalLista = lista.reduce((s, c) => s + (c.status === "paga" ? c.valorPago ?? c.valor : c.valor), 0);
+  const valorDe = (c: ContaTela) => (c.status === "paga" ? c.valorPago ?? c.valor : c.valor);
+  const totalLista = lista.reduce((s, c) => s + valorDe(c), 0);
+  // Sem filtro de empresa, a lista vem separada por empresa, com o total de cada uma
+  const agrupar = !empresa && new Set(lista.map((c) => c.empresaId)).size > 1;
+  const grupos = agrupar
+    ? cad.empresas
+        .map((e) => ({ id: e.id, nome: e.nome, contas: lista.filter((c) => c.empresaId === e.id) }))
+        .filter((g) => g.contas.length)
+    : [{ id: "todas", nome: "", contas: lista }];
+  const colunaEmpresa = !agrupar && empresasAtivas.length > 1;
   const pago = form?.modo === "pago";
 
   return (
@@ -339,6 +430,28 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
             <div className="value">{brl.format(r.pagasMes.total)}</div>
             <span className="muted">{r.pagasMes.qtd} {r.pagasMes.qtd === 1 ? "conta" : "contas"}</span>
           </div>
+        </div>
+      )}
+
+      {dados && dados.porEmpresa.length > 0 && (
+        <div className="fin-empresas">
+          {dados.porEmpresa.map((e) => (
+            <button
+              key={e.empresaId}
+              className={`fin-empresa${empresa === e.empresaId ? " sel" : ""}`}
+              onClick={() => setEmpresa(empresa === e.empresaId ? "" : e.empresaId)}
+              title={empresa === e.empresaId ? "Clique para ver todas" : `Ver só ${e.nome}`}
+            >
+              <span className="fin-empresa-nome">{e.nome}</span>
+              <span className="fin-empresa-valor">{brl.format(e.aPagar)}</span>
+              <span className="fin-sub">
+                a pagar em {nomeMesLongo(mes || mesAtual()).split(" ")[0]}
+                {e.qtd ? ` · ${e.qtd} ${e.qtd === 1 ? "conta" : "contas"}` : ""}
+              </span>
+              {e.vencido > 0 && <span className="fin-empresa-vencido">{brl.format(e.vencido)} vencido</span>}
+              {e.pago > 0 && <span className="fin-sub">pago no mês {brl.format(e.pago)}</span>}
+            </button>
+          ))}
         </div>
       )}
 
@@ -401,6 +514,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
           className="mini"
           onClick={() => {
             setArquivo(null);
+            setPreenchido("");
             setForm(novo("conta"));
           }}
         >
@@ -410,6 +524,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
           className="mini ghost"
           onClick={() => {
             setArquivo(null);
+            setPreenchido("");
             setForm(novo("pago"));
           }}
         >
@@ -440,14 +555,35 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
               fica paga no mês dela.
             </p>
           )}
+          {!form.id && sugestoes && (
+            <>
+              <datalist id="fin-fornecedores">
+                {sugestoes.porFornecedor.map((x) => (
+                  <option key={x.fornecedor} value={x.fornecedor} />
+                ))}
+              </datalist>
+              <datalist id="fin-descricoes">
+                {sugestoes.porDescricao.map((x) => (
+                  <option key={x.descricao} value={x.descricao} />
+                ))}
+              </datalist>
+            </>
+          )}
+          {preenchido && <div className="parcial" style={{ margin: "0 0 10px" }}>{preenchido}</div>}
           <div className="fin-grid">
             <label className="config-campo fin-largo">
               <span>Descrição</span>
-              <input value={form.descricao} onChange={(e) => campo("descricao", e.target.value)} autoFocus placeholder="ex.: Aluguel loja Centro" />
+              <input
+                value={form.descricao}
+                onChange={(e) => completar("descricao", e.target.value)}
+                autoFocus
+                list="fin-descricoes"
+                placeholder="ex.: Aluguel loja Centro"
+              />
             </label>
             <label className="config-campo">
               <span>Fornecedor</span>
-              <input value={form.fornecedor} onChange={(e) => campo("fornecedor", e.target.value)} />
+              <input value={form.fornecedor} onChange={(e) => completar("fornecedor", e.target.value)} list="fin-fornecedores" />
             </label>
             <label className="config-campo">
               <span>Empresa</span>
@@ -477,7 +613,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
             </label>
             <label className="config-campo">
               <span>Valor{form.repetir !== "nao" ? " (de cada uma)" : ""}</span>
-              <input inputMode="decimal" value={form.valor} onChange={(e) => campo("valor", e.target.value)} placeholder="0,00" />
+              <input inputMode="decimal" value={form.valor} onChange={(e) => trocarValor(e.target.value)} placeholder="0,00" />
             </label>
             <label className="config-campo">
               <span>
@@ -514,35 +650,42 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 <input inputMode="numeric" value={form.vezes} onChange={(e) => campo("vezes", e.target.value)} />
               </label>
             )}
-            <label className="config-campo">
-              <span>Loja</span>
-              <select
-                value={form.loja}
-                onChange={(e) => {
-                  const loja = e.target.value;
-                  setForm({
-                    ...form,
-                    loja,
-                    // Loja escolhida e empresa em branco: a empresa dona da loja
-                    empresaId: form.empresaId || (loja && loja !== RATEAR ? donaDaLoja(loja) : ""),
-                  });
-                }}
-              >
-                <option value="">Geral (sem loja)</option>
-                {cad.unidades.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-                <option value={RATEAR}>Ratear entre lojas…</option>
-              </select>
-            </label>
+            {form.loja !== RATEAR && lojasDaEmpresa.length >= 2 && (
+              <label className="config-campo">
+                <span>Loja</span>
+                <select value={form.loja} onChange={(e) => campo("loja", e.target.value)}>
+                  <option value="">Toda a empresa</option>
+                  {lojasDaEmpresa.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                  <option value={RATEAR}>Dividir entre lojas…</option>
+                </select>
+              </label>
+            )}
           </div>
+
+          {form.loja !== RATEAR && lojasDaEmpresa.length < 2 && (
+            <div className="fin-sub" style={{ margin: "-4px 0 12px" }}>
+              {lojasDaEmpresa.length === 1 ? (
+                <>
+                  Loja: <b>{lojasDaEmpresa[0]}</b> ·{" "}
+                </>
+              ) : null}
+              <button type="button" className="link" onClick={() => campo("loja", RATEAR)}>
+                dividir esta conta entre lojas (rateio)
+              </button>
+            </div>
+          )}
 
           {form.loja === RATEAR && (
             <div className="fin-rateio">
               <div className="fin-sub" style={{ marginBottom: 6 }}>
-                Marque as lojas que dividem esta conta e quanto cada uma paga:
+                Marque as lojas que dividem esta conta e quanto cada uma paga ·{" "}
+                <button type="button" className="link" onClick={() => setForm({ ...form, loja: "", partes: {} })}>
+                  não dividir
+                </button>
               </div>
               <div className="filters" style={{ marginBottom: 8 }}>
                 {cad.unidades.map((u) => (
@@ -657,7 +800,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 <tr>
                   <th>Venc.</th>
                   <th>Descrição</th>
-                  {empresasAtivas.length > 1 && <th>Empresa</th>}
+                  {colunaEmpresa && <th>Empresa</th>}
                   <th>Categoria</th>
                   <th className="n">Valor</th>
                   <th>Situação</th>
@@ -665,85 +808,103 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 </tr>
               </thead>
               <tbody>
-                {lista.map((c) => {
-                  const vencida = c.status === "aberta" && c.vencimento < dados.hoje;
-                  const hoje = c.status === "aberta" && c.vencimento === dados.hoje;
-                  const rateio = descreverRateio(c);
-                  return (
-                    <tr key={c.id} className={c.status === "paga" ? "paga" : ""}>
-                      <td className={vencida ? "vencida" : ""}>{dataBr(c.vencimento)}</td>
-                      <td title={c.observacao || undefined}>
-                        <div className="fin-desc">
-                          {c.descricao}
-                          {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
-                          {(c.anexos ?? []).map((a) => (
-                            <a key={a.id} className="fin-clipe" href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer" title={a.nome}>
-                              📎
-                            </a>
-                          ))}
-                        </div>
-                        {(c.fornecedor || c.forma || rateio) && (
-                          <div className="fin-sub">{[c.fornecedor, c.forma, rateio].filter(Boolean).join(" · ")}</div>
-                        )}
-                      </td>
-                      {empresasAtivas.length > 1 && <td className="fin-sub">{nomeEmpresa(c.empresaId)}</td>}
-                      <td className="fin-sub">{nomeCategoria(c.categoriaId)}</td>
-                      <td className="n">
-                        <b>{brl.format(c.status === "paga" ? c.valorPago ?? c.valor : c.valor)}</b>
-                      </td>
-                      <td>
-                        {c.status === "paga" ? (
-                          <span className="fin-status paga" title={c.pagoPorNome ? `baixa por ${c.pagoPorNome}` : undefined}>
-                            paga {dataBr(c.pagoEm)}
+                {grupos.map((g) => (
+                  <Fragment key={g.id}>
+                    {agrupar && (
+                      <tr className="fin-grupo-linha">
+                        <td colSpan={6}>
+                          <span>{g.nome}</span>
+                          <span className="fin-grupo-total">
+                            {g.contas.length} {g.contas.length === 1 ? "conta" : "contas"} ·{" "}
+                            <b>{brl.format(g.contas.reduce((s, c) => s + valorDe(c), 0))}</b>
                           </span>
-                        ) : vencida ? (
-                          <span className="fin-status vencida">vencida</span>
-                        ) : hoje ? (
-                          <span className="fin-status hoje">vence hoje</span>
-                        ) : (
-                          <span className="fin-status">a vencer</span>
-                        )}
-                      </td>
-                      <td className="fin-acoes">
-                        {pagando?.id === c.id ? (
-                          <span className="fin-pagar">
-                            <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
-                            <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
-                            <button className="mini" onClick={pagar}>
-                              Confirmar
-                            </button>
-                            <button className="mini ghost" onClick={() => setPagando(null)}>
-                              ✕
-                            </button>
-                          </span>
-                        ) : (
-                          <>
-                            {c.status === "aberta" ? (
-                              <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
-                                Pagar
-                              </button>
+                        </td>
+                      </tr>
+                    )}
+                    {g.contas.map((c) => {
+                      const vencida = c.status === "aberta" && c.vencimento < dados.hoje;
+                      const hoje = c.status === "aberta" && c.vencimento === dados.hoje;
+                      const rateio = descreverRateio(c);
+                      return (
+                        <tr key={c.id} className={c.status === "paga" ? "paga" : ""}>
+                          <td className={vencida ? "vencida" : ""}>{dataBr(c.vencimento)}</td>
+                          <td title={c.observacao || undefined}>
+                            <div className="fin-desc">
+                              {c.descricao}
+                              {c.parcela && <span className="fin-parcela">{c.parcela}</span>}
+                              {(c.anexos ?? []).map((a) => (
+                                <a key={a.id} className="fin-clipe" href={`/api/financeiro/anexos/${a.id}`} target="_blank" rel="noreferrer" title={a.nome}>
+                                  📎
+                                </a>
+                              ))}
+                            </div>
+                            {(c.fornecedor || c.forma || rateio) && (
+                              <div className="fin-sub">{[c.fornecedor, c.forma, rateio].filter(Boolean).join(" · ")}</div>
+                            )}
+                          </td>
+                          {colunaEmpresa && <td className="fin-sub">{nomeEmpresa(c.empresaId)}</td>}
+                          <td className="fin-sub">{nomeCategoria(c.categoriaId)}</td>
+                          <td className="n">
+                            <b>{brl.format(c.status === "paga" ? c.valorPago ?? c.valor : c.valor)}</b>
+                          </td>
+                          <td>
+                            {c.status === "paga" ? (
+                              <span className="fin-status paga" title={c.pagoPorNome ? `baixa por ${c.pagoPorNome}` : undefined}>
+                                paga {dataBr(c.pagoEm)}
+                              </span>
+                            ) : vencida ? (
+                              <span className="fin-status vencida">vencida</span>
+                            ) : hoje ? (
+                              <span className="fin-status hoje">vence hoje</span>
                             ) : (
-                              <button className="mini ghost" onClick={() => reabrir(c)}>
-                                Desfazer
-                              </button>
+                              <span className="fin-status">a vencer</span>
                             )}
-                            <button className="link" onClick={() => anexar(c.id)} title="Anexar boleto ou comprovante">
-                              anexar
-                            </button>
-                            <button className="link" onClick={() => editar(c)}>
-                              editar
-                            </button>
-                            {podeExcluir(c) && (
-                              <button className="link fin-excluir" onClick={() => excluir(c)}>
-                                excluir
-                              </button>
+                          </td>
+                          <td className="fin-acoes">
+                            {pagando?.id === c.id ? (
+                              <span className="fin-pagar">
+                                <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
+                                <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
+                                <button className="mini" onClick={pagar}>
+                                  Confirmar
+                                </button>
+                                <button className="mini ghost" onClick={() => setPagando(null)}>
+                                  ✕
+                                </button>
+                              </span>
+                            ) : (
+                              <>
+                                {c.status === "aberta" ? (
+                                  <button className="mini" onClick={() => setPagando({ id: c.id, pagoEm: hojeSp(), valor: valorParaCampo(c.valor) })}>
+                                    Pagar
+                                  </button>
+                                ) : (
+                                  <button className="mini ghost" onClick={() => reabrir(c)}>
+                                    Desfazer
+                                  </button>
+                                )}
+                                <button className="link" onClick={() => anexar(c.id)} title="Anexar boleto ou comprovante">
+                                  anexar
+                                </button>
+                                <button className="link" onClick={() => copiar(c)} title="Lançar outra igual a esta">
+                                  copiar
+                                </button>
+                                <button className="link" onClick={() => editar(c)}>
+                                  editar
+                                </button>
+                                {podeExcluir(c) && (
+                                  <button className="link fin-excluir" onClick={() => excluir(c)}>
+                                    excluir
+                                  </button>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>

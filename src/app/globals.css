@@ -746,3 +746,21 @@ th.num { text-align: right; }
   .nav-principal { order: 3; width: 100%; margin: 0; display: flex; }
   .nav-principal a { flex: 1; text-align: center; padding: 7px 6px; font-size: 13px; }
 }
+/* Contas por empresa */
+.fin-empresas { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.fin-empresa {
+  display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-1); font: inherit; color: inherit;
+}
+.fin-empresa:hover { border-color: var(--text-muted); }
+.fin-empresa.sel { outline: 2px solid var(--brand); outline-offset: -1px; }
+.fin-empresa-nome { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.fin-empresa-valor { font-family: var(--font-serif); font-size: 19px; font-weight: 600; color: var(--text-primary); }
+.fin-empresa-vencido { font-size: 11.5px; font-weight: 600; color: var(--critical); }
+.fin-tbl tr.fin-grupo-linha td {
+  padding-top: 14px; border-top: none; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--brand);
+}
+.fin-grupo-total { float: right; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-secondary); }
+.fin-grupo-total b { color: var(--text-primary); }

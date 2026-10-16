@@ -17,7 +17,11 @@ export interface Pedaco {
 export function pedacos(c: Conta, base: BaseFinanceira): Pedaco[] {
   const partes = (c.rateio ?? []).filter((p) => p.valor > 0);
   const soma = partes.reduce((s, p) => s + p.valor, 0);
-  if (!partes.length || !(soma > 0)) return [{ empresaId: c.empresaId, fracao: 1 }];
+  if (!partes.length || !(soma > 0)) {
+    // Empresa de uma loja só: a conta é daquela loja, sem precisar escolher
+    const lojas = base.empresas.find((e) => e.id === c.empresaId)?.unidades ?? [];
+    return [{ empresaId: c.empresaId, unidade: lojas.length === 1 ? lojas[0] : undefined, fracao: 1 }];
+  }
   const dona = (u: string) => base.empresas.find((e) => e.unidades.includes(u))?.id ?? c.empresaId;
   return partes.map((p) => ({ empresaId: dona(p.unidade), unidade: p.unidade, fracao: p.valor / soma }));
 }

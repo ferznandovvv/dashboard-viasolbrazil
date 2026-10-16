@@ -35,7 +35,8 @@ type Pedido =
       veDre: boolean;
       ativo?: boolean;
     }
-  | { tipo: "backup"; pasta: string };
+  | { tipo: "backup"; pasta: string }
+  | { tipo: "excluir-empresa"; id: string };
 
 /** Cria ou altera um cadastro (só o administrador). */
 export async function POST(req: NextRequest) {
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
     const r = await alterarBase((base) => {
       if (p.tipo === "empresa") {
         if (!p.nome?.trim()) throw new Error("Dê um nome para a empresa.");
+        if (base.empresas.some((e) => e.id !== p.id && e.nome.trim().toLowerCase() === p.nome.trim().toLowerCase()))
+          throw new Error("Já existe uma empresa com esse nome.");
         const unidades = (p.unidades ?? []).filter((u) => UNIDADES.includes(u));
         // Uma loja não pode ser receita de duas empresas: sairia em dobro no DRE "todas"
         for (const e of base.empresas)
@@ -91,6 +94,12 @@ export async function POST(req: NextRequest) {
             criadoEm: new Date().toISOString(),
           });
         }
+        return "ok";
+      }
+      if (p.tipo === "excluir-empresa") {
+        const usadas = base.contas.filter((c) => c.empresaId === p.id).length;
+        if (usadas) throw new Error(`Essa empresa tem ${usadas} conta(s) lançada(s). Desative em vez de excluir.`);
+        base.empresas = base.empresas.filter((e) => e.id !== p.id);
         return "ok";
       }
       if (p.tipo === "backup") {

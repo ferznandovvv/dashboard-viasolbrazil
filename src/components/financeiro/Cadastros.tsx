@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Categoria, Empresa, GrupoDre, Papel, UsuarioPublico } from "@/lib/financeiro/tipos";
 import { type Cadastros as Dados, api } from "./comum";
 
@@ -11,8 +11,12 @@ export function Cadastros({ cad, aoMudar }: { cad: Dados; aoMudar: () => Promise
   const [secao, setSecao] = useState<Secao>("empresas");
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
+  const salvando = useRef(false);
 
   const salvar = async (corpo: object, msg = "Salvo.") => {
+    // Duplo clique no salvar criava o mesmo cadastro duas vezes
+    if (salvando.current) return false;
+    salvando.current = true;
     setErro("");
     setAviso("");
     try {
@@ -26,6 +30,8 @@ export function Cadastros({ cad, aoMudar }: { cad: Dados; aoMudar: () => Promise
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro");
       return false;
+    } finally {
+      salvando.current = false;
     }
   };
 
@@ -142,6 +148,18 @@ function Empresas({ cad, salvar }: { cad: Dados; salvar: Salvar }) {
             <button className="exportar" onClick={() => setEdit(null)}>
               Cancelar
             </button>
+            {edit.id && (
+              <button
+                className="link fin-excluir"
+                onClick={async () =>
+                  confirm(`Excluir a empresa "${edit.nome}"? Só dá se ela não tiver nenhuma conta lançada.`) &&
+                  (await salvar({ tipo: "excluir-empresa", id: edit.id }, "Empresa excluída.")) &&
+                  setEdit(null)
+                }
+              >
+                excluir empresa
+              </button>
+            )}
           </div>
         </div>
       )}

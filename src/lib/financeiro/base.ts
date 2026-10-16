@@ -60,9 +60,53 @@ async function gravar(base: BaseFinanceira): Promise<void> {
   await rename(tmp, ARQUIVO);
 }
 
+/**
+ * Ajustes que entram com versões novas do sistema e precisam valer também
+ * para a base que já existe na máquina. Cada um roda uma vez só.
+ */
+const MIGRACOES: { id: string; aplicar: (b: BaseFinanceira) => void }[] = [
+  {
+    // Categorias de produção (Barracão), no grupo do custo da mercadoria
+    id: "categorias-producao",
+    aplicar: (b) => {
+      for (const nome of ["Tecidos e aviamentos", "Costura / facção", "Estamparia / bordado", "Embalagem"]) {
+        if (!b.categorias.some((c) => c.nome.toLowerCase() === nome.toLowerCase()))
+          b.categorias.push({ id: novoId(), nome, grupo: "cmv", ativa: true });
+      }
+    },
+  },
+  {
+    // Empresas com o mesmo nome criadas por duplo clique: fica a primeira;
+    // as repetidas sem nenhuma conta saem
+    id: "empresas-repetidas",
+    aplicar: (b) => {
+      const vistos = new Set<string>();
+      b.empresas = b.empresas.filter((e) => {
+        const nome = e.nome.trim().toLowerCase();
+        const repetida = vistos.has(nome) && !b.contas.some((c) => c.empresaId === e.id);
+        vistos.add(nome);
+        return !repetida;
+      });
+    },
+  },
+];
+
+const precisaMigrar = (b: BaseFinanceira) => MIGRACOES.some((m) => !b.config.migracoes?.includes(m.id));
+
+function migrar(b: BaseFinanceira) {
+  for (const m of MIGRACOES) {
+    if (b.config.migracoes?.includes(m.id)) continue;
+    m.aplicar(b);
+    b.config.migracoes = [...(b.config.migracoes ?? []), m.id];
+  }
+}
+
 /** Leitura simples, para consultas. */
 export async function lerBase(): Promise<BaseFinanceira> {
   await (global.__filaFin ?? Promise.resolve()).catch(() => {}); // espera uma escrita em andamento
+  const base = await ler();
+  if (!precisaMigrar(base)) return base;
+  await alterarBase(() => {}); // a migração roda dentro da fila, gravando uma vez
   return ler();
 }
 
@@ -75,6 +119,7 @@ export function alterarBase<T>(fn: (base: BaseFinanceira) => T | Promise<T>): Pr
     .catch(() => {})
     .then(async () => {
       const base = await ler();
+      migrar(base);
       const r = await fn(base);
       await gravar(base);
       void copiaDeSeguranca(base);

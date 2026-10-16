@@ -52,6 +52,26 @@ export async function GET(req: NextRequest) {
     .filter(busca)
     .sort((a, b) => a.vencimento.localeCompare(b.vencimento) || a.descricao.localeCompare(b.descricao));
 
+  // Quanto cada empresa tem para pagar no mês (vale o filtro de mês, não o de empresa)
+  const mesRef = mes || hoje.slice(0, 7);
+  const porEmpresa = base.empresas
+    .filter((e) => e.ativa || base.contas.some((c) => c.empresaId === e.id && c.status === "aberta"))
+    .map((e) => {
+      const dela = base.contas.filter((c) => c.empresaId === e.id);
+      const abertasMes = dela.filter((c) => c.status === "aberta" && c.vencimento.startsWith(mesRef));
+      const vencidasDela = dela.filter((c) => c.status === "aberta" && c.vencimento < hoje);
+      const pagasNoMes = dela.filter((c) => c.status === "paga" && (c.pagoEm ?? "").startsWith(mesRef));
+      return {
+        empresaId: e.id,
+        nome: e.nome,
+        aPagar: soma(abertasMes),
+        qtd: abertasMes.length,
+        vencido: soma(vencidasDela),
+        pago: pagasNoMes.reduce((s, c) => s + (c.valorPago ?? c.valor), 0),
+      };
+    })
+    .filter((x) => x.aPagar || x.vencido || x.pago);
+
   const nomes = new Map(base.usuarios.map((u) => [u.id, u.nome]));
   return NextResponse.json({
     hoje,
@@ -67,6 +87,7 @@ export async function GET(req: NextRequest) {
       pagoPorNome: c.pagoPor ? nomes.get(c.pagoPor) ?? "" : "",
     })),
     totalLista: soma(lista),
+    porEmpresa,
   });
 }
 
