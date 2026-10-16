@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const criadas = await alterarBase((base) => {
-      const r = validarRateio(n.rateio, valor, base);
+      const r = validarRateio(n.rateio, valor, base, n.empresaId);
       if (r.erro) throw new Error(r.erro);
       if (!base.empresas.some((e) => e.id === n.empresaId)) throw new Error("Empresa não encontrada.");
       if (!base.categorias.some((c) => c.id === n.categoriaId)) throw new Error("Categoria não encontrada.");

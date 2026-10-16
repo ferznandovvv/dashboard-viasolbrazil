@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!base.empresas.some((e) => e.id === p.empresaId)) throw new Error("Empresa não encontrada.");
         if (!base.categorias.some((x) => x.id === p.categoriaId)) throw new Error("Categoria não encontrada.");
         const valor = Math.round(Number(p.valor) * 100) / 100;
-        const r = validarRateio(p.rateio, valor, base);
+        const r = validarRateio(p.rateio, valor, base, p.empresaId);
         if (r.erro) throw new Error(r.erro);
         Object.assign(c, {
           rateio: r.rateio,

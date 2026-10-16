@@ -41,6 +41,8 @@ interface Formulario {
   vezes: string;
   /** Conta dividida entre empresas */
   dividir: boolean;
+  /** Despesa de outra empresa (100%), paga por esta: entra no DRE da outra */
+  despesaDe: string;
   /** Na divisão: empresa → valor digitado */
   partes: Record<string, string>;
   anexos: Conta["anexos"];
@@ -54,9 +56,11 @@ const divisaoNoForm = (rateio?: Conta["rateio"]) => {
   const partes = (rateio ?? []).filter((p) => p.empresaId);
   return {
     dividir: partes.length > 1,
+    despesaDe: partes.length === 1 ? partes[0].empresaId : "",
     partes: partes.length > 1 ? Object.fromEntries(partes.map((p) => [p.empresaId, valorParaCampo(p.valor)])) : {},
   };
 };
+const DIVIDIR = "__dividir";
 const diaCurto = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).replace(".", "");
 const somarDia = (d: string, n: number) => {
@@ -226,6 +230,7 @@ export function Contas({
     repetir: "nao",
     vezes: "2",
     dividir: false,
+    despesaDe: "",
     partes: {},
     anexos: [],
     chavePix: "",
@@ -259,7 +264,9 @@ export function Contas({
       ? Object.entries(f.partes)
           .map(([empresaId, v]) => ({ empresaId, valor: lerValor(v) }))
           .filter((p) => p.valor > 0)
-      : [];
+      : f.despesaDe && f.despesaDe !== f.empresaId
+        ? [{ empresaId: f.despesaDe, valor: lerValor(f.valor) }]
+        : [];
 
   const enviarAnexo = async (contaId: string, f: File) => {
     const corpo = new FormData();
@@ -465,7 +472,7 @@ export function Contas({
 
   const descreverRateio = (c: ContaTela) => {
     if (!c.rateio?.length) return "";
-    if (c.rateio.length < 2) return "";
+    if (c.rateio.length === 1) return c.rateio[0].empresaId !== c.empresaId ? `despesa de ${nomeEmpresa(c.rateio[0].empresaId)}` : "";
     const total = c.rateio.reduce((s, p) => s + p.valor, 0);
     return "dividida: " + c.rateio.map((p) => `${nomeEmpresa(p.empresaId)} ${Math.round((p.valor / total) * 100)}%`).join(" · ");
   };
@@ -476,7 +483,7 @@ export function Contas({
   const empresasDivisao = form ? Object.keys(form.partes) : [];
   /** Abre a divisão já com a empresa da conta marcada com o valor todo */
   const abrirDivisao = () =>
-    setForm((f) => (f ? { ...f, dividir: true, partes: f.empresaId ? { [f.empresaId]: f.valor } : {} } : f));
+    setForm((f) => (f ? { ...f, dividir: true, despesaDe: "", partes: f.empresaId ? { [f.empresaId]: f.valor } : {} } : f));
   const alternarEmpresaDivisao = (u: string) =>
     setForm((f) => {
       if (!f) return f;
@@ -640,7 +647,7 @@ export function Contas({
               <input value={form.fornecedor} onChange={(e) => completar("fornecedor", e.target.value)} list="fin-fornecedores" />
             </label>
             <label className="config-campo">
-              <span>{form.dividir ? "Empresa que paga" : "Empresa"}</span>
+              <span>{form.dividir || form.despesaDe ? "Empresa que paga" : "Empresa"}</span>
               <select value={form.empresaId} onChange={(e) => campo("empresaId", e.target.value)}>
                 <option value="">Escolha…</option>
                 {empresasAtivas.map((e) => (
@@ -745,12 +752,25 @@ export function Contas({
               </label>
             )}
             {!form.dividir && empresasAtivas.length > 1 && (
-              <div className="config-campo">
-                <span>Dividir com outras empresas?</span>
-                <button type="button" className="fin-dividir fin-dividir-largo" onClick={abrirDivisao}>
-                  ⇆ Dividir entre empresas
-                </button>
-              </div>
+              <label className="config-campo">
+                <span>Despesa de quem? (DRE)</span>
+                <select
+                  value={form.despesaDe && form.despesaDe !== form.empresaId ? form.despesaDe : ""}
+                  onChange={(e) => (e.target.value === DIVIDIR ? abrirDivisao() : campo("despesaDe", e.target.value))}
+                >
+                  <option value="">Da mesma empresa que paga</option>
+                  <optgroup label="Toda de outra empresa">
+                    {empresasAtivas
+                      .filter((e) => e.id !== form.empresaId)
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.nome}
+                        </option>
+                      ))}
+                  </optgroup>
+                  <option value={DIVIDIR}>⇆ Dividir entre empresas…</option>
+                </select>
+              </label>
             )}
           </div>
 
