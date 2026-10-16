@@ -22,7 +22,6 @@ interface Resposta {
 type Status = "abertas" | "vencidas" | "pagas" | "todas";
 type Vista = "agenda" | "lista";
 type Janela = "hoje" | "amanha" | "semana";
-const RATEAR = "__ratear";
 
 interface Formulario {
   id?: string;
@@ -39,15 +38,24 @@ interface Formulario {
   observacao: string;
   repetir: "nao" | "parcelado" | "mensal";
   vezes: string;
-  /** "" = sem loja; nome da loja; ou RATEAR */
-  loja: string;
-  /** No rateio: loja → valor digitado */
+  /** Conta dividida entre empresas */
+  dividir: boolean;
+  /** Na divisão: empresa → valor digitado */
   partes: Record<string, string>;
   anexos: Conta["anexos"];
   chavePix: string;
 }
 
 const mesAtual = () => hojeSp().slice(0, 7);
+
+/** Divisão salva → campos do formulário. */
+const divisaoNoForm = (rateio?: Conta["rateio"]) => {
+  const partes = (rateio ?? []).filter((p) => p.empresaId);
+  return {
+    dividir: partes.length > 1,
+    partes: partes.length > 1 ? Object.fromEntries(partes.map((p) => [p.empresaId, valorParaCampo(p.valor)])) : {},
+  };
+};
 const diaCurto = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).replace(".", "");
 const somarDia = (d: string, n: number) => {
@@ -83,7 +91,7 @@ const lerVista = (): Vista => {
   }
 };
 
-/** Contas a pagar: agenda do mês, lançar (a pagar ou já pago), ratear entre lojas e dar baixa. */
+/** Contas a pagar: agenda do mês, lançar (a pagar ou já pago), dividir entre empresas e dar baixa. */
 export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPublico }) {
   const empresasAtivas = cad.empresas.filter((e) => e.ativa);
   const categoriasAtivas = cad.categorias.filter((c) => c.ativa);
@@ -158,7 +166,6 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     }
     const empresaValida = cad.empresas.some((e) => e.id === s.empresaId && e.ativa);
     const categoriaValida = cad.categorias.some((c) => c.id === s.categoriaId && c.ativa);
-    const rateio = s.rateio ?? [];
     setPreenchido(`Completei com o último lançamento igual (${dataBr(s.em)}) — confira o valor.`);
     setForm({
       ...novo,
@@ -169,8 +176,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       // Pagamento já feito não volta a ser "Boleto" só porque a conta era boleto
       forma: form.modo === "pago" && s.forma === "Boleto" ? form.forma : s.forma || form.forma,
       valor: novo.valor || valorParaCampo(s.valor),
-      loja: rateio.length > 1 ? RATEAR : rateio[0]?.unidade ?? "",
-      partes: rateio.length > 1 ? Object.fromEntries(rateio.map((p) => [p.unidade, valorParaCampo(p.valor)])) : {},
+      ...divisaoNoForm(s.rateio),
       chavePix: form.chavePix || s.chavePix || "",
     });
   };
@@ -187,8 +193,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       categoriaId: c.categoriaId,
       valor: valorParaCampo(c.valor),
       forma: c.forma,
-      loja: !c.rateio?.length ? "" : c.rateio.length === 1 ? c.rateio[0].unidade : RATEAR,
-      partes: Object.fromEntries((c.rateio ?? []).map((p) => [p.unidade, valorParaCampo(p.valor)])),
+      ...divisaoNoForm(c.rateio),
       chavePix: c.chavePix ?? "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -196,7 +201,6 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
   const nomeEmpresa = (id: string) => cad.empresas.find((e) => e.id === id)?.nome ?? "—";
   const nomeCategoria = (id: string) => cad.categorias.find((c) => c.id === id)?.nome ?? "—";
-  const donaDaLoja = (u: string) => empresasAtivas.find((e) => e.unidades.includes(u))?.id ?? "";
 
   const novo = (modo: Formulario["modo"]): Formulario => ({
     modo,
@@ -211,7 +215,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
     observacao: "",
     repetir: "nao",
     vezes: "2",
-    loja: "",
+    dividir: false,
     partes: {},
     anexos: [],
     chavePix: "",
@@ -219,7 +223,6 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
   const editar = (c: ContaTela) => {
     setArquivo(null);
-    const partes = Object.fromEntries((c.rateio ?? []).map((p) => [p.unidade, valorParaCampo(p.valor)]));
     setForm({
       id: c.id,
       modo: c.status === "paga" ? "pago" : "conta",
@@ -234,26 +237,19 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       observacao: c.observacao,
       repetir: "nao",
       vezes: "1",
-      loja: !c.rateio?.length ? "" : c.rateio.length === 1 ? c.rateio[0].unidade : RATEAR,
-
-      partes,
+      ...divisaoNoForm(c.rateio),
       anexos: c.anexos ?? [],
       chavePix: c.chavePix ?? "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const rateioDoForm = (f: Formulario) => {
-    const valor = lerValor(f.valor);
-    if (!f.loja) return [];
-    if (f.loja !== RATEAR) {
-      const lojas = cad.empresas.find((e) => e.id === f.empresaId)?.unidades ?? [];
-      return lojas.includes(f.loja) ? [{ unidade: f.loja, valor }] : [];
-    }
-    return Object.entries(f.partes)
-      .map(([unidade, v]) => ({ unidade, valor: lerValor(v) }))
-      .filter((p) => p.valor > 0);
-  };
+  const rateioDoForm = (f: Formulario) =>
+    f.dividir
+      ? Object.entries(f.partes)
+          .map(([empresaId, v]) => ({ empresaId, valor: lerValor(v) }))
+          .filter((p) => p.valor > 0)
+      : [];
 
   const enviarAnexo = async (contaId: string, f: File) => {
     const corpo = new FormData();
@@ -443,19 +439,19 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
 
   const descreverRateio = (c: ContaTela) => {
     if (!c.rateio?.length) return "";
-    if (c.rateio.length === 1) return c.rateio[0].unidade;
+    if (c.rateio.length < 2) return "";
     const total = c.rateio.reduce((s, p) => s + p.valor, 0);
-    return "rateio: " + c.rateio.map((p) => `${p.unidade} ${Math.round((p.valor / total) * 100)}%`).join(" · ");
+    return "dividida: " + c.rateio.map((p) => `${nomeEmpresa(p.empresaId)} ${Math.round((p.valor / total) * 100)}%`).join(" · ");
   };
-
-  // Loja: empresa de uma loja só já é daquela loja; com várias, escolhe
-  const lojasDaEmpresa = form ? cad.empresas.find((e) => e.id === form.empresaId)?.unidades ?? [] : [];
 
   // Rateio na tela
   const valorForm = form ? lerValor(form.valor) : 0;
   const somaPartes = form ? Object.values(form.partes).reduce((s, v) => s + lerValor(v), 0) : 0;
-  const lojasRateio = form ? Object.keys(form.partes) : [];
-  const alternarLojaRateio = (u: string) =>
+  const empresasDivisao = form ? Object.keys(form.partes) : [];
+  /** Abre a divisão já com a empresa da conta marcada com o valor todo */
+  const abrirDivisao = () =>
+    setForm((f) => (f ? { ...f, dividir: true, partes: f.empresaId ? { [f.empresaId]: f.valor } : {} } : f));
+  const alternarEmpresaDivisao = (u: string) =>
     setForm((f) => {
       if (!f) return f;
       const partes = { ...f.partes };
@@ -470,7 +466,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
       const antes = lerValor(f.valor);
       const depois = lerValor(texto);
       const soma = Object.values(f.partes).reduce((s, v) => s + lerValor(v), 0);
-      if (f.loja !== RATEAR || !(antes > 0) || !(depois > 0) || Math.abs(soma - antes) > 0.05) return { ...f, valor: texto };
+      if (!f.dividir || !(antes > 0) || !(depois > 0) || Math.abs(soma - antes) > 0.05) return { ...f, valor: texto };
       const partes = Object.fromEntries(
         Object.entries(f.partes).map(([u, v]) => [u, valorParaCampo(Math.round((lerValor(v) / antes) * depois * 100) / 100)])
       );
@@ -480,11 +476,11 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
   const dividirIgual = () =>
     setForm((f) => {
       if (!f) return f;
-      const lojas = Object.keys(f.partes);
-      if (!lojas.length) return f;
-      const cada = Math.floor((lerValor(f.valor) / lojas.length) * 100) / 100;
-      const resto = Math.round((lerValor(f.valor) - cada * lojas.length) * 100) / 100;
-      const partes = Object.fromEntries(lojas.map((u, i) => [u, valorParaCampo(i === lojas.length - 1 ? cada + resto : cada)]));
+      const ids = Object.keys(f.partes);
+      if (!ids.length) return f;
+      const cada = Math.floor((lerValor(f.valor) / ids.length) * 100) / 100;
+      const resto = Math.round((lerValor(f.valor) - cada * ids.length) * 100) / 100;
+      const partes = Object.fromEntries(ids.map((u, i) => [u, valorParaCampo(i === ids.length - 1 ? cada + resto : cada)]));
       return { ...f, partes };
     });
 
@@ -618,7 +614,7 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
               <input value={form.fornecedor} onChange={(e) => completar("fornecedor", e.target.value)} list="fin-fornecedores" />
             </label>
             <label className="config-campo">
-              <span>Empresa</span>
+              <span>{form.dividir ? "Empresa que paga" : "Empresa"}</span>
               <select value={form.empresaId} onChange={(e) => campo("empresaId", e.target.value)}>
                 <option value="">Escolha…</option>
                 {empresasAtivas.map((e) => (
@@ -688,55 +684,39 @@ export function Contas({ cad, usuario }: { cad: Cadastros; usuario: UsuarioPubli
                 <input inputMode="numeric" value={form.vezes} onChange={(e) => campo("vezes", e.target.value)} />
               </label>
             )}
-            {form.loja !== RATEAR && (
+            {!form.dividir && empresasAtivas.length > 1 && (
               <div className="config-campo">
-                <span>Loja</span>
-                <div className="fin-loja">
-                  {lojasDaEmpresa.length >= 2 ? (
-                    <select value={form.loja} onChange={(e) => campo("loja", e.target.value)}>
-                      <option value="">Toda a empresa</option>
-                      {lojasDaEmpresa.map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="fin-loja-fixa">
-                      {lojasDaEmpresa.length === 1 ? lojasDaEmpresa[0] : form.empresaId ? "sem loja" : "escolha a empresa"}
-                    </span>
-                  )}
-                  <button type="button" className="fin-dividir" onClick={() => campo("loja", RATEAR)}>
-                    ⇆ Dividir entre lojas
-                  </button>
-                </div>
+                <span>Dividir com outras empresas?</span>
+                <button type="button" className="fin-dividir fin-dividir-largo" onClick={abrirDivisao}>
+                  ⇆ Dividir entre empresas
+                </button>
               </div>
             )}
           </div>
 
-          {form.loja === RATEAR && (
+          {form.dividir && (
             <div className="fin-rateio">
               <div className="fin-sub" style={{ marginBottom: 6 }}>
-                Marque as lojas que dividem esta conta e quanto cada uma paga{" "}
-                <button type="button" className="fin-dividir" onClick={() => setForm({ ...form, loja: "", partes: {} })}>
+                Marque as empresas que dividem esta conta e quanto cada uma paga{" "}
+                <button type="button" className="fin-dividir" onClick={() => setForm({ ...form, dividir: false, partes: {} })}>
                   ✕ Não dividir
                 </button>
               </div>
               <div className="filters" style={{ marginBottom: 8 }}>
-                {cad.unidades.map((u) => (
-                  <button key={u} type="button" className={u in form.partes ? "active" : ""} onClick={() => alternarLojaRateio(u)}>
-                    {u}
+                {empresasAtivas.map((e) => (
+                  <button key={e.id} type="button" className={e.id in form.partes ? "active" : ""} onClick={() => alternarEmpresaDivisao(e.id)}>
+                    {e.nome}
                   </button>
                 ))}
               </div>
-              {lojasRateio.length > 0 && (
+              {empresasDivisao.length > 0 && (
                 <>
                   <div className="fin-rateio-linhas">
-                    {lojasRateio.map((u) => {
+                    {empresasDivisao.map((u) => {
                       const v = lerValor(form.partes[u] ?? "");
                       return (
                         <label key={u} className="fin-rateio-linha">
-                          <span>{u}</span>
+                          <span>{nomeEmpresa(u)}</span>
                           <input
                             inputMode="decimal"
                             value={form.partes[u]}

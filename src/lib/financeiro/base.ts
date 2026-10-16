@@ -91,6 +91,24 @@ const MIGRACOES: { id: string; aplicar: (b: BaseFinanceira) => void }[] = [
   },
 ];
 
+MIGRACOES.push({
+  // Rateio deixou de ser por loja: cada parte vai para a empresa dona da loja
+  id: "rateio-por-empresa",
+  aplicar: (b) => {
+    for (const c of b.contas) {
+      if (!c.rateio?.length) continue;
+      const porEmpresa = new Map<string, number>();
+      for (const p of c.rateio) {
+        const empresaId =
+          p.empresaId || b.empresas.find((e) => p.unidade && e.unidades.includes(p.unidade))?.id || c.empresaId;
+        porEmpresa.set(empresaId, (porEmpresa.get(empresaId) ?? 0) + p.valor);
+      }
+      c.rateio =
+        porEmpresa.size > 1 ? Array.from(porEmpresa, ([empresaId, valor]) => ({ empresaId, valor })) : undefined;
+    }
+  },
+});
+
 const precisaMigrar = (b: BaseFinanceira) => MIGRACOES.some((m) => !b.config.migracoes?.includes(m.id));
 
 function migrar(b: BaseFinanceira) {

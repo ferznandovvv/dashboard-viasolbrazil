@@ -63,10 +63,12 @@ export type UsuarioPublico = Omit<Usuario, "hash" | "salt">;
 
 export const FORMAS = ["Boleto", "PIX", "Cartão de crédito", "Transferência", "Débito automático", "Dinheiro"];
 
-/** Parte de uma conta dividida entre lojas (valor em R$, somando o valor da conta). */
+/** Parte de uma conta dividida entre empresas (valor em R$, somando o valor da conta). */
 export interface ParteRateio {
-  unidade: string;
+  empresaId: string;
   valor: number;
+  /** Versão antiga dividia por loja; a migração converte para a empresa dona */
+  unidade?: string;
 }
 
 export interface Anexo {
@@ -95,8 +97,8 @@ export interface Conta {
   lote?: string;
   observacao: string;
   /**
-   * Lojas que pagam esta conta. Uma loja só = conta daquela loja; várias =
-   * rateio. Vazio = despesa geral da empresa, sem loja.
+   * Conta dividida entre empresas (cada uma leva a parte dela no DRE).
+   * Vazio = a conta é toda da empresa em que foi lançada.
    */
   rateio?: ParteRateio[];
   /** Boleto, nota, comprovante de pagamento */

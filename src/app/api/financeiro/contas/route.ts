@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exigir } from "@/lib/financeiro/auth";
-import { UNIDADES, alterarBase, novoId } from "@/lib/financeiro/base";
+import { alterarBase, novoId } from "@/lib/financeiro/base";
 import { validarRateio } from "@/lib/financeiro/rateio";
 import { type Conta, type ParteRateio, somarMeses } from "@/lib/financeiro/tipos";
 import { todaySpKey } from "@/lib/types";
@@ -119,7 +119,7 @@ interface NovaConta {
   vezes?: number;
   /** parcelado = "1/3, 2/3…"; mensal = conta fixa que se repete */
   repetir?: "parcelado" | "mensal";
-  /** Divisão entre lojas (valores de cada parcela) */
+  /** Divisão entre empresas (valores de cada parcela) */
   rateio?: ParteRateio[];
   /**
    * Pagamento já feito (comprovante de PIX, compra no cartão): entra direto
@@ -143,11 +143,11 @@ export async function POST(req: NextRequest) {
   const competencia = n.competencia && /^\d{4}-\d{2}$/.test(n.competencia) ? n.competencia : n.vencimento.slice(0, 7);
   const agora = new Date().toISOString();
   const valor = Math.round(Number(n.valor) * 100) / 100;
-  const r = validarRateio(n.rateio, valor, UNIDADES);
-  if (r.erro) return NextResponse.json({ erro: r.erro }, { status: 400 });
 
   try {
     const criadas = await alterarBase((base) => {
+      const r = validarRateio(n.rateio, valor, base);
+      if (r.erro) throw new Error(r.erro);
       if (!base.empresas.some((e) => e.id === n.empresaId)) throw new Error("Empresa não encontrada.");
       if (!base.categorias.some((c) => c.id === n.categoriaId)) throw new Error("Categoria não encontrada.");
       const novas: Conta[] = Array.from({ length: vezes }, (_, i) => {
