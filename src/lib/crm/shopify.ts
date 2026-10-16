@@ -3,9 +3,9 @@
  * venda na "loja" Site; a cliente é identificada pelo telefone (do cadastro
  * ou do endereço), com e-mail e id da Shopify como apoio.
  *
- * O aceite de mensagens vem do consentimento de marketing por SMS que a
- * cliente deu no checkout. Quem não aceitou fica na base, mas não recebe
- * nada até aceitar numa loja.
+ * Quem compra no site já aceita contato no cadastro da loja virtual, então
+ * entra como "aceita mensagens"; só fica de fora quem pediu explicitamente
+ * para sair do marketing por SMS na Shopify.
  */
 
 import { env } from "../env";
@@ -108,7 +108,7 @@ async function buscarPedidos(de: string, ate: string, limitePaginas = 60): Promi
           nomeNaNota: nome || undefined,
           origem: "shopify",
         },
-        cliente: c && nome ? { nome, telefone, email: c.email ?? undefined, codigoShopify: c.id.split("/").pop()!, optIn: c.smsMarketingConsent?.marketingState === "SUBSCRIBED" } : undefined,
+        cliente: c && nome ? { nome, telefone, email: c.email ?? undefined, codigoShopify: c.id.split("/").pop()!, optIn: c.smsMarketingConsent?.marketingState !== "UNSUBSCRIBED" } : undefined,
       });
     }
     if (!orders.pageInfo.hasNextPage) break;
@@ -131,8 +131,9 @@ export async function sincronizarShopify(de: string, ate: string, opcoes: { cred
       for (const { venda, cliente } of pedidos) {
         if (cliente) {
           const { cliente: c, nova } = salvarCliente(b, { ...cliente, lojaOrigem: LOJA_SITE }, "shopify");
-          // Aceite de SMS dado depois do primeiro pedido também vale
+          // Quem pediu para sair na Shopify não recebe por aqui também
           if (cliente.optIn && !c.optOut) c.optIn = true;
+          else if (!cliente.optIn && !c.codigoTotvs) c.optIn = false;
           venda.clienteId = c.id;
           if (nova) progressoShopify.clientesNovos++;
           else progressoShopify.clientesAtualizados++;

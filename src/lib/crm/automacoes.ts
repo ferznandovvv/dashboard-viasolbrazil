@@ -43,6 +43,18 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
 
   const porId = new Map(b.clientes.map((c) => [c.id, c]));
 
+  // Cliente que só comprou no site é cuidada pelo CRM do e-commerce, a não
+  // ser que a configuração diga o contrário. Avisos de cashback do site
+  // passam só quando o cashback do site está ligado.
+  const lojasDe = new Map<string, Set<string>>();
+  for (const v of b.vendas) if (v.clienteId) (lojasDe.get(v.clienteId) ?? lojasDe.set(v.clienteId, new Set()).get(v.clienteId)!).add(v.loja);
+  const soSite = (id: string) => {
+    const lojas = lojasDe.get(id);
+    const c = porId.get(id);
+    return Boolean(lojas && lojas.size === 1 && lojas.has("Site") && !c?.codigoTotvs && c?.lojaOrigem === "Site");
+  };
+  const participa = (id: string) => b.config.siteNasAutomacoes || !soSite(id);
+
   // Cashback creditado: créditos dos últimos 3 dias ainda não avisados
   const desde = somarDias(hoje, -3);
   for (const mov of b.cashback) {
@@ -70,14 +82,14 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   // Aniversário do dia
   const mmdd = hoje.slice(5);
   for (const c of b.clientes) {
-    if (!c.nascimento || c.nascimento.slice(5) !== mmdd) continue;
+    if (!c.nascimento || c.nascimento.slice(5) !== mmdd || !participa(c.id)) continue;
     tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
   }
 
   // Pós-venda
   const diaPos = somarDias(hoje, -b.config.posVendaDias);
   for (const v of b.vendas) {
-    if (!v.clienteId || v.data.slice(0, 10) !== diaPos) continue;
+    if (!v.clienteId || v.data.slice(0, 10) !== diaPos || !participa(v.clienteId)) continue;
     const c = porId.get(v.clienteId);
     if (c) tentar("pos_venda", enfileirar(b, { cliente: c, campanha: "pos_venda", loja: v.loja, chave: `pos-${v.id}` }));
   }
@@ -86,6 +98,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   const porLoja = new Map<string, number>();
   const candidatas = b.clientes
     .map((c) => resumir(b, c, hoje))
+    .filter((x) => participa(x.id))
     .filter((x) => x.podeMarketing && x.totalGasto >= b.config.reativacaoTicketMinimo && x.ultimaCompra && diasEntre(x.ultimaCompra, hoje) >= b.config.reativacaoDias)
     .filter((x) => {
       const ultima = b.mensagens

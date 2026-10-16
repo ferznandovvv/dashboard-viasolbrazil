@@ -164,6 +164,8 @@ export interface ConfigCrm {
   cashbackResgateMinimo: number;
   /** Compras no site (Shopify) também geram cashback para usar na loja */
   cashbackSite: boolean;
+  /** Clientes que só compraram no site entram nas automações (aniversário, reativação, pós-venda) */
+  siteNasAutomacoes: boolean;
   /** Máximo do valor da compra que pode ser pago com cashback (0 a 100) */
   cashbackMaxPctDaCompra: number;
   /** Dias antes do vencimento para avisar */
@@ -297,6 +299,7 @@ export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   cashbackCompraMinima: 0,
   cashbackResgateMinimo: 20,
   cashbackSite: false,
+  siteNasAutomacoes: false,
   cashbackMaxPctDaCompra: 30,
   avisoVencimentoDias: 7,
   posVendaDias: 5,
