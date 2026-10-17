@@ -52,13 +52,35 @@ export function totvsConfigured(): boolean {
 }
 
 let cachedToken: { token: string; expiresAt: number; chave: string } | null = null;
+/** Qual login funcionou por último — depois da atualização de 2026 a TOTVS ganhou o "de integração" */
+let modoLogin: "senha" | "integracao" = "senha";
 
-/** Token de acesso da APIv2, com cache em memória. */
-export async function getTotvsToken(): Promise<string> {
-  // Trocou o client id/secret ou o usuário na configuração: o token antigo não vale mais
-  const chave = `${env("TOTVS_CLIENT_ID")}|${env("TOTVS_CLIENT_SECRET")}|${env("TOTVS_USERNAME")}|${env("TOTVS_PASSWORD")}`;
-  if (cachedToken && cachedToken.chave === chave && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+const CAMINHO_INTEGRACAO = "/api/totvsmoda/authorization/v2/integration/token";
 
+/** Credencial que cada campo do login pede, pelo nome do campo. */
+export function credencialDoCampo(nome: string): string {
+  if (/secret/i.test(nome)) return env("TOTVS_CLIENT_SECRET");
+  if (/client.?id|^id$/i.test(nome)) return env("TOTVS_CLIENT_ID");
+  if (/pass|senha/i.test(nome)) return env("TOTVS_PASSWORD");
+  if (/user|login|usuario/i.test(nome)) return env("TOTVS_USERNAME");
+  if (/grant/i.test(nome)) return "client_credentials";
+  return "";
+}
+
+/** Token e validade, aceitando os nomes de campo das duas versões do login. */
+function lerToken(texto: string): { token: string; segundos: number } | null {
+  try {
+    const j = JSON.parse(texto) as Record<string, unknown>;
+    const token = String(j.access_token ?? j.accessToken ?? j.token ?? "");
+    if (!token) return null;
+    return { token, segundos: Number(j.expires_in ?? j.expiresIn ?? 3600) || 3600 };
+  } catch {
+    return null;
+  }
+}
+
+/** Login de sempre: client id/secret + usuário e senha. */
+async function loginSenha(): Promise<{ token: string; segundos: number } | string> {
   const res = await fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -71,26 +93,52 @@ export async function getTotvsToken(): Promise<string> {
     }),
     cache: "no-store",
   });
-
   const text = await res.text();
-  let json: { access_token?: string; expires_in?: number; message?: string; error?: string } = {};
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Resposta inesperada do token (${res.status}): ${text.slice(0, 200)}`);
-  }
-  if (!res.ok || !json.access_token) {
-    throw new Error(
-      `Falha na autenticação (${res.status}): ${json.message ?? json.error ?? text.slice(0, 200)}`
-    );
-  }
+  return lerToken(text) ?? `login (${res.status}): ${text.replace(/\s+/g, " ").slice(0, 200)}`;
+}
 
-  cachedToken = {
-    token: json.access_token,
-    expiresAt: Date.now() + ((json.expires_in ?? 3600) - 300) * 1000,
-    chave,
-  };
-  return cachedToken.token;
+/**
+ * Login de integração (TOTVS atualizada): o formato vem do próprio manual da
+ * API, que diz quais campos ele pede e se é formulário ou JSON.
+ */
+async function loginIntegracao(): Promise<{ token: string; segundos: number } | string> {
+  const base = totvsBaseUrl();
+  const manual = await fetch(`${base}/api/totvsmoda/authorization/v2/swagger/v1/swagger.json`, { cache: "no-store" });
+  if (!manual.ok) return `manual do login (${manual.status})`;
+  const { camposDoCorpo } = await import("../swagger");
+  const c = camposDoCorpo(await manual.json(), CAMINHO_INTEGRACAO);
+  if (!c?.campos.length) return "login de integração não existe nesta TOTVS";
+  const corpo = Object.fromEntries(c.campos.map((n) => [n, credencialDoCampo(n)]).filter(([, v]) => v));
+  const res = await fetch(`${base}${CAMINHO_INTEGRACAO}`, {
+    method: "POST",
+    headers: { "Content-Type": c.formulario ? "application/x-www-form-urlencoded" : "application/json" },
+    body: c.formulario ? new URLSearchParams(corpo) : JSON.stringify(corpo),
+    cache: "no-store",
+  });
+  const text = await res.text();
+  return lerToken(text) ?? `integração (${res.status}): ${text.replace(/\s+/g, " ").slice(0, 200)}`;
+}
+
+/** Token de acesso da APIv2, com cache em memória. */
+export async function getTotvsToken(): Promise<string> {
+  // Trocou o client id/secret ou o usuário na configuração: o token antigo não vale mais
+  const chave = `${totvsBaseUrl()}|${env("TOTVS_CLIENT_ID")}|${env("TOTVS_CLIENT_SECRET")}|${env("TOTVS_USERNAME")}|${env("TOTVS_PASSWORD")}`;
+  if (cachedToken && cachedToken.chave === chave && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+
+  // Tenta primeiro o login que funcionou da última vez; se falhar, o outro
+  const ordem = modoLogin === "senha" ? (["senha", "integracao"] as const) : (["integracao", "senha"] as const);
+  const erros: string[] = [];
+  for (const modo of ordem) {
+    const r = modo === "senha" ? await loginSenha() : await loginIntegracao().catch((e) => String(e));
+    if (typeof r === "string") {
+      erros.push(r);
+      continue;
+    }
+    modoLogin = modo;
+    cachedToken = { token: r.token, expiresAt: Date.now() + Math.max(60, r.segundos - 300) * 1000, chave };
+    return r.token;
+  }
+  throw new Error(`Falha na autenticação — ${erros.join(" · ")}`);
 }
 
 /** Chamada autenticada à APIv2. */
