@@ -1430,3 +1430,45 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 }
 .cp-nova-cab .link { align-self: flex-start; }
 .an-rank { grid-template-columns: 140px 1fr 150px; }
+
+/* Painel da loja: vendas, vendedoras, produtos, cashback */
+.lp-btn-cashback { padding: 9px 16px; font-size: 13.5px; }
+.lp-vendas { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; margin-bottom: 14px; }
+.lp-vendas .card { margin: 0; }
+.lp-vendas-topo { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 6px 0 10px; }
+.lp-vendas-v { font-family: var(--font-serif); font-size: 46px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.lp-vendas-pct { font-size: 15px; font-weight: 700; color: var(--brand); }
+.lp-vendas-pct.bom { color: var(--good); }
+.lp-meta { height: 14px; border-radius: 999px; background: var(--grid); overflow: hidden; }
+.lp-meta i { display: block; height: 100%; background: var(--brand); border-radius: 999px; }
+.lp-vendas-info { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); margin-top: 6px; }
+.lp-vendas-info .bom { color: var(--good); font-weight: 600; }
+.lp-vendas-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.lp-vendas-mini b { display: block; font-family: var(--font-serif); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lp-vendas-mini small { font-size: 12px; color: var(--text-muted); }
+.lp-tab td { vertical-align: middle; }
+.lp-barra-v { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 8px; }
+.lp-barra-v em { font-style: normal; font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.lp-rank-linha.marca i { background: var(--brand); }
+.lp-prod { list-style: none; display: flex; flex-direction: column; gap: 2px; counter-reset: prod; }
+.lp-prod li { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) 56px 90px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; counter-increment: prod; }
+.lp-prod li:first-child { border-top: none; }
+.lp-prod-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-prod-nome::before { content: counter(prod) ". "; color: var(--text-muted); font-size: 12px; }
+.lp-prod-q, .lp-prod-r { text-align: right; font-variant-numeric: tabular-nums; }
+.lp-prod-r { color: var(--text-muted); font-size: 12px; }
+.lp-cliente { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; font: inherit; color: inherit; padding: 12px 14px; margin-top: 8px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); cursor: pointer; }
+.lp-cliente:hover { border-color: var(--brand); }
+.lp-cliente small { display: block; color: var(--text-muted); font-size: 12px; }
+.lp-cliente .bom { color: var(--good); font-weight: 700; }
+.lp-saldo { display: flex; flex-direction: column; gap: 2px; padding: 14px; border-radius: 12px; background: var(--page); border: 1px solid var(--border); margin-bottom: 10px; }
+.lp-saldo span { font-weight: 600; }
+.lp-saldo b { font-family: var(--font-serif); font-size: 38px; color: var(--good); line-height: 1.1; }
+.lp-saldo small { color: var(--text-muted); font-size: 12px; }
+.lp-regra { font-size: 13px; color: var(--text-secondary); margin: 4px 0 8px; }
+@media (max-width: 860px) {
+  .lp-vendas { grid-template-columns: 1fr; }
+  .lp-vendas-v { font-size: 36px; }
+  .lp-prod li { grid-template-columns: minmax(0, 1fr) 50px 80px; }
+  .lp-prod li .lp-rank-linha { display: none; }
+}

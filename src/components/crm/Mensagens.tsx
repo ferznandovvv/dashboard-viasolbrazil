@@ -17,7 +17,6 @@ const FILTROS: (StatusMensagem | "todas")[] = ["todas", "fila", "simulada", "env
 export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
   const [filtro, setFiltro] = useState<StatusMensagem | "todas">("todas");
   const [d, setD] = useState<Dados | null>(null);
-  const [aba, setAba] = useState<"enviadas" | "recebidas">("enviadas");
   const [aviso, setAviso] = useState("");
 
   const carregar = useCallback(async () => setD(await api(`/api/crm/mensagens?status=${filtro}`)), [filtro]);
@@ -51,11 +50,7 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
   return (
     <div>
       <div className="fin-barra">
-        <div className="seg" role="tablist">
-          <button className={aba === "enviadas" ? "on" : ""} onClick={() => setAba("enviadas")}>Nossas</button>
-          <button className={aba === "recebidas" ? "on" : ""} onClick={() => setAba("recebidas")}>Respostas</button>
-        </div>
-        {aba === "enviadas" && (
+        {(
           <select className="fin-select" value={filtro} onChange={(e) => setFiltro(e.target.value as StatusMensagem | "todas")}>
             {FILTROS.map((f) => (
               <option key={f} value={f}>
@@ -83,25 +78,6 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
       <div className="card">
         {!d ? (
           <div className="empty">Carregando…</div>
-        ) : aba === "recebidas" ? (
-          !d.recebidas.length ? (
-            <div className="empty">Nenhuma resposta recebida ainda. Confira se o webhook está configurado na WA-AKG.</div>
-          ) : (
-            <table className="prod-tbl fin-tbl">
-              <tbody>
-                {d.recebidas.map((r) => (
-                  <tr key={r.id}>
-                    <td style={{ whiteSpace: "nowrap" }}>{dataHora(r.recebidoEm)}</td>
-                    <td>
-                      <div className="fin-desc">{r.cliente ?? <span className="muted">número desconhecido</span>}</div>
-                      <div className="fin-sub">{formatarTelefone(r.telefone)}{r.loja && <> · {r.loja}</>}</div>
-                    </td>
-                    <td>{r.texto}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
         ) : !d.mensagens.length ? (
           <div className="empty">Nada por aqui.</div>
         ) : (

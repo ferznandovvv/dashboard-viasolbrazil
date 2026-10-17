@@ -71,6 +71,8 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
       if (!tel || tel.length < 10) return out;
       out.push({
         em: quando(d.messageTimestamp),
+        // Nome que a cliente usa no WhatsApp (só quando é ela que escreve)
+        nome: !fromMe && typeof d.pushName === "string" && d.pushName.trim() ? d.pushName.trim().slice(0, 60) : undefined,
         tipo: "mensagem",
         sessao,
         telefone: tel,

@@ -394,6 +394,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
               <th>Loja</th>
               <th>Sessão / id</th>
               <th>Vendedora que assina</th>
+              <th>Endereço (pra cliente do site)</th>
               <th>Teto/dia</th>
               <th>Ligado</th>
               <th></th>
@@ -405,6 +406,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
                 <td className="fin-desc">{n.loja}</td>
                 <td><input className="crm-input" value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
                 <td><input className="crm-input" value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
+                <td><input className="crm-input" value={n.endereco ?? ""} onChange={(e) => muda(i, { endereco: e.target.value })} placeholder="ex.: Rua do Comércio, 1200" /></td>
                 <td><input className="crm-input" style={{ width: 70 }} value={n.tetoDia ?? ""} onChange={(e) => muda(i, { tetoDia: e.target.value ? Number(e.target.value) : undefined })} placeholder="geral" /></td>
                 <td><input type="checkbox" checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
                 <td className="fin-acoes">

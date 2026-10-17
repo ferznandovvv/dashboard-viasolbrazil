@@ -26,6 +26,8 @@ export interface Pendente {
   loja: string;
   telefone: string;
   cliente?: string;
+  /** Nome no WhatsApp (contato salvo no celular da loja ou o que ela usa), quando não está na base */
+  apelido?: string;
   /** Minutos esperando */
   esperando: number;
   desde: string;
@@ -110,6 +112,9 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
   const porLoja = new Map<string, { conversas: Set<string>; msgs: number; respondidas: number; tempos: number[]; lentas: number; rapidas: number }>();
   // Por conversa: última mensagem da cliente ainda sem resposta
   const aberta = new Map<string, { em: string; texto?: string; loja: string }>();
+  // Nome do WhatsApp de quem não está na base (o último que veio)
+  const apelido = new Map<string, string>();
+  for (const a of base.atendimento) if (a.de === "cliente" && a.nome) apelido.set(a.telefone, a.nome);
 
   for (const ev of eventos) {
     const chave = `${ev.loja}|${ev.telefone}`;
@@ -142,7 +147,7 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
     const telefone = chave.split("|")[1];
     const esperando = minutosUteis(new Date(a.em), agora, inicio, fim);
     if (esperando < 15) continue; // ainda é normal
-    pendentes.push({ loja: a.loja, telefone, cliente: nomes.get(telefone), esperando, desde: a.em, texto: a.texto });
+    pendentes.push({ loja: a.loja, telefone, cliente: nomes.get(telefone), apelido: apelido.get(telefone), esperando, desde: a.em, texto: a.texto });
   }
   pendentes.sort((x, y) => y.esperando - x.esperando);
 

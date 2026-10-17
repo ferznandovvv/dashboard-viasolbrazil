@@ -111,8 +111,8 @@ export type TipoCampanha =
 export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[] = [
   { id: "boas_vindas", nome: "Boas-vindas", dica: "Cadastro novo na loja", marketing: false },
   { id: "cashback_creditado", nome: "Cashback creditado (loja)", dica: "No dia seguinte à compra na loja", marketing: false },
-  { id: "cashback_site_perto", nome: "Cashback creditado (site, tem loja na cidade)", dica: "Compra no site de quem mora numa cidade com loja", marketing: false },
-  { id: "cashback_site_longe", nome: "Cashback creditado (site, sem loja perto)", dica: "Compra no site de quem mora longe das lojas", marketing: false },
+  { id: "cashback_site_perto", nome: "Cashback creditado (site, tem loja na cidade)", dica: "Compra no site de quem mora numa cidade com loja: lembra que a loja existe e o endereço", marketing: false },
+  { id: "cashback_site_longe", nome: "Cashback creditado (site, sem loja perto)", dica: "Compra no site de quem mora longe das lojas (desligada: só faz sentido pra quem pode ir na loja)", marketing: false },
   { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
   { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
   { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta", marketing: true },
@@ -221,6 +221,8 @@ export interface Atendimento {
   em: string;
   /** Começo do texto: da cliente (lista de quem espera) e da loja (pra reconhecer mensagem automática) */
   texto?: string;
+  /** Nome que a cliente usa no WhatsApp */
+  nome?: string;
 }
 
 /** Variações de texto de uma campanha. {nome}, {valor}, {loja}, {validade}, {codigo}, {primeiro} */
@@ -239,6 +241,8 @@ export interface NumeroWhatsapp {
   tetoDia?: number;
   /** Quem assina as mensagens dessa loja quando a venda não tem vendedora (ex.: "Carol") */
   vendedora?: string;
+  /** Endereço da loja, pra mensagem da cliente do site que mora na cidade (ex.: "Rua do Comércio, 1200") */
+  endereco?: string;
 }
 
 export interface ConfigCrm {
@@ -382,13 +386,13 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "cashback_site_perto",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {lojaProxima} ☀️ Vi que você comprou no nosso site e queria te contar: essa compra rendeu {valor} de cashback pra usar na loja, até {validade}, em compra a partir de {compraMinima}. A gente fica em {cidade}, então quando quiser experimentar ao vivo é só me chamar.",
-      "{primeiro}, tudo bem? Sou a {vendedora}, da Via Sol aqui de {cidade} 🧡 Sua compra no site gerou {valor} de cashback, válido até {validade} na nossa loja {lojaProxima} (em compra a partir de {compraMinima}). Se quiser, separo peças do seu tamanho pra você provar.",
+      "Oi {primeiro}! Aqui é da Via Sol ☀️ Sua compra no nosso site rendeu {valor} de cashback, válido até {validade}. E lembrando: temos loja física aí em {cidade}{endereco}, e o seu cashback vale lá também, em compras a partir de {compraMinima}.",
+      "{primeiro}, sua compra no site da Via Sol rendeu {valor} de cashback 🧡 Ele vale até {validade} e dá pra usar na nossa loja de {cidade}{endereco}, em compras a partir de {compraMinima}. Passa lá pra provar as peças ao vivo!",
     ],
   },
   {
     campanha: "cashback_site_longe",
-    ativo: true,
+    ativo: false,
     variacoes: [
       "Oi {primeiro}, aqui é a {vendedora}, da Via Sol ☀️ Sua compra no site rendeu {valor} de cashback, válido até {validade} em qualquer loja nossa (Franca, Ribeirão Preto, São Paulo, Rio de Janeiro, Belo Horizonte e Praia Grande), em compra a partir de {compraMinima}. Se passar por alguma delas, me avisa que eu deixo tudo preparado.",
     ],

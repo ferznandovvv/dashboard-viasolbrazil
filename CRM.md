@@ -207,11 +207,22 @@ se a ideia é trazer a cliente do site para a loja.
 ## Painel da loja
 
 `/crm/loja?k=CODIGO_DA_TV&loja=Centro`, pra gerente e vendedoras (o código
-é o mesmo da tela de metas). Não é caixa: venda e cashback continuam no
-PDV. Mostra quem está esperando resposta no WhatsApp (com botão pra abrir a
+é o mesmo da tela de metas). Venda e desconto continuam no PDV. Mostra as
+vendas do mês contra a meta (e o ranking das lojas na meta), cada vendedora
+(vendido, ticket, % com celular), os produtos que mais saíram em 30 dias,
+quem está esperando resposta no WhatsApp (com botão pra abrir a
 conversa), conversas do dia, tempo de resposta, % das vendas de 30 dias com
 celular semana a semana, o ranking das lojas nas duas coisas e o % de cada
 vendedora. Atualiza sozinho a cada minuto.
+
+Cashback é manual: a cliente mostra a mensagem, a vendedora toca em
+"Cliente veio usar o cashback", digita o celular, confere o saldo, dá o
+desconto no PDV e dá baixa ali. A baixa é o que impede usar o mesmo
+cashback duas vezes (ou em outra loja) e para os lembretes de vencimento.
+
+Cashback de compra no site só gera mensagem pra quem mora numa cidade com
+loja, lembrando o endereço (preencha em Configurar → Números). Quem mora
+longe não recebe.
 
 ## Automações
 

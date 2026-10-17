@@ -27,6 +27,8 @@ export interface Adaptador {
   situacao(sessao: string): Promise<SituacaoNumero>;
   /** Nome legível da sessão a partir do código que vem no webhook (quando o provedor tem os dois). */
   nomeDaSessao?(codigo: string): Promise<string | undefined>;
+  /** Contatos do número (dígitos do telefone ou do id → nome salvo / nome do WhatsApp) */
+  contatos?(sessao: string): Promise<Map<string, string>>;
 }
 
 export function adaptadorDe(cfg: ConfigCrm): Adaptador | null {

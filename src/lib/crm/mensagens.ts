@@ -22,6 +22,8 @@ export interface Variaveis {
   vendedora?: string;
   /** Compra mínima para usar o cashback, já formatada */
   compraMinima?: string;
+  /** Endereço da loja próxima (vira " (endereço)" no texto, ou nada) */
+  endereco?: string;
 }
 
 /** Compra mínima para usar `valor` de cashback, pela regra do múltiplo. */
@@ -57,9 +59,15 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{cidade\}/g, v.cidade ?? cliente.cidade ?? "")
     .replace(/\{vendedora\}/g, v.vendedora ?? "equipe")
     .replace(/\{compraMinima\}/g, v.compraMinima ?? "")
-    // "aqui é a equipe" fica estranho: vira "aqui é da equipe"
-    .replace(/\b([EeÉé]) a equipe\b/g, "$1 da equipe")
-    .replace(/\bSou a equipe\b/g, "Somos a equipe")
+    .replace(/\{endereco\}/g, v.endereco?.trim() ? ` (${v.endereco.trim()})` : "")
+    // Sem vendedora: "aqui é a equipe, da Via Sol Centro" vira "aqui é da Via Sol Centro"
+    .replace(/(^|[\s,])([EeÉé]) a equipe,? da /g, "$1$2 da ")
+    .replace(/(^|[\s,])([EeÉé]) a equipe\b/g, "$1$2 da equipe")
+    .replace(/(^|[\s,])Sou a equipe\b/g, "$1Somos a equipe")
+    .replace(/(^|[\s!.,])equipe aqui, da /gi, "$1aqui é da ")
+    .replace(/(^|[\s!.,])equipe aqui\b/gi, "$1aqui é da equipe")
+    .replace(/(^|\s)equipe, da /g, "$1Aqui é da ")
+    .replace(/([!?.]\s+)aqui é da/g, "$1Aqui é da")
     .replace(/\s{2,}/g, " ")
     .trim();
 }

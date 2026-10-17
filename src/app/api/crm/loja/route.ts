@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
-import { detalheLoja, painel } from "@/lib/crm/painel";
+import { painel } from "@/lib/crm/painel";
+import { produtosDaLoja, vendasDaLoja } from "@/lib/crm/vendasLoja";
+import { nomearPendentes, telefoneVisivel } from "@/lib/crm/contatos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { creditosAbertos, resgatar, saldoDe, usarOferta } from "@/lib/crm/cashback";
 import { resumir, salvarCliente } from "@/lib/crm/clientes";
@@ -10,6 +12,7 @@ import { enfileirar } from "@/lib/crm/mensagens";
 import { formatarTelefone, normalizarTelefone } from "@/lib/crm/telefone";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** Mesmo hash do middleware: o cookie do login do painel também vale aqui. */
 function cookieEsperado(senha: string): string {
@@ -80,20 +83,25 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
     modoSombra: base.config.modoSombra,
     whatsapp: { ativo: card.numero.ativo, conectado: situacao ? situacao.conectado : null },
     atendimento: card.atend,
-    esperandoLista: pg.semana.pendentes
-      .filter((p) => p.loja === loja)
-      .slice(0, 20)
-      .map((p) => ({ nome: p.cliente, telefone: formatarTelefone(p.telefone), esperando: p.esperando, texto: p.texto })),
+    esperandoLista: (await nomearPendentes(base, pg.semana.pendentes.filter((p) => p.loja === loja).slice(0, 20))).map((p) => {
+      const tel = telefoneVisivel(p.telefone);
+      return { nome: p.nomeMostrar, cadastrada: Boolean(p.cliente), telefone: tel ? formatarTelefone(tel) : "", esperando: p.esperando, texto: p.texto };
+    }),
     celular: card.cadastro,
     rankingCelular,
     rankingResposta,
-    vendedoras: detalheLoja(base, loja, 30).vendedoras,
+    vendas: await vendasDaLoja(base, loja).catch((e) => ({ configurado: false, erro: e instanceof Error ? e.message : "erro" })),
   };
 }
 
 /** Busca por telefone, CPF ou nome; ou o painel da loja (?painel=Nome). */
 export async function GET(req: NextRequest) {
   if (!autorizado(req)) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
+  const produtos = req.nextUrl.searchParams.get("produtos");
+  if (produtos) {
+    if (!Object.values(LOJAS).includes(produtos)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
+    return NextResponse.json(await produtosDaLoja(produtos).catch(() => ({ produtos: [], incompleto: true })));
+  }
   const painel = req.nextUrl.searchParams.get("painel");
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   const base = await lerBase();

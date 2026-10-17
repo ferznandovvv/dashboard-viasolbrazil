@@ -12,6 +12,7 @@ interface Pendente {
   loja: string;
   telefone: string;
   cliente?: string;
+  nomeMostrar?: string;
   esperando: number;
   desde: string;
   texto?: string;
@@ -246,8 +247,11 @@ export function ListaPendentes({ pendentes, comLoja }: { pendentes: Pendente[]; 
           <tr key={`${p.loja}|${p.telefone}`}>
             {comLoja && <td className="fin-desc">{p.loja}</td>}
             <td>
-              <div className="fin-desc">{p.cliente ?? <span className="muted">não cadastrada</span>}</div>
-              <div className="fin-sub">{formatarTelefone(p.telefone)}</div>
+              <div className="fin-desc">{p.nomeMostrar ?? <span className="muted">sem nome</span>}</div>
+              <div className="fin-sub">
+                {/^55\d{10,11}$/.test(p.telefone) ? formatarTelefone(p.telefone) : "número escondido pelo WhatsApp"}
+                {!p.cliente && " · não está na base"}
+              </div>
             </td>
             <td className="crm-texto-msg">{p.texto}</td>
             <td style={{ whiteSpace: "nowrap" }}>

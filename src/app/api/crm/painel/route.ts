@@ -4,6 +4,8 @@ import { lerBase } from "@/lib/crm/base";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { dentroDaJanela } from "@/lib/crm/fila";
 import { detalheLoja, painel } from "@/lib/crm/painel";
+import { nomearPendentes } from "@/lib/crm/contatos";
+import { aprenderVendedoras } from "@/lib/crm/vendasLoja";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +13,12 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const base = await lerBase();
   const loja = req.nextUrl.searchParams.get("loja");
+  await aprenderVendedoras(base).catch(() => {});
   if (loja) {
     if (!Object.values(LOJAS).includes(loja)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
     const dias = Math.min(90, Math.max(1, Number(req.nextUrl.searchParams.get("dias")) || 7));
-    return NextResponse.json(detalheLoja(base, loja, dias));
+    const d = detalheLoja(base, loja, dias);
+    return NextResponse.json({ ...d, pendentes: await nomearPendentes(base, d.pendentes) });
   }
 
   const p = painel(base);
@@ -52,7 +56,7 @@ export async function GET(req: NextRequest) {
       numeros: lojas.filter((l) => l.numero.ativo).length,
       eventos: base.atendimento.length,
     },
-    pendentes: p.semana.pendentes.slice(0, 12),
+    pendentes: await nomearPendentes(base, p.semana.pendentes.slice(0, 12)),
     envio: {
       modoSombra: cfg.modoSombra,
       pausado: cfg.pausado,

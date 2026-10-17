@@ -15,6 +15,8 @@ import type { Adaptador, ResultadoEnvio, SituacaoNumero } from "./adaptador";
  */
 const cacheSessoes = new Map<string, { em: number; porNome: Map<string, { id: string; status: string }> }>();
 
+const cacheContatos = new Map<string, { em: number; mapa: Map<string, string> }>();
+
 export class WaAkg implements Adaptador {
   nome = "WA-AKG";
   constructor(
@@ -78,6 +80,31 @@ export class WaAkg implements Adaptador {
   async nomeDaSessao(codigo: string): Promise<string | undefined> {
     for (const [chave, v] of await this.sessoes()) if (v.id === codigo && chave !== codigo.toLowerCase()) return chave;
     return undefined;
+  }
+
+  /** Contatos da sessão, com cache de 10 minutos. Chave: só dígitos (telefone e, quando houver, o id novo do WhatsApp). */
+  async contatos(sessao: string): Promise<Map<string, string>> {
+    const chave = `${this.url}|${sessao}`;
+    const c = cacheContatos.get(chave);
+    if (c && Date.now() - c.em < 10 * 60000) return c.mapa;
+    const mapa = new Map<string, string>();
+    try {
+      const { id } = await this.resolver(sessao);
+      const r = await this.chamar(`/api/contacts/${encodeURIComponent(id)}?limit=all`);
+      const lista = (r.json?.data ?? []) as { jid?: string; lid?: string; remoteJidAlt?: string; name?: string; notify?: string; verifiedName?: string }[];
+      for (const k of Array.isArray(lista) ? lista : []) {
+        const nome = (k.name || k.notify || k.verifiedName || "").trim();
+        if (!nome) continue;
+        for (const j of [k.jid, k.lid, k.remoteJidAlt]) {
+          const dig = String(j ?? "").split("@")[0].split(":")[0].replace(/\D/g, "");
+          if (dig) mapa.set(dig, nome);
+        }
+      }
+    } catch {
+      /* sem contatos: fica o número */
+    }
+    cacheContatos.set(chave, { em: Date.now(), mapa });
+    return mapa;
   }
 
   async enviarTexto(sessao: string, telefone: string, texto: string): Promise<ResultadoEnvio> {

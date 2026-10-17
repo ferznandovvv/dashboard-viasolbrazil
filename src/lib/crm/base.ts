@@ -126,6 +126,20 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Cashback do site: só pra quem mora numa cidade com loja, lembrando o endereço
+    id: "site-perto-v2",
+    aplicar: (b) => {
+      for (const id of ["cashback_site_perto", "cashback_site_longe"] as const) {
+        const novo = MODELOS_PADRAO.find((m) => m.campanha === id)!;
+        const i = b.modelos.findIndex((m) => m.campanha === id);
+        if (i >= 0) b.modelos[i] = structuredClone(novo);
+        else b.modelos.push(structuredClone(novo));
+      }
+      // O que já estava simulado pra quem mora longe some da fila
+      b.mensagens = b.mensagens.filter((m) => !(m.campanha === "cashback_site_longe" && m.status === "simulada"));
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

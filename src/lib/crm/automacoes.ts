@@ -82,7 +82,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       // Compra no site: avisa que tem loja na cidade dela, quando tiver
       const perto = lojaNaCidade(c);
       const campanha = perto ? "cashback_site_perto" : "cashback_site_longe";
-      tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor: mov.valor, validade: mov.validade, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined }, chave: `cb-credito-${mov.id}` }));
+      tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor: mov.valor, validade: mov.validade, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined, endereco: b.config.numeros.find((n) => n.loja === perto)?.endereco }, chave: `cb-credito-${mov.id}` }));
       continue;
     }
     const venda = b.vendas.find((v) => v.id === mov.vendaId);
