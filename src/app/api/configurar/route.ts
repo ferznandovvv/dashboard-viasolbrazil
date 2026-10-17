@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rodandoLocal, salvarCredenciais, situacaoCredenciais } from "@/lib/credenciais";
+import { detalheCredenciais, rodandoLocal, salvarCredenciais, situacaoCredenciais } from "@/lib/credenciais";
 import { INTEGRACOES, NOMES_PERMITIDOS } from "@/lib/integracoes";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,6 +21,7 @@ export async function GET() {
   return NextResponse.json({
     local: rodandoLocal(),
     situacao: situacaoCredenciais(Array.from(NOMES_PERMITIDOS)),
+    detalhe: detalheCredenciais(Array.from(NOMES_PERMITIDOS)),
     integracoes: INTEGRACOES,
     atualizador: await atualizador(),
   });
@@ -46,5 +47,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     salvas: Object.keys(aceitas),
     situacao: situacaoCredenciais(Array.from(NOMES_PERMITIDOS)),
+    detalhe: detalheCredenciais(Array.from(NOMES_PERMITIDOS)),
   });
 }

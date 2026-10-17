@@ -37,13 +37,36 @@ function ler(): Record<string, string> {
 
 let carregado = false;
 
-/** Leva o arquivo para o process.env, sem sobrescrever o que já veio preenchido. */
+/**
+ * Leva o arquivo para o process.env. Na máquina própria, o que foi salvo pela
+ * tela vale mais que o .env.local: é sempre a troca mais recente — antes, um
+ * valor velho no .env.local voltava a valer a cada reinício e a chave nova
+ * "não pegava".
+ */
 export function carregarCredenciais(): void {
   if (carregado) return;
   carregado = true;
+  const local = rodandoLocal();
   for (const [nome, valor] of Object.entries(ler())) {
-    if (vazio(process.env[nome]) && !vazio(valor)) process.env[nome] = valor;
+    if (vazio(valor)) continue;
+    if (local || vazio(process.env[nome])) process.env[nome] = valor;
   }
+}
+
+/**
+ * De onde vem cada chave e como ela termina — para a tela mostrar o que está
+ * valendo sem nunca mostrar o valor inteiro.
+ */
+export function detalheCredenciais(nomes: string[]): Record<string, { final: string; origem: "tela" | "arquivo .env" } | null> {
+  carregarCredenciais();
+  const salvas = ler();
+  return Object.fromEntries(
+    nomes.map((n) => {
+      const v = (process.env[n] ?? "").trim();
+      if (vazio(v)) return [n, null];
+      return [n, { final: v.length > 6 ? `…${v.slice(-4)}` : "•••", origem: salvas[n]?.trim() === v ? "tela" : "arquivo .env" }];
+    })
+  );
 }
 
 /** Grava e já aplica: a próxima consulta usa o valor novo, sem reiniciar. */

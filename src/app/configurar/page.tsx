@@ -7,6 +7,8 @@ import type { Integracao } from "@/lib/integracoes";
 interface Estado {
   local: boolean;
   situacao: Record<string, boolean>;
+  /** Final de cada chave em uso e de onde ela vem (nunca o valor inteiro) */
+  detalhe?: Record<string, { final: string; origem: string } | null>;
   integracoes: Integracao[];
   atualizador?: { verificadoEm?: string; atualizadoEm?: string; falhou?: string; mensagem?: string } | null;
 }
@@ -31,6 +33,19 @@ export default function Configurar() {
   const [valores, setValores] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState<string | null>(null);
   const [aviso, setAviso] = useState("");
+  const [testes, setTestes] = useState<Record<string, { ok: boolean; mensagem: string } | "testando">>({});
+
+  /** Testa a integração agora, com as chaves que estão valendo. */
+  const testar = async (id: string) => {
+    setTestes((t) => ({ ...t, [id]: "testando" }));
+    try {
+      const r = await fetch(`/api/configurar/testar?id=${id}`, { method: "POST" });
+      const j = (await r.json()) as { ok: boolean; mensagem: string };
+      setTestes((t) => ({ ...t, [id]: j }));
+    } catch {
+      setTestes((t) => ({ ...t, [id]: { ok: false, mensagem: "O painel não respondeu." } }));
+    }
+  };
 
   const carregar = () =>
     fetch("/api/configurar", { cache: "no-store" })
@@ -68,8 +83,10 @@ export default function Configurar() {
       for (const c of integ.campos) delete novo[c.nome];
       return novo;
     });
-    setAviso(`${integ.nome}: salvo e já valendo.`);
-    carregar();
+    setAviso(`${integ.nome}: salvo e já valendo. Testando a conexão…`);
+    await carregar();
+    // Testa na hora: assim dá para saber se a chave nova funciona
+    void testar(integ.id);
   };
 
   if (!estado) return <main className="wrap"><div className="empty">Carregando…</div></main>;
@@ -155,6 +172,12 @@ export default function Configurar() {
                   value={valores[c.nome] ?? ""}
                   onChange={(e) => setValores((v) => ({ ...v, [c.nome]: e.target.value }))}
                 />
+                {estado.detalhe?.[c.nome] && (
+                  <small className="config-em-uso">
+                    em uso: <code>{estado.detalhe[c.nome]!.final}</code>
+                    {estado.detalhe[c.nome]!.origem === "tela" ? " · salvo por esta tela" : " · vindo do arquivo .env.local"}
+                  </small>
+                )}
                 {c.dica && <small>{c.dica}</small>}
               </label>
             ))}
@@ -168,7 +191,18 @@ export default function Configurar() {
                   {pronta(i) ? "autorizar de novo" : "autorizar agora →"}
                 </a>
               )}
+              {temCampos(i) && (
+                <button className="exportar" onClick={() => testar(i.id)} disabled={testes[i.id] === "testando"}>
+                  {testes[i.id] === "testando" ? "testando…" : "testar conexão"}
+                </button>
+              )}
             </div>
+            {testes[i.id] && testes[i.id] !== "testando" && (
+              <div className={`config-teste ${(testes[i.id] as { ok: boolean }).ok ? "ok" : "falha"}`}>
+                {(testes[i.id] as { ok: boolean }).ok ? "✓ " : "✗ "}
+                {(testes[i.id] as { mensagem: string }).mensagem}
+              </div>
+            )}
           </div>
         ))}
       </div>

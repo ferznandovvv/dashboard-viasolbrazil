@@ -1478,3 +1478,8 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .lp-semBaixa h2 { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
 .lp-semBaixa p { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px; max-width: 80ch; }
 .lp-semBaixa .lp-espera-tempo { color: var(--text-primary); }
+/* Configuração: chave em uso e resultado do teste */
+.config-em-uso code { font-size: 11px; padding: 0 5px; border-radius: 5px; background: var(--page); border: 1px solid var(--border); }
+.config-teste { margin-top: 10px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; overflow-wrap: anywhere; }
+.config-teste.ok { color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.config-teste.falha { color: var(--critical); background: color-mix(in srgb, var(--critical) 10%, transparent); }
