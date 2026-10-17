@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { fmtDay } from "@/components/viz";
+import { Abas } from "@/components/Abas";
 
 interface Linha {
   produto: string;
@@ -258,14 +259,15 @@ export function Produtos() {
 
   return (
     <div>
-      <div className="seg abas-prod" role="tablist">
-        <button className={aba === "busca" ? "on" : ""} onClick={() => trocarAba("busca")}>
-          Buscar produto
-        </button>
-        <button className={aba === "vendidos" ? "on" : ""} onClick={() => trocarAba("vendidos")}>
-          Mais vendidos
-        </button>
-      </div>
+      <Abas
+        rotulo="Produtos"
+        abas={[
+          { id: "busca", nome: "Buscar produto" },
+          { id: "vendidos", nome: "Mais vendidos" },
+        ]}
+        atual={aba}
+        aoMudar={trocarAba}
+      />
 
       {aba === "busca" ? (
         <>

@@ -6,6 +6,7 @@ import type { Previa, ResultadoCampanha } from "@/lib/crm/campanhas";
 import { api, brl, dataHora } from "./comum";
 import { Chips, SeletorFaixas } from "./faixa";
 import { Mensagens } from "./Mensagens";
+import { Abas } from "@/components/Abas";
 
 interface Lista {
   manuais: (CampanhaManual & { resultado: ResultadoCampanha })[];
@@ -104,14 +105,16 @@ export function Campanhas({ lojas, filtroInicial, limparFiltroInicial, irPara, r
   return (
     <div>
       <div className="cp-barra">
-        <div className="seg" role="tablist">
-          <button className={vista === "campanhas" ? "on" : ""} onClick={() => setVista("campanhas")}>
-            Campanhas
-          </button>
-          <button className={vista === "fila" ? "on" : ""} onClick={() => setVista("fila")}>
-            Fila de envio
-          </button>
-        </div>
+        <Abas
+          className="seg"
+          rotulo="Campanhas"
+          abas={[
+            { id: "campanhas", nome: "Campanhas" },
+            { id: "fila", nome: "Fila de envio" },
+          ]}
+          atual={vista}
+          aoMudar={setVista}
+        />
         <span style={{ flex: 1 }} />
         {vista === "campanhas" && (
           <button className="mini" onClick={() => setNova({ filtro: {} })}>

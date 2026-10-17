@@ -33,7 +33,7 @@ export default function LoginPage() {
           aria-label="Via Sol"
           style={{ margin: "0 auto" }}
         />
-        <p>Dashboard de vendas online</p>
+        <p>Entre com a senha do painel</p>
         <input
           type="password"
           placeholder="Senha"

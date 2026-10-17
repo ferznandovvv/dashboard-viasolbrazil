@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Cabecalho } from "@/components/Moldura";
 import { useEffect, useState } from "react";
 import type { Integracao } from "@/lib/integracoes";
 
@@ -89,7 +89,13 @@ export default function Configurar() {
     void testar(integ.id);
   };
 
-  if (!estado) return <main className="wrap"><div className="empty">Carregando…</div></main>;
+  if (!estado)
+    return (
+      <main className="wrap">
+        <Cabecalho titulo="Configurações" />
+        <div className="empty">Carregando…</div>
+      </main>
+    );
 
   const pronta = (i: Integracao) =>
     [...i.campos.filter((c) => !c.opcional).map((c) => c.nome), ...(i.geradas ?? [])].every((n) => estado.situacao[n]);
@@ -97,17 +103,7 @@ export default function Configurar() {
 
   return (
     <main className="wrap">
-      <div className="topbar">
-        <div className="logo">
-          <div>
-            <span className="brand-word" role="img" aria-label="Via Sol" />
-            <span className="tag">configuração</span>
-          </div>
-        </div>
-        <Link href="/" className="updated">
-          ← voltar para vendas
-        </Link>
-      </div>
+      <Cabecalho titulo="Configurações" />
 
       {!estado.local && (
         <div className="card">

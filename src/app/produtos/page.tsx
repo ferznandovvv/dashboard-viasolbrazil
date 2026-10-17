@@ -1,6 +1,6 @@
 "use client";
 
-import { NavPrincipal } from "@/components/NavPrincipal";
+import { Cabecalho } from "@/components/Moldura";
 import { Produtos } from "@/components/produtos";
 
 /**
@@ -10,15 +10,7 @@ import { Produtos } from "@/components/produtos";
 export default function PaginaProdutos() {
   return (
     <main className="wrap">
-      <div className="topbar">
-        <div className="logo">
-          <div>
-            <span className="brand-word" role="img" aria-label="Via Sol" />
-            <span className="tag">produtos e estoque</span>
-          </div>
-        </div>
-        <NavPrincipal atual="/produtos" />
-      </div>
+      <Cabecalho titulo="Produtos e estoque" />
 
       <Produtos />
     </main>

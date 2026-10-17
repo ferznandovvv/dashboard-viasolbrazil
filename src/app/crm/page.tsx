@@ -1,6 +1,7 @@
 "use client";
 
-import { NavPrincipal } from "@/components/NavPrincipal";
+import { Cabecalho } from "@/components/Moldura";
+import { Abas } from "@/components/Abas";
 import { useCallback, useEffect, useState } from "react";
 import { type Resumo, api } from "@/components/crm/comum";
 import { VisaoGeral } from "@/components/crm/VisaoGeral";
@@ -41,20 +42,11 @@ export default function Crm() {
 
   return (
     <main className="wrap">
-      <div className="topbar">
-        <div className="logo">
-          <div>
-            <span className="brand-word" role="img" aria-label="Via Sol" />
-            <span className="tag">crm das lojas</span>
-          </div>
-        </div>
-        <NavPrincipal atual="/crm" />
-        <span className="updated">
-          <a href="/crm/loja" target="_blank" rel="noreferrer">
-            painel das lojas
-          </a>
-        </span>
-      </div>
+      <Cabecalho titulo="CRM das lojas">
+        <a className="btn btn-sec btn-sm" href="/crm/loja" target="_blank" rel="noreferrer">
+          Abrir o caixa e cashback <span className="so-leitor">(abre em outra aba)</span>
+        </a>
+      </Cabecalho>
 
       {!r ? (
         <div className="empty">{erro || "Carregando…"}</div>
@@ -62,8 +54,9 @@ export default function Crm() {
         <div className="card">O CRM guarda a base de clientes no computador da empresa, então só funciona no sistema rodando lá.</div>
       ) : (
         <>
-          <div className="seg abas-prod" role="tablist">
-            {(
+          <Abas
+            rotulo="CRM"
+            abas={(
               [
                 ["geral", "Visão geral"],
                 ["campanhas", "Campanhas"],
@@ -71,12 +64,10 @@ export default function Crm() {
                 ["analise", "Análise"],
                 ["configurar", "Configurar"],
               ] as [Aba, string][]
-            ).map(([a, nome]) => (
-              <button key={a} className={aba === a ? "on" : ""} onClick={() => setAba(a)}>
-                {nome}
-              </button>
-            ))}
-          </div>
+            ).map(([id, nome]) => ({ id, nome }))}
+            atual={aba}
+            aoMudar={setAba}
+          />
           {aba === "geral" && <VisaoGeral />}
           {aba === "campanhas" && (
             <Campanhas lojas={r.lojas} filtroInicial={filtroCampanha} limparFiltroInicial={() => setFiltroCampanha(undefined)} irPara={setAba} recarregar={carregar} />

@@ -12,6 +12,9 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
 
+  // Logo e ícone: aparecem também na tela de entrar, na TV e na tela da loja
+  if (/^\/(logo-[a-z]+|icon)\.png$/.test(pathname)) return NextResponse.next();
+
   // O cron da Vercel chega sem cookie: ele se identifica pelo CRON_SECRET,
   // conferido dentro da própria rota.
   if (pathname === "/api/aquecer") return NextResponse.next();

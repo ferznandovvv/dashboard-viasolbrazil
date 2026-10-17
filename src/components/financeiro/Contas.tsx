@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { Conta, Sugestao, UsuarioPublico } from "@/lib/financeiro/tipos";
 import { Agenda } from "./Agenda";
+import { Abas } from "@/components/Abas";
 import { type Cadastros, api, brl, dataBr, hojeSp, lerValor, nomeMesLongo, valorParaCampo } from "./comum";
 
 type ContaTela = Conta & { criadoPorNome: string; pagoPorNome: string };
@@ -500,12 +501,12 @@ export function Contas({
   const acoesRapidas = (c: ContaTela) =>
     pagando?.id === c.id ? (
       <span className="fin-pagar">
-        <input type="date" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
-        <input inputMode="decimal" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
+        <input type="date" aria-label="Pago em" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
+        <input inputMode="decimal" aria-label="Valor pago" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
         <button className="mini" onClick={pagar}>
           Confirmar
         </button>
-        <button className="mini ghost" onClick={() => setPagando(null)}>
+        <button className="mini ghost" onClick={() => setPagando(null)} aria-label="Cancelar">
           ✕
         </button>
       </span>
@@ -927,20 +928,27 @@ export function Contas({
         <div className={`card fin-hoje${hojeTotal > 0 ? "" : " livre"}`}>
           <div className="fin-hoje-cab">
             <div>
-              <div className="seg fin-hoje-abas" role="tablist">
-                {(
+              <Abas
+                className="seg fin-hoje-abas"
+                rotulo="Quando pagar"
+                abas={(
                   [
                     ["hoje", "Pagar hoje"],
                     ["amanha", "Amanhã"],
                     ["semana", "Próximos 7 dias"],
                   ] as [Janela, string][]
-                ).map(([j, nome]) => (
-                  <button key={j} className={janela === j ? "on" : ""} onClick={() => setJanela(j)}>
-                    {nome}
-                    {j !== janela && somaDe(daJanela(j)) > 0 && <span className="fin-hoje-aba-valor"> {brl.format(somaDe(daJanela(j)))}</span>}
-                  </button>
-                ))}
-              </div>
+                ).map(([j, nome]) => ({
+                  id: j,
+                  nome: (
+                    <>
+                      {nome}
+                      {j !== janela && somaDe(daJanela(j)) > 0 && <span className="fin-hoje-aba-valor"> {brl.format(somaDe(daJanela(j)))}</span>}
+                    </>
+                  ),
+                }))}
+                atual={janela}
+                aoMudar={setJanela}
+              />
               <div className="fin-sub" style={{ marginTop: 6 }}>
                 {janela === "hoje"
                   ? diaExtenso(dados.hoje)
@@ -1076,7 +1084,7 @@ export function Contas({
           )}
         </div>
         {empresasAtivas.length > 1 && (
-          <select className="fin-select" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+          <select className="fin-select" aria-label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
             <option value="">Todas as empresas</option>
             {empresasAtivas.map((e) => (
               <option key={e.id} value={e.id}>

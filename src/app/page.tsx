@@ -5,7 +5,7 @@ import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
 import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
-import { NavPrincipal } from "@/components/NavPrincipal";
+import { Cabecalho } from "@/components/Moldura";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli" | "shopee";
@@ -337,14 +337,7 @@ export default function Dashboard() {
 
   return (
     <main className="wrap">
-      <div className="topbar">
-        <div className="logo">
-          <div>
-            <span className="brand-word" role="img" aria-label="Via Sol" />
-            <span className="tag">vendas</span>
-          </div>
-        </div>
-        <NavPrincipal atual="/" />
+      <Cabecalho titulo="Vendas">
         {data && (
           <span className="updated">
             {fmtDay(data.from)} – {fmtDay(data.to)} · atualizado{" "}
@@ -355,7 +348,7 @@ export default function Dashboard() {
             })}
           </span>
         )}
-      </div>
+      </Cabecalho>
 
       <div className="filters" role="group" aria-label="Período">
         {presets.map((p) => (
@@ -403,7 +396,7 @@ export default function Dashboard() {
         <div style={{ opacity: loading ? 0.6 : 1 }}>
           {sel.length > 0 && (
             <div className="unit-head">
-              <h1>{canal ? (canal === "shopify" ? "Site (Shopify)" : CHANNEL_META[canal].name) : sel.map((u) => (u === "Site" ? "Online" : u)).join(" + ")}</h1>
+              <h2>{canal ? CHANNEL_META[canal].name : sel.map((u) => (u === "Site" ? "Online" : u)).join(" + ")}</h2>
               <button
                 className="back"
                 onClick={() => {
@@ -1140,11 +1133,6 @@ export default function Dashboard() {
           )}
         </div>
       )}
-      <div className="rodape">
-        <a href="/configurar">configuração</a>
-        <span aria-hidden="true"> · </span>
-        <a href="/loja">tela das lojas</a>
-      </div>
     </main>
   );
 }

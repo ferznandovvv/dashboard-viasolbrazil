@@ -29,3 +29,10 @@ export async function POST(req: NextRequest) {
   });
   return res;
 }
+
+/** Sair: apaga o cookie do painel. */
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set("vs_auth", "", { httpOnly: true, secure: true, sameSite: "lax", maxAge: 0, path: "/" });
+  return res;
+}

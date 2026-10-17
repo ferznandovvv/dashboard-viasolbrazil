@@ -222,7 +222,7 @@ function CartaoLoja({ l, abrir }: { l: Loja; abrir: () => void }) {
           )}
         </span>
       </div>
-      <div className="pg-progresso" role="progressbar" aria-valuenow={c.pct30 ?? 0} aria-valuemin={0} aria-valuemax={100}>
+      <div className="pg-progresso" role="progressbar" aria-label="Vendas com celular nos últimos 30 dias" aria-valuenow={c.pct30 ?? 0} aria-valuemin={0} aria-valuemax={100}>
         <i style={{ width: `${c.pct30 ?? 0}%` }} />
       </div>
       <div className="pg-semanas" aria-label="Vendas com celular por semana, 8 semanas">

@@ -110,8 +110,8 @@ export default function TelaLoja() {
         </section>
       ) : (
         <section className="tl-loja">
-          A meta desta loja ainda não foi definida. Ela é definida na dashboard, ao entrar na
-          loja.
+          A meta deste mês ainda não foi definida. Peça para o escritório cadastrar a meta da loja
+          no painel.
         </section>
       )}
 

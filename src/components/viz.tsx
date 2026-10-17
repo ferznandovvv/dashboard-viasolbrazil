@@ -8,7 +8,8 @@ export const CHANNEL_META: Record<
   { name: string; cssVar: string; envVars: string[] }
 > = {
   shopify: {
-    name: "Shopify",
+    // O cliente conhece como "Site"; Shopify é só a plataforma por trás
+    name: "Site",
     cssVar: "var(--c-shopify)",
     envVars: ["SHOPIFY_ADMIN_TOKEN"],
   },

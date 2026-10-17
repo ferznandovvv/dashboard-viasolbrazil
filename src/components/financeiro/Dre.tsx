@@ -62,13 +62,13 @@ export function Dre({ cad }: { cad: Cadastros }) {
             Caixa
           </button>
         </div>
-        <select className="fin-select" value={ano} onChange={(e) => setAno(Number(e.target.value))}>
+        <select className="fin-select" aria-label="Ano" value={ano} onChange={(e) => setAno(Number(e.target.value))}>
           {[anoAtual, anoAtual - 1, anoAtual - 2].map((a) => (
             <option key={a}>{a}</option>
           ))}
         </select>
         {empresas.length > 1 && (
-          <select className="fin-select" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+          <select className="fin-select" aria-label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
             <option value="">Todas as empresas</option>
             {empresas.map((e) => (
               <option key={e.id} value={e.id}>

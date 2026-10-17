@@ -1,6 +1,7 @@
 "use client";
 
-import { NavPrincipal } from "@/components/NavPrincipal";
+import { Cabecalho } from "@/components/Moldura";
+import { Abas } from "@/components/Abas";
 import { useCallback, useEffect, useState } from "react";
 import type { UsuarioPublico } from "@/lib/financeiro/tipos";
 import { type Cadastros as DadosCadastros, api } from "@/components/financeiro/comum";
@@ -48,23 +49,16 @@ export default function Financeiro() {
   const veDre = u?.papel === "admin" || u?.veDre;
   return (
     <main className="wrap">
-      <div className="topbar">
-        <div className="logo">
-          <div>
-            <span className="brand-word" role="img" aria-label="Via Sol" />
-            <span className="tag">financeiro</span>
-          </div>
-        </div>
-        <NavPrincipal atual="/financeiro" />
+      <Cabecalho titulo="Financeiro">
         {u && (
-          <span className="updated">
-            {u.nome} ·{" "}
-            <button className="link" onClick={sair}>
-              sair
+          <>
+            <span className="updated">Entrou como {u.nome}</span>
+            <button className="btn btn-sec btn-sm" onClick={sair}>
+              Sair do financeiro
             </button>
-          </span>
+          </>
         )}
-      </div>
+      </Cabecalho>
 
       {!sessao ? (
         <div className="empty">Carregando…</div>
@@ -76,19 +70,16 @@ export default function Financeiro() {
         <div className="empty">Carregando…</div>
       ) : (
         <>
-          <div className="seg abas-prod" role="tablist">
-            <button className={aba === "contas" ? "on" : ""} onClick={() => setAba("contas")}>
-              Contas a pagar
-            </button>
-            {veDre && (
-              <button className={aba === "dre" ? "on" : ""} onClick={() => setAba("dre")}>
-                DRE
-              </button>
-            )}
-            <button className={aba === "cadastros" ? "on" : ""} onClick={() => setAba("cadastros")}>
-              {u.papel === "admin" ? "Cadastros" : "Categorias"}
-            </button>
-          </div>
+          <Abas
+            rotulo="Financeiro"
+            abas={[
+              { id: "contas" as Aba, nome: "Contas a pagar" },
+              ...(veDre ? [{ id: "dre" as Aba, nome: "DRE" }] : []),
+              { id: "cadastros" as Aba, nome: u.papel === "admin" ? "Cadastros" : "Categorias" },
+            ]}
+            atual={aba}
+            aoMudar={setAba}
+          />
           {aba === "contas" && <Contas cad={cad} usuario={u} aoMudarCadastros={carregarCadastros} />}
           {aba === "dre" && veDre && <Dre cad={cad} />}
           {aba === "cadastros" && <Cadastros cad={cad} admin={u.papel === "admin"} aoMudar={carregarCadastros} />}
