@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { CodigoResgate, Mensagem, MovimentoCashback, Recebida, Venda } from "@/lib/crm/tipos";
+import type { CodigoResgate, FiltroCampanha, Mensagem, MovimentoCashback, Recebida, Venda } from "@/lib/crm/tipos";
 import { type ClienteResumo, type Resumo, STATUS_NOME, api, brl, dataBrAno, dataHora, lerValor } from "./comum";
 import { formatarTelefone } from "@/lib/crm/telefone";
 
@@ -16,14 +16,23 @@ interface Ficha {
 }
 
 /** Lista de clientes por segmento, com ficha e ações. */
-export function Clientes({ r, segmentoInicial, recarregar }: { r: Resumo; segmentoInicial?: string; recarregar: () => Promise<void> }) {
+/** Segmento da lista vira o filtro inicial de uma campanha. */
+function filtroDoSegmento(segmento: string, loja: string): Partial<FiltroCampanha> {
+  const f: Partial<FiltroCampanha> = { lojas: loja ? [loja] : [] };
+  if (segmento === "aniversariantes") f.aniversariantes = true;
+  if (segmento === "com_saldo" || segmento === "cashback_vencendo") f.comSaldo = true;
+  if (segmento === "compraram_recente") f.compraramDias = 30;
+  if (segmento === "inativas") f.semComprarDias = 90;
+  return f;
+}
+
+export function Clientes({ r, segmentoInicial, recarregar, novaCampanha }: { r: Resumo; segmentoInicial?: string; recarregar: () => Promise<void>; novaCampanha: (f: Partial<FiltroCampanha>) => void }) {
   const [segmento, setSegmento] = useState(segmentoInicial ?? "todos");
   const [loja, setLoja] = useState("");
   const [busca, setBusca] = useState("");
   const [dados, setDados] = useState<{ total: number; clientes: ClienteResumo[] } | null>(null);
   const [fichaId, setFichaId] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
-  const [avulsa, setAvulsa] = useState(false);
 
   useEffect(() => {
     if (segmentoInicial) setSegmento(segmentoInicial);
@@ -60,9 +69,9 @@ export function Clientes({ r, segmentoInicial, recarregar }: { r: Resumo; segmen
         <button className="mini ghost" onClick={() => setNova(true)}>
           Nova cliente
         </button>
-        {segmento !== "todos" && segmento !== "sem_telefone" && segmento !== "opt_out" && segmento !== "funcionarias" && (
-          <button className="mini" onClick={() => setAvulsa(true)}>
-            Mandar mensagem para este segmento
+        {segmento !== "sem_telefone" && segmento !== "opt_out" && segmento !== "funcionarias" && (
+          <button className="mini" onClick={() => novaCampanha(filtroDoSegmento(segmento, loja))}>
+            Criar campanha com essas clientes
           </button>
         )}
       </div>
@@ -137,24 +146,11 @@ export function Clientes({ r, segmentoInicial, recarregar }: { r: Resumo; segmen
           }}
         />
       )}
-      {avulsa && dados && (
-        <MensagemSegmento
-          segmento={segmento}
-          nome={seg?.nome ?? ""}
-          loja={loja}
-          total={dados.total}
-          fechar={() => setAvulsa(false)}
-          aoEnviar={async () => {
-            setAvulsa(false);
-            await recarregar();
-          }}
-        />
-      )}
     </div>
   );
 }
 
-function Janela({ titulo, fechar, children, larga }: { titulo: string; fechar: () => void; children: React.ReactNode; larga?: boolean }) {
+export function Janela({ titulo, fechar, children, larga }: { titulo: string; fechar: () => void; children: React.ReactNode; larga?: boolean }) {
   return (
     <div className="crm-fundo" onClick={fechar}>
       <div className={`crm-janela ${larga ? "larga" : ""}`} onClick={(e) => e.stopPropagation()}>
@@ -479,43 +475,6 @@ function NovaCliente({ lojas, fechar, aoSalvar }: { lojas: string[]; fechar: () 
           }
         }}
       />
-      {erro && <div className="login-error">{erro}</div>}
-    </Janela>
-  );
-}
-
-function MensagemSegmento({ segmento, nome, loja, total, fechar, aoEnviar }: { segmento: string; nome: string; loja: string; total: number; fechar: () => void; aoEnviar: () => Promise<void> }) {
-  const [texto, setTexto] = useState("");
-  const [limite, setLimite] = useState(String(Math.min(total, 100)));
-  const [res, setRes] = useState("");
-  const [erro, setErro] = useState("");
-  return (
-    <Janela titulo={`Mensagem para: ${nome}`} fechar={fechar}>
-      <div className="muted" style={{ marginBottom: 10 }}>
-        {total} clientes no segmento{loja ? ` (loja ${loja})` : ""}. Quem está sem aceite, pediu para não receber ou não respondeu às últimas campanhas fica de fora. Use {"{primeiro}"}, {"{nome}"} e {"{loja}"} no texto.
-      </div>
-      <label className="config-campo"><span>Texto</span><textarea className="crm-textarea" rows={4} value={texto} onChange={(e) => setTexto(e.target.value)} /></label>
-      <div className="config-acoes">
-        <label className="config-campo" style={{ margin: 0 }}><span>Máximo de clientes</span><input value={limite} onChange={(e) => setLimite(e.target.value)} style={{ width: 100 }} /></label>
-        <button
-          className="mini"
-          disabled={!texto.trim()}
-          onClick={async () => {
-            setErro("");
-            try {
-              const r = await api<{ enfileiradas: number; puladas: Record<string, number> }>("/api/crm/mensagens", { method: "POST", body: JSON.stringify({ acao: "avulsa", segmento, loja: loja || undefined, texto, limite: Number(limite) || 100 }) });
-              const puladas = Object.entries(r.puladas).map(([k, v]) => `${v}× ${k}`).join(", ");
-              setRes(`${r.enfileiradas} entraram na fila.${puladas ? ` Puladas: ${puladas}.` : ""}`);
-              await aoEnviar();
-            } catch (e) {
-              setErro(e instanceof Error ? e.message : "Erro");
-            }
-          }}
-        >
-          Colocar na fila
-        </button>
-      </div>
-      {res && <div className="crm-aviso">{res}</div>}
       {erro && <div className="login-error">{erro}</div>}
     </Janela>
   );

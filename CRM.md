@@ -35,7 +35,7 @@ Quem manda é a fila, nunca a campanha. É ela que protege os números:
 
 1. **Subir o painel** com a versão nova (o `iniciar-painel.cmd` atualiza
    sozinho). Abra `/crm`.
-2. **Conferir a API do TOTVS**: aba Importar → "Diagnóstico da API do TOTVS"
+2. **Conferir a API do TOTVS**: Configurar → Dados → "Diagnóstico da API do TOTVS"
    → Consultar. A nota traz `personCode` (confirmado). No cadastro, veja
    `expandAceito` e se `lida.telefone` veio preenchido: telefones e e-mails
    só vêm quando pedidos com `expand`. Se vier vazio para uma cliente que
@@ -47,7 +47,7 @@ Quem manda é a fila, nunca a campanha. É ela que protege os números:
    representante e transportadora ficam de fora, assim como cadastros
    genéricos tipo "CONSUMIDOR FINAL" (e qualquer código que apareça em mais
    de 15% das notas de uma carga).
-3. **Carga histórica**: Visão geral → card TOTVS → "carga histórica…". Um ano
+3. **Carga histórica**: Configurar → Dados → card TOTVS → "carga histórica…". Um ano
    é um bom começo. Não gera cashback do passado, só preenche quem é cliente
    e quanto gastou. Leva alguns minutos; a tela mostra o andamento.
 4. **Regras**: Configurar → Cashback. Percentual, validade, mínimo para
@@ -82,7 +82,7 @@ Depois, em <http://localhost:3200>:
 3. **Webhooks**: cadastre `http://localhost:3100/api/crm/webhook?t=...` (a URL
    exata aparece em CRM → Configurar → Envio) com os eventos
    `message.received`, `message.sent` e `message.status`. É isso que alimenta
-   a aba Atendimento e marca as respostas das clientes.
+   o atendimento na Visão geral e marca as respostas das clientes.
 
 No painel, CRM → Configurar → Envio: provedor WA-AKG, endereço
 `http://localhost:3200`, API Key. Em Números, cole o nome da sessão de cada
@@ -100,9 +100,20 @@ template aprovado, então as campanhas precisariam ser cadastradas na Meta.
 
 ## Modo sombra, limite de contato e códigos
 
-O CRM nasce em **modo sombra**: as automações rodam e as mensagens entram
-na fila, mas nada sai. Leia em Mensagens o que teria saído, ajuste textos e
-regras, e desligue em Configurar → Envio quando estiver confortável.
+O CRM nasce em **modo sombra**: as automações e campanhas rodam, mas as
+mensagens ficam como **simuladas** e nada sai. Leia em Mensagens o que teria
+saído, ajuste textos e regras, e desligue em Configurar → Envio quando
+estiver confortável. Simulada nunca sai, nem depois de desligar o modo
+sombra (senão o acúmulo de dias sairia de uma vez); "Limpar simuladas" em
+Mensagens apaga o histórico do ensaio.
+
+Loja física sem número de WhatsApp no CRM não manda nada: a mensagem dela
+não sai pelo número de outra loja. Só cliente do site sem loja na cidade sai
+pelo primeiro número ativo.
+
+O teto por número é **50 por dia** (números antigos, com histórico de
+conversa, aguentam). Conta só o que o sistema manda: cliente chamando e
+vendedora respondendo pelo celular não entram na conta.
 
 Cada cliente recebe no máximo **2 mensagens em 30 dias**, de qualquer
 campanha (o aviso de cashback da própria compra não conta). Aniversário e
@@ -119,13 +130,41 @@ validade do cashback), faixas RFM (Ouro, Prata, Bronze, Nova, Parada) com
 receita de cada uma, resultado por campanha (resposta, SAIR, código usado,
 compra em 14 dias) e o extrato geral do cashback.
 
-## Atendimento das lojas
+## Visão geral (painel gerencial)
 
-A aba **Atendimento** mede, por loja, quantas clientes escreveram, quantas
-foram respondidas, a mediana do tempo até a primeira resposta (só dentro do
-horário de atendimento, sem domingo) e quem está esperando agora. Conta tanto
-resposta digitada no celular da loja quanto mandada pela API. Para ler as
-conversas em si, o botão "Abrir conversas" leva à WA-AKG.
+Um cartão por loja, ordenado do que precisa de atenção para o que está bem:
+
+- **Semáforo**: vermelho se o WhatsApp caiu ou tem cliente esperando há mais
+  de 1h; amarelo se tem alguém esperando, se a loja responde em mais de
+  15 min (mediana de 7 dias) ou se menos da metade das vendas sai com
+  celular. Tracejado: loja ainda sem número no CRM.
+- **Atendimento**: conversas do dia, quem está esperando (mais de 15 min de
+  expediente) e tempo de resposta. Conta resposta digitada no celular da
+  loja e mandada pela API; só o horário de atendimento, sem domingo.
+- **Celular no caixa**: % das vendas dos últimos 30 dias em que a cliente tem
+  celular cadastrado, comparado com os 30 anteriores, e a evolução por
+  semana. É o número a cobrar das gerentes (consumidor final conta como sem).
+
+Clicar no cartão abre o detalhe: atendimento em 24h/7/30 dias, a lista de
+quem está esperando e o % de celular por vendedora. A tela da loja
+(`/crm/loja` → Minha loja) mostra o mesmo para a gerente, com o botão de
+responder quem está esperando.
+
+## Campanhas
+
+Aba **Campanhas** → Nova campanha: escolha loja(s) e faixa (Ouro, Prata...),
+filtros extras (sem comprar há X dias, gasto mínimo, com cashback,
+aniversariantes), o máximo de clientes e o texto (até 3 versões, cada cliente
+recebe uma sorteada). Oferta opcional gera um código único por cliente. A
+prévia mostra quantas recebem, quem fica de fora e por quê (limite do mês,
+sem telefone, loja sem número) e como a mensagem chega.
+
+As mensagens saem espalhadas na duração escolhida (1h a 4h), cada número
+com as suas, em intervalos irregulares. O que cair fora do horário de envio
+ou passar do teto do dia fica para o próximo horário. Cada campanha mostra
+entregues, lidas, respostas, SAIR, código usado e quem comprou em 14 dias;
+"Parar campanha" cancela o que ainda não saiu. Embaixo, o resultado das
+automáticas nos últimos 30 dias.
 
 ## Shopify (site)
 

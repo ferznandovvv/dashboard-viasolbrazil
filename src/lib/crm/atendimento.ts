@@ -17,6 +17,8 @@ export interface ResumoLoja {
   medianaMin: number | null;
   /** Respostas que levaram mais de 1h */
   lentas: number;
+  /** Respostas em até 15 min de expediente */
+  rapidas: number;
   pendentes: number;
 }
 
@@ -30,37 +32,65 @@ export interface Pendente {
   texto?: string;
 }
 
-/** Só conta espera dentro do horário de atendimento (SP). */
-function minutosUteis(de: Date, ate: Date, inicio: number, fim: number): number {
+/**
+ * Minutos de espera dentro do horário de atendimento (SP, sem domingo).
+ * Brasil não tem horário de verão desde 2019: SP é UTC-3 fixo, então dá pra
+ * fazer a conta direto, sem formatar data minuto a minuto.
+ */
+export function minutosUteis(de: Date, ate: Date, inicio: number, fim: number): number {
   if (ate <= de) return 0;
+  const OFF = 3 * 3600000;
+  const MIN = 60000;
+  let t = Math.floor((de.getTime() - OFF) / MIN) * MIN; // relógio de SP, em ms "UTC"
+  const final = ate.getTime() - OFF;
   let total = 0;
-  const cur = new Date(de);
-  while (cur < ate) {
-    const h = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(cur)) % 24;
-    const dow = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(cur);
-    if (dow !== "Sun" && h >= inicio && h < fim) total++;
-    cur.setMinutes(cur.getMinutes() + 1);
-    if (total > 7 * 24 * 60) break;
+  while (t < final) {
+    const d = new Date(t);
+    const h = d.getUTCHours();
+    const diaUtil = d.getUTCDay() !== 0;
+    if (diaUtil && h >= inicio && h < fim) {
+      // Dentro do expediente: anda até o fim do expediente ou até `final`
+      const fimExp = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), fim);
+      const ate2 = Math.min(fimExp, final);
+      total += Math.max(0, Math.round((ate2 - t) / MIN));
+      t = ate2;
+    } else {
+      // Fora: pula para o próximo início de expediente
+      const base = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), inicio);
+      t = h < inicio && diaUtil ? base : base + 86400000;
+    }
+    if (total > 45 * 24 * 60) break;
   }
   return total;
 }
 
-export function resumoAtendimento(base: BaseCrm, dias = 7): { lojas: ResumoLoja[]; pendentes: Pendente[]; desde: string } {
+export interface ResumoAtendimento {
+  lojas: ResumoLoja[];
+  pendentes: Pendente[];
+  desde: string;
+  /** Todas as lojas juntas */
+  medianaMin: number | null;
+  respondidas: number;
+  rapidas: number;
+}
+
+/** `desdeIso` sobrepõe `dias` (ex.: meia-noite de hoje). */
+export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): ResumoAtendimento {
   const agora = new Date();
-  const desde = new Date(agora.getTime() - dias * 86400000).toISOString();
+  const desde = desdeIso ?? new Date(agora.getTime() - dias * 86400000).toISOString();
   const eventos = base.atendimento.filter((a) => a.em >= desde).sort((a, b) => a.em.localeCompare(b.em));
   const cfg = base.config;
   const inicio = cfg.envioInicio;
   const fim = cfg.envioFim;
   const nomes = new Map(base.clientes.filter((c) => c.telefone).map((c) => [c.telefone!, c.nome]));
 
-  const porLoja = new Map<string, { conversas: Set<string>; msgs: number; respondidas: number; tempos: number[]; lentas: number }>();
+  const porLoja = new Map<string, { conversas: Set<string>; msgs: number; respondidas: number; tempos: number[]; lentas: number; rapidas: number }>();
   // Por conversa: última mensagem da cliente ainda sem resposta
   const aberta = new Map<string, { em: string; texto?: string; loja: string }>();
 
   for (const ev of eventos) {
     const chave = `${ev.loja}|${ev.telefone}`;
-    const l = porLoja.get(ev.loja) ?? porLoja.set(ev.loja, { conversas: new Set(), msgs: 0, respondidas: 0, tempos: [], lentas: 0 }).get(ev.loja)!;
+    const l = porLoja.get(ev.loja) ?? porLoja.set(ev.loja, { conversas: new Set(), msgs: 0, respondidas: 0, tempos: [], lentas: 0, rapidas: 0 }).get(ev.loja)!;
     if (ev.de === "cliente") {
       l.conversas.add(ev.telefone);
       l.msgs++;
@@ -74,6 +104,7 @@ export function resumoAtendimento(base: BaseCrm, dias = 7): { lojas: ResumoLoja[
         l.respondidas++;
         l.tempos.push(min);
         if (min > 60) l.lentas++;
+        if (min <= 15) l.rapidas++;
         aberta.delete(chave);
       }
     }
@@ -100,12 +131,21 @@ export function resumoAtendimento(base: BaseCrm, dias = 7): { lojas: ResumoLoja[
     respondidas: l.respondidas,
     medianaMin: mediana(l.tempos),
     lentas: l.lentas,
+    rapidas: l.rapidas,
     pendentes: pendentes.filter((p) => p.loja === loja).length,
   })).sort((a, b) => b.conversas - a.conversas);
 
   // Lojas com número ativo mas sem nenhuma conversa aparecem zeradas
   for (const n of cfg.numeros.filter((x) => x.ativo)) {
-    if (!lojas.some((l) => l.loja === n.loja)) lojas.push({ loja: n.loja, conversas: 0, mensagensClientes: 0, respondidas: 0, medianaMin: null, lentas: 0, pendentes: 0 });
+    if (!lojas.some((l) => l.loja === n.loja)) lojas.push({ loja: n.loja, conversas: 0, mensagensClientes: 0, respondidas: 0, medianaMin: null, lentas: 0, rapidas: 0, pendentes: 0 });
   }
-  return { lojas, pendentes: pendentes.slice(0, 100), desde: desde.slice(0, 10) };
+  const todos = Array.from(porLoja.values()).flatMap((l) => l.tempos);
+  return {
+    lojas,
+    pendentes: pendentes.slice(0, 100),
+    desde: desde.slice(0, 10),
+    medianaMin: mediana(todos),
+    respondidas: todos.length,
+    rapidas: todos.filter((t) => t <= 15).length,
+  };
 }

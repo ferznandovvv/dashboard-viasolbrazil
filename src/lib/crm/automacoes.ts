@@ -6,7 +6,7 @@
 import { alterarBase, diasEntre, hojeSp, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
 import { resumir } from "./clientes";
-import { assinatura, ehMarketing, enfileirar } from "./mensagens";
+import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -147,7 +147,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
     .filter((x) => x.podeMarketing && x.totalGasto >= b.config.reativacaoTicketMinimo && x.ultimaCompra && diasEntre(x.ultimaCompra, hoje) >= b.config.reativacaoDias)
     .filter((x) => {
       const ultima = b.mensagens
-        .filter((m) => m.clienteId === x.id && m.campanha === "reativacao" && m.status !== "cancelada")
+        .filter((m) => m.clienteId === x.id && m.campanha === "reativacao" && contaNoLimite(b, m))
         .sort((p, q) => q.criadoEm.localeCompare(p.criadoEm))[0];
       return !ultima || diasEntre(ultima.criadoEm.slice(0, 10), hoje) >= b.config.reativacaoIntervaloDias;
     })

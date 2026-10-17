@@ -1,0 +1,67 @@
+import { NextRequest, NextResponse } from "next/server";
+import { LOJAS } from "@/lib/connectors/totvs";
+import { lerBase } from "@/lib/crm/base";
+import { adaptadorDe } from "@/lib/crm/envio/adaptador";
+import { dentroDaJanela } from "@/lib/crm/fila";
+import { detalheLoja, painel } from "@/lib/crm/painel";
+
+export const dynamic = "force-dynamic";
+
+/** Painel gerencial (um cartão por loja) ou, com ?loja=, o detalhe de uma loja. */
+export async function GET(req: NextRequest) {
+  const base = await lerBase();
+  const loja = req.nextUrl.searchParams.get("loja");
+  if (loja) {
+    if (!Object.values(LOJAS).includes(loja)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
+    const dias = Math.min(90, Math.max(1, Number(req.nextUrl.searchParams.get("dias")) || 7));
+    return NextResponse.json(detalheLoja(base, loja, dias));
+  }
+
+  const p = painel(base);
+  const adaptador = adaptadorDe(base.config);
+  // Situação de cada número direto na WA-AKG (conectado ou não)
+  const situacoes = await Promise.all(
+    p.lojas.map(async (l) => {
+      const n = base.config.numeros.find((x) => x.loja === l.loja);
+      if (!adaptador || !n?.sessao || !n.ativo) return null;
+      return adaptador.situacao(n.sessao);
+    })
+  );
+  const lojas = p.lojas.map((l, i) => {
+    const s = situacoes[i];
+    if (s && !s.conectado) {
+      l.alertas.unshift("WhatsApp desconectado");
+      l.nivel = "critico";
+    }
+    return { ...l, conectado: s ? s.conectado : null, detalheNumero: s?.detalhe };
+  });
+
+  const cfg = base.config;
+  return NextResponse.json({
+    lojas,
+    geral: {
+      conversasHoje: p.hoje.lojas.reduce((s, l) => s + l.conversas, 0),
+      esperando: p.semana.pendentes.length,
+      maiorEsperaMin: p.semana.pendentes[0]?.esperando ?? 0,
+      mediana7d: p.semana.medianaMin,
+      rapidas7d: p.semana.respondidas ? Math.round((p.semana.rapidas / p.semana.respondidas) * 100) : null,
+      respondidas7d: p.semana.respondidas,
+      vendas30: lojas.reduce((s, l) => s + l.cadastro.vendas30, 0),
+      comCelular30: lojas.reduce((s, l) => s + l.cadastro.comCelular30, 0),
+      conectados: lojas.filter((l) => l.conectado).length,
+      numeros: lojas.filter((l) => l.numero.ativo).length,
+      eventos: base.atendimento.length,
+    },
+    pendentes: p.semana.pendentes.slice(0, 12),
+    envio: {
+      modoSombra: cfg.modoSombra,
+      pausado: cfg.pausado,
+      provedor: adaptador?.nome ?? null,
+      dentroDaJanela: dentroDaJanela(base),
+      naFila: base.mensagens.filter((m) => m.status === "fila").length,
+      inicio: cfg.envioInicio,
+      fim: cfg.envioFim,
+    },
+    gatewayUrl: cfg.provedor === "waakg" ? cfg.waakgUrl : undefined,
+  });
+}

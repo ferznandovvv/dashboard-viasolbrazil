@@ -17,6 +17,7 @@ export const STATUS_NOME: Record<StatusMensagem, string> = {
   respondida: "respondida",
   erro: "erro",
   cancelada: "cancelada",
+  simulada: "simulada (modo sombra)",
 };
 
 export interface Resumo {

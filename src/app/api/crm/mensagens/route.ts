@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alterarBase, lerBase } from "@/lib/crm/base";
-import { type Segmento, SEGMENTOS, listarSegmento } from "@/lib/crm/clientes";
 import { rodarAutomacoes } from "@/lib/crm/automacoes";
 import { processarFila } from "@/lib/crm/fila";
-import { enfileirar, renderizar } from "@/lib/crm/mensagens";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import type { StatusMensagem } from "@/lib/crm/tipos";
 import { normalizarTelefone } from "@/lib/crm/telefone";
@@ -37,8 +35,8 @@ type Pedido =
   | { acao: "automacoes" }
   | { acao: "cancelar"; id: string }
   | { acao: "cancelar-fila" }
-  | { acao: "teste"; telefone: string; loja: string; texto: string }
-  | { acao: "avulsa"; segmento: Segmento; loja?: string; texto: string; limite?: number };
+  | { acao: "limpar-simuladas" }
+  | { acao: "teste"; telefone: string; loja: string; texto: string };
 
 export async function POST(req: NextRequest) {
   const p = (await req.json().catch(() => ({}))) as Pedido;
@@ -64,6 +62,14 @@ export async function POST(req: NextRequest) {
         });
         return NextResponse.json({ canceladas: n });
       }
+      case "limpar-simuladas": {
+        const n = await alterarBase((b) => {
+          const antes = b.mensagens.length;
+          b.mensagens = b.mensagens.filter((m) => m.status !== "simulada");
+          return antes - b.mensagens.length;
+        });
+        return NextResponse.json({ canceladas: n });
+      }
       case "teste": {
         // Envio direto, fora da fila: para conferir que o número está respondendo
         const base = await lerBase();
@@ -75,24 +81,6 @@ export async function POST(req: NextRequest) {
         if (!tel) return NextResponse.json({ erro: "Telefone inválido." }, { status: 400 });
         const r = await adaptador.enviarTexto(n.sessao, tel, p.texto?.trim() || "Teste do CRM Via Sol.");
         return NextResponse.json(r, { status: r.ok ? 200 : 502 });
-      }
-      case "avulsa": {
-        if (!SEGMENTOS.some((s) => s.id === p.segmento)) return NextResponse.json({ erro: "Segmento inválido." }, { status: 400 });
-        if (!p.texto?.trim()) return NextResponse.json({ erro: "Escreva o texto." }, { status: 400 });
-        const r = await alterarBase((b) => {
-          const alvo = listarSegmento(b, p.segmento, p.loja).slice(0, p.limite ?? 500);
-          const lote = `avulsa-${Date.now()}`;
-          const res = { enfileiradas: 0, puladas: {} as Record<string, number> };
-          for (const c of alvo) {
-            const loja = c.ultimaLoja ?? c.lojaOrigem;
-            const texto = renderizar(p.texto, c, loja ?? "");
-            const e = enfileirar(b, { cliente: c, campanha: "avulsa", loja, texto, chave: `${lote}-${c.id}` });
-            if (e.mensagem) res.enfileiradas++;
-            else res.puladas[e.motivo ?? "?"] = (res.puladas[e.motivo ?? "?"] ?? 0) + 1;
-          }
-          return res;
-        });
-        return NextResponse.json(r);
       }
       default:
         return NextResponse.json({ erro: "Ação desconhecida." }, { status: 400 });

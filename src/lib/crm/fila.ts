@@ -76,7 +76,7 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
       if (enviadasHoje(base, n.loja, hoje) >= (n.tetoDia ?? cfg.tetoDiaPorNumero)) continue;
       const m = base.mensagens
         .filter((x) => x.loja === n.loja && x.status === "fila" && x.naoAntesDe <= agoraIso)
-        .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))[0];
+        .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];
       if (m) escolhidas.push(m);
     }
     if (!escolhidas.length) return { enviadas: 0, erros: 0 };
@@ -95,7 +95,9 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
       escolhidas.map(async (m) => {
         const numero = cfg.numeros.find((n) => n.loja === m.loja)!;
         const r = await adaptador.enviarTexto(numero.sessao, m.telefone, m.texto);
-        proximoEnvio.set(m.loja, Date.now() + aleatorio(cfg.intervaloMinSeg, cfg.intervaloMaxSeg) * 1000);
+        // Campanha já vem espaçada pelo horário de cada mensagem; aqui só garante o intervalo mínimo
+        const espera = m.campanhaId ? cfg.intervaloMinSeg : aleatorio(cfg.intervaloMinSeg, cfg.intervaloMaxSeg);
+        proximoEnvio.set(m.loja, Date.now() + espera * 1000);
         return { m, r };
       })
     );

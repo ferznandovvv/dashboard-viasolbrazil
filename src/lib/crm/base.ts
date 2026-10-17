@@ -30,6 +30,7 @@ function inicial(): BaseCrm {
     atendimento: [],
     vendedoras: {},
     modelos: structuredClone(MODELOS_PADRAO),
+    campanhas: [],
     config: { ...CONFIG_PADRAO, webhookSegredo: randomBytes(12).toString("hex") },
   };
 }
@@ -115,6 +116,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Aba Campanhas; números antigos aguentam mais que 20 por dia; o que foi
+    // gerado em modo sombra vira "simulada" para não sair quando o modo for desligado
+    id: "campanhas-v1",
+    aplicar: (b) => {
+      b.campanhas ??= [];
+      if (b.config.tetoDiaPorNumero === 20) b.config.tetoDiaPorNumero = 50;
+      if (b.config.modoSombra) for (const m of b.mensagens) if (m.status === "fila") m.status = "simulada";
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
@@ -122,6 +133,7 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
       b.recebidas ??= [];
       b.codigos ??= [];
       b.atendimento ??= [];
+      b.campanhas ??= [];
       for (const m of MODELOS_PADRAO) {
         if (!b.modelos.some((x) => x.campanha === m.campanha)) b.modelos.push(structuredClone(m));
       }

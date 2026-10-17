@@ -80,11 +80,18 @@ export function textoDaCampanha(base: BaseCrm, campanha: TipoCampanha, cliente: 
 
 export const ehMarketing = (campanha: TipoCampanha) => CAMPANHAS.find((c) => c.id === campanha)?.marketing ?? true;
 
-/** Loja cujo número vai mandar: a da venda/origem, se tiver número; senão a primeira ativa. */
+/**
+ * Loja cujo número vai mandar: sempre o da própria loja. Loja física sem
+ * número ainda não manda (não faz sentido o número do Centro mandar mensagem
+ * assinada pela loja de Ribeirão). Só cliente do site, ou sem loja, sai pelo
+ * primeiro número ativo.
+ */
 export function lojaDeEnvio(base: BaseCrm, preferida?: string): string | undefined {
   const ativos = base.config.numeros.filter((n) => n.ativo && n.sessao);
-  if (!ativos.length) return undefined;
-  return ativos.find((n) => n.loja === preferida)?.loja ?? ativos[0].loja;
+  const propria = ativos.find((n) => n.loja === preferida);
+  if (propria) return propria.loja;
+  if (preferida && preferida !== "Site") return undefined;
+  return ativos[0]?.loja;
 }
 
 export interface PedidoFila {
@@ -103,33 +110,49 @@ export interface PedidoFila {
   forcar?: boolean;
   /** Gera um código de resgate da oferta, amarrado à campanha, e o põe em {codigo} */
   oferta?: string;
+  /** Campanha manual que gerou */
+  campanhaId?: string;
 }
 
 /** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
 const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas"];
 
+/**
+ * A mensagem conta para limite e repetição? Cancelada e erro não. Simulada
+ * conta só enquanto o modo sombra está ligado (pra simulação ser realista);
+ * desligado, ela some das contas e a cliente pode receber a de verdade.
+ */
+export const conta = (base: BaseCrm, m: Mensagem) =>
+  m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || base.config.modoSombra);
+
 /** Mensagens mandadas (ou na fila) para a cliente nos últimos 30 dias, de campanhas que contam. */
 export function mensagensNoMes(base: BaseCrm, clienteId: string): number {
   const desde = new Date(Date.now() - 30 * 86400000).toISOString();
   return base.mensagens.filter(
-    (m) => m.clienteId === clienteId && !FORA_DO_LIMITE.includes(m.campanha) && m.criadoEm >= desde && !["cancelada", "erro"].includes(m.status)
+    (m) => m.clienteId === clienteId && !FORA_DO_LIMITE.includes(m.campanha) && m.criadoEm >= desde && conta(base, m)
   ).length;
 }
 
-/** Põe na fila. Devolve a mensagem ou o motivo de não ter entrado. */
+/** Por que a cliente não pode receber esta campanha agora (ou undefined se pode). */
+export function motivoBloqueio(base: BaseCrm, c: Cliente, campanha: TipoCampanha, forcar = false): string | undefined {
+  if (!c.telefone) return "sem telefone";
+  if (forcar) return undefined;
+  if (c.optOut) return "pediu para não receber";
+  if (!c.optIn) return "sem aceite";
+  if (ehMarketing(campanha) && c.semResposta >= base.config.maxSemResposta) return "sem resposta nas últimas campanhas";
+  if (!FORA_DO_LIMITE.includes(campanha) && mensagensNoMes(base, c.id) >= base.config.maxMensagensMes) return "já recebeu o máximo do mês";
+  return undefined;
+}
+
+/** Põe na fila (ou, em modo sombra, registra como simulada). Devolve a mensagem ou o motivo de não ter entrado. */
 export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem; motivo?: string } {
   const c = p.cliente;
-  if (!c.telefone) return { motivo: "sem telefone" };
-  if (!p.forcar) {
-    if (c.optOut) return { motivo: "pediu para não receber" };
-    if (!c.optIn) return { motivo: "sem aceite" };
-    if (ehMarketing(p.campanha) && c.semResposta >= base.config.maxSemResposta) return { motivo: "sem resposta nas últimas campanhas" };
-    if (!FORA_DO_LIMITE.includes(p.campanha) && mensagensNoMes(base, c.id) >= base.config.maxMensagensMes) return { motivo: "já recebeu o máximo do mês" };
-  }
-  if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada")) return { motivo: "já enviada" };
+  const bloqueio = motivoBloqueio(base, c, p.campanha, p.forcar);
+  if (bloqueio) return { motivo: bloqueio };
+  if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada" && (m.status !== "simulada" || base.config.modoSombra))) return { motivo: "já enviada" };
   const lojaRef = p.loja ?? c.lojaOrigem;
   const loja = lojaDeEnvio(base, lojaRef);
-  if (!loja) return { motivo: "nenhum número de WhatsApp configurado" };
+  if (!loja) return { motivo: base.config.numeros.some((n) => n.ativo && n.sessao) ? `loja ${lojaRef} ainda sem número` : "nenhum número de WhatsApp configurado" };
   const id = novoId();
   // Oferta vira um código único: a vendedora digita no caixa e a gente sabe qual campanha trouxe a cliente
   let codigo: string | undefined;
@@ -137,7 +160,10 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
     codigo = gerarCodigo(base);
     base.codigos.push({ codigo, clienteId: c.id, valor: 0, oferta: p.oferta, campanha: p.campanha, mensagemId: id, criadoEm: new Date().toISOString(), validade: somarDias(hojeSp(), 45) });
   }
-  const texto = p.texto?.trim() || textoDaCampanha(base, p.campanha, c, lojaRef ?? loja, { ...p.variaveis, codigo });
+  const ref = lojaRef ?? loja;
+  const texto = p.texto?.trim()
+    ? renderizar(p.texto, c, ref, { vendedora: assinatura(base, ref), compraMinima: compraMinimaPara(base, p.variaveis?.valor), ...p.variaveis, codigo })
+    : textoDaCampanha(base, p.campanha, c, ref, { ...p.variaveis, codigo });
   if (!texto) {
     if (codigo) base.codigos.splice(base.codigos.findIndex((x) => x.codigo === codigo), 1);
     return { motivo: "campanha desligada ou sem texto" };
@@ -145,15 +171,16 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   const m: Mensagem = {
     id,
     clienteId: c.id,
-    telefone: c.telefone,
+    telefone: c.telefone!,
     campanha: p.campanha,
     loja,
     texto,
-    status: "fila",
+    status: base.config.modoSombra ? "simulada" : "fila",
     naoAntesDe: p.naoAntesDe ?? new Date().toISOString(),
     criadoEm: new Date().toISOString(),
     tentativas: 0,
     chave: p.chave,
+    campanhaId: p.campanhaId,
   };
   base.mensagens.push(m);
   return { mensagem: m };

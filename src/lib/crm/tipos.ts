@@ -115,13 +115,14 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "cashback_site_longe", nome: "Cashback creditado (site, sem loja perto)", dica: "Compra no site de quem mora longe das lojas", marketing: false },
   { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
   { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
-  { id: "aniversario", nome: "Aniversário", dica: "No dia, com a oferta configurada", marketing: true },
+  { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta", marketing: true },
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
   { id: "avulsa", nome: "Avulsa", dica: "Mandada à mão para um segmento", marketing: true },
 ];
 
-export type StatusMensagem = "fila" | "enviando" | "enviada" | "entregue" | "lida" | "respondida" | "erro" | "cancelada";
+/** "simulada": gerada em modo sombra; nunca sai, nem quando o modo sombra é desligado. */
+export type StatusMensagem = "fila" | "enviando" | "enviada" | "entregue" | "lida" | "respondida" | "erro" | "cancelada" | "simulada";
 
 export interface Mensagem {
   id: string;
@@ -147,6 +148,57 @@ export interface Mensagem {
   chave?: string;
   /** Marketing: já contou (ou não) como "sem resposta" para a cliente */
   avaliada?: boolean;
+  /** Campanha manual (aba Campanhas) que gerou a mensagem */
+  campanhaId?: string;
+}
+
+/** Faixas de cliente pelo histórico de compra (ver perfil.ts). */
+export type FaixaCliente = "Ouro" | "Prata" | "Bronze" | "Nova" | "Parada" | "Sem compra";
+
+export const FAIXAS: { id: FaixaCliente; dica: string }[] = [
+  { id: "Ouro", dica: "3+ compras ou R$ 1.500+, comprou no último ano" },
+  { id: "Prata", dica: "2 compras ou R$ 600+, comprou no último ano" },
+  { id: "Bronze", dica: "1 compra entre 6 meses e 1 ano atrás" },
+  { id: "Nova", dica: "1 compra nos últimos 6 meses" },
+  { id: "Parada", dica: "Sem comprar há mais de um ano" },
+  { id: "Sem compra", dica: "Cadastrada, sem compra registrada" },
+];
+
+/** Quem entra numa campanha manual. Campo vazio = não filtra. */
+export interface FiltroCampanha {
+  /** Loja da cliente (a da última compra, senão a do cadastro) */
+  lojas: string[];
+  faixas: FaixaCliente[];
+  /** Sem comprar há pelo menos N dias */
+  semComprarDias?: number;
+  /** Comprou nos últimos N dias */
+  compraramDias?: number;
+  gastoMinimo?: number;
+  comSaldo?: boolean;
+  aniversariantes?: boolean;
+  /** Máximo de clientes (as que mais gastaram primeiro) */
+  limite?: number;
+}
+
+/** Campanha montada à mão na aba Campanhas, espalhada no tempo. */
+export interface CampanhaManual {
+  id: string;
+  nome: string;
+  criadaEm: string;
+  filtro: FiltroCampanha;
+  /** Variações do texto; cada cliente recebe uma, sorteada */
+  variacoes: string[];
+  /** Oferta com código único por cliente (vai em {oferta} e {codigo}) */
+  oferta?: string;
+  /** Primeira mensagem (ISO) */
+  inicio: string;
+  /** Em quantos minutos espalhar, por número */
+  duracaoMin: number;
+  total: number;
+  puladas: Record<string, number>;
+  /** Criada em modo sombra: só simulada */
+  simulada?: boolean;
+  canceladaEm?: string;
 }
 
 /** Resposta recebida pelo webhook (fica no histórico mesmo sem mensagem nossa antes). */
@@ -278,6 +330,7 @@ export interface BaseCrm {
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */
   vendedoras: Record<string, string>;
   modelos: Modelo[];
+  campanhas: CampanhaManual[];
   config: ConfigCrm;
 }
 
@@ -407,7 +460,7 @@ export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   envioInicio: 9,
   envioFim: 19,
   envioDias: [1, 2, 3, 4, 5, 6],
-  tetoDiaPorNumero: 20,
+  tetoDiaPorNumero: 50,
   intervaloMinSeg: 60,
   intervaloMaxSeg: 240,
   maxSemResposta: 2,

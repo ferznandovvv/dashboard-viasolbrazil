@@ -6,6 +6,7 @@
 
 import { diasEntre, hojeSp } from "./base";
 import type { BaseCrm, Venda } from "./tipos";
+import { faixaDe } from "./perfil";
 
 const arred = (v: number, c = 1) => Math.round(v * 10 ** c) / 10 ** c;
 const mediana = (v: number[]) => {
@@ -83,14 +84,11 @@ export function analisar(base: BaseCrm): Analise {
   // RFM simplificado em quatro faixas que a gerente entende
   const receitaTotal = vendas.reduce((s, v) => s + v.valor, 0);
   const faixas = { ouro: [] as number[], prata: [] as number[], bronze: [] as number[], uma: [] as number[], paradas: [] as number[] };
+  const chave = { Ouro: "ouro", Prata: "prata", Bronze: "bronze", Nova: "uma", Parada: "paradas" } as const;
   for (const l of porCliente.values()) {
     const total = l.reduce((s, v) => s + v.valor, 0);
-    const recencia = diasEntre(l[l.length - 1].data.slice(0, 10), hoje);
-    if (recencia > 365) faixas.paradas.push(total);
-    else if (l.length >= 3 || total >= 1500) faixas.ouro.push(total);
-    else if (l.length === 2 || total >= 600) faixas.prata.push(total);
-    else if (l.length === 1 && recencia <= 180) faixas.uma.push(total);
-    else faixas.bronze.push(total);
+    const f = faixaDe(l.length, total, diasEntre(l[l.length - 1].data.slice(0, 10), hoje));
+    if (f !== "Sem compra") faixas[chave[f]].push(total);
   }
   const linhaRfm = (faixa: string, descricao: string, v: number[]) => {
     const receita = v.reduce((s, x) => s + x, 0);
@@ -99,7 +97,7 @@ export function analisar(base: BaseCrm): Analise {
   const rfm = [
     linhaRfm("Ouro", "3+ compras ou R$ 1.500+, ativa no último ano", faixas.ouro),
     linhaRfm("Prata", "2 compras ou R$ 600+, ativa no último ano", faixas.prata),
-    linhaRfm("Bronze", "1 compra há mais de 6 meses, ativa no último ano", faixas.bronze),
+    linhaRfm("Bronze", "1 compra entre 6 meses e 1 ano atrás", faixas.bronze),
     linhaRfm("Nova", "1 compra nos últimos 6 meses", faixas.uma),
     linhaRfm("Parada", "Sem comprar há mais de um ano", faixas.paradas),
   ];

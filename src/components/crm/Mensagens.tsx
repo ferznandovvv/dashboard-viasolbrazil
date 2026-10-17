@@ -11,7 +11,7 @@ interface Dados {
   porStatus: Record<string, number>;
 }
 
-const FILTROS: (StatusMensagem | "todas")[] = ["todas", "fila", "enviada", "entregue", "lida", "respondida", "erro", "cancelada"];
+const FILTROS: (StatusMensagem | "todas")[] = ["todas", "fila", "simulada", "enviada", "entregue", "lida", "respondida", "erro", "cancelada"];
 
 /** Fila e histórico de mensagens, e o que as clientes responderam. */
 export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
@@ -31,7 +31,15 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
     setAviso("");
     try {
       const r = await api<Record<string, unknown>>("/api/crm/mensagens", { method: "POST", body: JSON.stringify(corpo) });
-      setAviso("canceladas" in r ? `${r.canceladas} canceladas.` : `${r.enviadas ?? 0} enviadas, ${r.erros ?? 0} erros${r.motivo ? ` (${r.motivo})` : ""}.`);
+      setAviso(
+        "canceladas" in r
+          ? `${r.canceladas} canceladas.`
+          : "enfileiradas" in r
+            ? `Automações: ${Object.values(r.enfileiradas as Record<string, number>).reduce((s, n) => s + n, 0)} mensagens geradas.`
+            : "aviso" in r
+              ? String(r.aviso)
+              : `${r.enviadas ?? 0} enviadas, ${r.erros ?? 0} erros${r.motivo ? ` (${r.motivo})` : ""}.`
+      );
       await carregar();
       await recarregar();
     } catch (e) {
@@ -57,7 +65,13 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
           </select>
         )}
         <span style={{ flex: 1 }} />
+        <button className="mini ghost" onClick={() => acao({ acao: "automacoes" })}>Rodar automações agora</button>
         <button className="mini ghost" onClick={() => acao({ acao: "processar" })}>Processar fila agora</button>
+        {(d?.porStatus.simulada ?? 0) > 0 && (
+          <button className="mini ghost" onClick={() => confirm(`Apagar as ${d?.porStatus.simulada} mensagens simuladas?`) && acao({ acao: "limpar-simuladas" })}>
+            Limpar simuladas
+          </button>
+        )}
         {fila > 0 && (
           <button className="mini ghost fin-excluir" onClick={() => confirm(`Cancelar as ${fila} mensagens que ainda estão na fila?`) && acao({ acao: "cancelar-fila" })}>
             Cancelar fila

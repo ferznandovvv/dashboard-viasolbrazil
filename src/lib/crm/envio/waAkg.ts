@@ -110,7 +110,7 @@ export class WaAkg implements Adaptador {
       if (r.status !== 200) return { sessao, conectado: false, detalhe: `HTTP ${r.status}` };
       const data = (r.json?.data ?? r.json) as Record<string, unknown>;
       const status = String(data?.status ?? data?.connectionStatus ?? daLista ?? "").toUpperCase();
-      return { sessao, conectado: /CONNECTED|OPEN|READY/.test(status), detalhe: `${status || "sem status"}${id !== sessao ? ` · código ${id}` : ""}` };
+      return { sessao, conectado: /^(CONNECTED|OPEN|READY|ONLINE)\b/.test(status), detalhe: `${status || "sem status"}${id !== sessao ? ` · código ${id}` : ""}` };
     } catch (e) {
       return { sessao, conectado: false, detalhe: e instanceof Error ? e.message : String(e) };
     }

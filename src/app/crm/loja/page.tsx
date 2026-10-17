@@ -283,7 +283,13 @@ interface Painel {
   saldoTotal: number;
   esperando: number;
   modoSombra: boolean;
+  celular: { vendas30: number; comCelular30: number; pct30: number | null; pctAnterior: number | null; novas7d: number; novas7dSemCelular: number };
+  rankingVendas: { loja: string; pct: number; vendas: number }[];
+  atendimento: { ativo: boolean; conversasHoje: number; mediana7d: number | null; rapidas7d: number | null };
+  esperandoLista: { nome?: string; telefone: string; esperando: number; texto?: string }[];
 }
+
+const minutos = (m: number | null) => (m === null ? "–" : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`);
 
 const zap = (tel: string) => `https://wa.me/55${tel.replace(/\D/g, "")}`;
 
@@ -295,24 +301,75 @@ function PainelLoja({ loja, api }: { loja: string; api: <T>(url: string, corpo?:
     api<Painel>(`/api/crm/loja?painel=${encodeURIComponent(loja)}`).then(setP).catch((e) => setErro(e.message));
   }, [loja, api]);
   if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
-  const posicao = p.ranking.findIndex((r) => r.loja === loja) + 1;
+  const posicao = p.rankingVendas.findIndex((r) => r.loja === loja) + 1;
+  const c = p.celular;
+  const delta = c.pct30 !== null && c.pctAnterior !== null ? c.pct30 - c.pctAnterior : null;
   return (
     <div>
+      {p.esperandoLista.length > 0 && (
+        <div className="crm-caixa-ficha lj-alerta">
+          <div className="crm-caixa-nome">Esperando resposta no WhatsApp</div>
+          <div className="lj-lista">
+            {p.esperandoLista.map((x) => (
+              <div key={x.telefone} className="lj-item">
+                <span>
+                  {x.nome ?? x.telefone}
+                  <small>
+                    há {minutos(x.esperando)}
+                    {x.texto ? ` · "${x.texto.slice(0, 60)}"` : ""}
+                  </small>
+                </span>
+                <a href={zap(x.telefone)} target="_blank" rel="noreferrer">
+                  responder
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="crm-caixa-ficha">
-        <div className="muted">Clientes da {loja} com celular cadastrado</div>
-        <div className="lj-grande">{p.pctTelefone}%</div>
+        <div className="muted">Vendas da {loja} com celular da cliente, últimos 30 dias</div>
+        <div className="lj-grande">{c.pct30 === null ? "–" : `${c.pct30}%`}</div>
         <div className="muted lj-meta">
-          {p.comTelefone} de {p.clientes} clientes. {posicao ? `${posicao}ª de ${p.ranking.length} lojas.` : ""} {p.cadastradasSemana ? `${p.cadastradasSemana} cadastradas por aqui nos últimos 7 dias.` : ""}
+          {c.comCelular30} de {c.vendas30} vendas.{" "}
+          {delta !== null && delta !== 0 ? (delta > 0 ? `Subiu ${delta} pontos em relação ao mês anterior. ` : `Caiu ${-delta} pontos em relação ao mês anterior. `) : ""}
+          {posicao ? `${posicao}ª de ${p.rankingVendas.length} lojas. ` : ""}
+          {c.novas7d ? (c.novas7d === 1 ? "1 cliente nova com celular na semana." : `${c.novas7d} clientes novas com celular na semana.`) : ""}
+          {c.novas7dSemCelular ? (c.novas7dSemCelular === 1 ? " 1 cliente nova saiu sem celular." : ` ${c.novas7dSemCelular} clientes novas saíram sem celular.`) : ""}
         </div>
         <div className="lj-ranking">
-          {p.ranking.map((r) => (
+          {p.rankingVendas.map((r) => (
             <div key={r.loja} className={`lj-ranking-linha ${r.loja === loja ? "eu" : ""}`}>
               <span>{r.loja}</span>
               <span style={{ textAlign: "right" }}>{r.pct}%</span>
             </div>
           ))}
         </div>
+        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+          Na base toda, {p.pctTelefone}% das clientes da loja têm celular ({p.comTelefone} de {p.clientes}).
+        </div>
       </div>
+
+      {p.atendimento.ativo && (
+        <div className="crm-caixa-ficha">
+          <div className="crm-caixa-nome">WhatsApp da loja</div>
+          <div className="pg-mini" style={{ marginTop: 8 }}>
+            <div>
+              <b>{p.atendimento.conversasHoje}</b>
+              <small>conversas hoje</small>
+            </div>
+            <div>
+              <b>{minutos(p.atendimento.mediana7d)}</b>
+              <small>pra responder (7 dias)</small>
+            </div>
+            <div>
+              <b>{p.atendimento.rapidas7d === null ? "–" : `${p.atendimento.rapidas7d}%`}</b>
+              <small>em até 15 min</small>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="crm-caixa-ficha lj-info">
         <div className="crm-caixa-nome">Por que pedir o celular</div>
@@ -325,7 +382,6 @@ function PainelLoja({ loja, api }: { loja: string; api: <T>(url: string, corpo?:
         <div className="crm-caixa-nome">Pra chamar esta semana</div>
         <div className="muted">
           {p.comSaldo} clientes da loja com cashback pra usar, {brl.format(p.saldoTotal)} no total.
-          {p.esperando ? ` ${p.esperando} esperando resposta no WhatsApp agora.` : ""}
           {p.modoSombra ? " As mensagens automáticas ainda não estão saindo; por enquanto, chamar é com você." : ""}
         </div>
         {p.vencendo.length > 0 && (

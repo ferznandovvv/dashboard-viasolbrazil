@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
-import { resumoAtendimento } from "@/lib/crm/atendimento";
+import { painel } from "@/lib/crm/painel";
 import { creditosAbertos, resgatar, saldoDe, usarOferta } from "@/lib/crm/cashback";
 import { resumir, salvarCliente } from "@/lib/crm/clientes";
 import { enfileirar } from "@/lib/crm/mensagens";
@@ -106,8 +106,22 @@ function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: string) {
       saldoTotal += s;
     }
   }
-  const atend = resumoAtendimento(base, 1);
+  // Captura de celular pelas vendas dos últimos 30 dias e atendimento no WhatsApp
+  const pg = painel(base);
+  const card = pg.lojas.find((l) => l.loja === loja)!;
+  const rankingVendas = pg.lojas
+    .filter((l) => l.cadastro.vendas30 > 0)
+    .map((l) => ({ loja: l.loja, pct: l.cadastro.pct30 ?? 0, vendas: l.cadastro.vendas30 }))
+    .sort((a, b) => b.pct - a.pct);
+  const esperandoLista = pg.semana.pendentes
+    .filter((p) => p.loja === loja)
+    .slice(0, 20)
+    .map((p) => ({ nome: p.cliente, telefone: formatarTelefone(p.telefone), esperando: p.esperando, texto: p.texto }));
   return {
+    celular: card.cadastro,
+    rankingVendas,
+    atendimento: { ativo: card.numero.ativo, conversasHoje: card.atend.conversasHoje, mediana7d: card.atend.mediana7d, rapidas7d: card.atend.rapidas7d },
+    esperandoLista,
     loja,
     clientes: minhas.length,
     comTelefone: comTel,
@@ -118,7 +132,7 @@ function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: string) {
     vencendo: vencendo.slice(0, 40),
     comSaldo,
     saldoTotal: Math.round(saldoTotal * 100) / 100,
-    esperando: atend.pendentes.filter((p) => p.loja === loja).length,
+    esperando: esperandoLista.length,
     modoSombra: base.config.modoSombra,
   };
 }

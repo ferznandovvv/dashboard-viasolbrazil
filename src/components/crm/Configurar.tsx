@@ -2,21 +2,24 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ConfigCrm, Modelo, NumeroWhatsapp } from "@/lib/crm/tipos";
-import { type DadosConfig, api, brl } from "./comum";
+import { type DadosConfig, type Resumo, api, brl } from "./comum";
+import { Fontes } from "./Fontes";
+import { Importar } from "./Importar";
 
-type Secao = "cashback" | "campanhas" | "envio" | "numeros" | "modelos" | "backup";
+type Secao = "cashback" | "campanhas" | "envio" | "numeros" | "modelos" | "dados" | "backup";
 
 const SECOES: [Secao, string, string][] = [
   ["cashback", "Cashback", "Percentual, validade e a regra de uso"],
-  ["campanhas", "Campanhas", "Lembretes, aniversário, reativação"],
+  ["campanhas", "Automações", "Lembretes, aniversário, reativação"],
   ["envio", "Envio", "Provedor, modo sombra, horário e ritmo"],
   ["numeros", "Números", "Um WhatsApp por loja"],
   ["modelos", "Textos", "O que as mensagens dizem"],
+  ["dados", "Dados", "TOTVS, Shopify e planilhas"],
   ["backup", "Backup", "Cópia da base"],
 ];
 
 /** Regras do cashback, campanhas, provedor e números, ritmo de envio e textos. */
-export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) {
+export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Promise<void> }) {
   const [d, setD] = useState<DadosConfig | null>(null);
   const [secao, setSecao] = useState<Secao>("cashback");
   const [cfg, setCfg] = useState<ConfigCrm | null>(null);
@@ -274,6 +277,13 @@ export function Configurar({ recarregar }: { recarregar: () => Promise<void> }) 
         {secao === "numeros" && <Numeros lojas={d.lojas} numeros={cfg.numeros} provedor={cfg.provedor} salvar={(numeros) => salvar({ numeros }, "Números salvos.")} />}
 
         {secao === "modelos" && <Modelos d={d} aoMudar={carregar} />}
+
+        {secao === "dados" && (
+          <>
+            <Fontes r={r} recarregar={recarregar} />
+            <Importar r={r} recarregar={recarregar} />
+          </>
+        )}
 
         {secao === "backup" && (
           <section className="card cfg-card">

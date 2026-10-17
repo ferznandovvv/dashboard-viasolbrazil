@@ -6,19 +6,19 @@ import { type Resumo, api } from "@/components/crm/comum";
 import { VisaoGeral } from "@/components/crm/VisaoGeral";
 import { Clientes } from "@/components/crm/Clientes";
 import { Mensagens } from "@/components/crm/Mensagens";
-import { Importar } from "@/components/crm/Importar";
 import { Configurar } from "@/components/crm/Configurar";
-import { Atendimento } from "@/components/crm/Atendimento";
+import { Campanhas } from "@/components/crm/Campanhas";
+import type { FiltroCampanha } from "@/lib/crm/tipos";
 import { Analise } from "@/components/crm/Analise";
 
-type Aba = "geral" | "clientes" | "mensagens" | "atendimento" | "analise" | "importar" | "configurar";
+type Aba = "geral" | "campanhas" | "clientes" | "mensagens" | "analise" | "configurar";
 
 /** CRM das lojas físicas: clientes, cashback e mensagens de WhatsApp. */
 export default function Crm() {
   const [r, setR] = useState<Resumo | null>(null);
   const [erro, setErro] = useState("");
   const [aba, setAba] = useState<Aba>("geral");
-  const [segmento, setSegmento] = useState<string | undefined>();
+  const [filtroCampanha, setFiltroCampanha] = useState<Partial<FiltroCampanha> | undefined>();
 
   const carregar = useCallback(async () => {
     try {
@@ -35,9 +35,9 @@ export default function Crm() {
     return () => clearInterval(t);
   }, [carregar]);
 
-  const irPara = (a: "clientes", seg?: string) => {
-    setSegmento(seg);
-    setAba(a);
+  const novaCampanha = (f: Partial<FiltroCampanha>) => {
+    setFiltroCampanha(f);
+    setAba("campanhas");
   };
 
   return (
@@ -67,11 +67,10 @@ export default function Crm() {
             {(
               [
                 ["geral", "Visão geral"],
+                ["campanhas", "Campanhas"],
                 ["clientes", "Clientes"],
                 ["mensagens", "Mensagens"],
-                ["atendimento", "Atendimento"],
                 ["analise", "Análise"],
-                ["importar", "Importar"],
                 ["configurar", "Configurar"],
               ] as [Aba, string][]
             ).map(([a, nome]) => (
@@ -80,13 +79,14 @@ export default function Crm() {
               </button>
             ))}
           </div>
-          {aba === "geral" && <VisaoGeral r={r} recarregar={carregar} irPara={irPara} />}
-          {aba === "clientes" && <Clientes r={r} segmentoInicial={segmento} recarregar={carregar} />}
+          {aba === "geral" && <VisaoGeral />}
+          {aba === "campanhas" && (
+            <Campanhas lojas={r.lojas} filtroInicial={filtroCampanha} limparFiltroInicial={() => setFiltroCampanha(undefined)} irPara={setAba} />
+          )}
+          {aba === "clientes" && <Clientes r={r} recarregar={carregar} novaCampanha={novaCampanha} />}
           {aba === "mensagens" && <Mensagens recarregar={carregar} />}
-          {aba === "atendimento" && <Atendimento />}
           {aba === "analise" && <Analise validade={r.validade} />}
-          {aba === "importar" && <Importar r={r} recarregar={carregar} />}
-          {aba === "configurar" && <Configurar recarregar={carregar} />}
+          {aba === "configurar" && <Configurar r={r} recarregar={carregar} />}
         </>
       )}
     </main>
