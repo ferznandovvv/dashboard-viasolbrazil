@@ -51,11 +51,13 @@ export function totvsConfigured(): boolean {
   );
 }
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedToken: { token: string; expiresAt: number; chave: string } | null = null;
 
 /** Token de acesso da APIv2, com cache em memória. */
 export async function getTotvsToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+  // Trocou o client id/secret ou o usuário na configuração: o token antigo não vale mais
+  const chave = `${env("TOTVS_CLIENT_ID")}|${env("TOTVS_CLIENT_SECRET")}|${env("TOTVS_USERNAME")}|${env("TOTVS_PASSWORD")}`;
+  if (cachedToken && cachedToken.chave === chave && cachedToken.expiresAt > Date.now()) return cachedToken.token;
 
   const res = await fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
     method: "POST",
@@ -86,6 +88,7 @@ export async function getTotvsToken(): Promise<string> {
   cachedToken = {
     token: json.access_token,
     expiresAt: Date.now() + ((json.expires_in ?? 3600) - 300) * 1000,
+    chave,
   };
   return cachedToken.token;
 }
