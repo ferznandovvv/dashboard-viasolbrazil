@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { fmtDay } from "@/components/viz";
 import { Abas } from "@/components/Abas";
+import { usePode } from "@/components/sessao";
 
 interface Linha {
   produto: string;
@@ -71,6 +72,8 @@ const tom = (v: number) => (v > 0 ? "tem" : v === 0 ? "vazio" : "negativo");
  *  - Mais vendidos: loja(s) e período → o que mais saiu, com o saldo ao lado
  */
 export function Produtos() {
+  // Usuário de loja consulta só o estoque; vendas por produto ficam com dono e sócia
+  const veVendidos = usePode("produtos");
   const presets = useMemo(() => buildPresets().filter((p) => PERIODOS.includes(p.key)), []);
   const [aba, setAba] = useState<Aba>("busca");
   const [q, setQ] = useState("");
@@ -149,7 +152,7 @@ export function Produtos() {
       setCustomDe(perUrl.from);
       setCustomAte(perUrl.to);
     }
-    if (p.get("aba") === "vendidos") verMaisVendidos(perUrl ?? periodo, lsUrl, tUrl);
+    if (p.get("aba") === "vendidos" && veVendidos) verMaisVendidos(perUrl ?? periodo, lsUrl, tUrl);
     else if (p.get("q")) setQ(p.get("q") ?? "");
     setPronto(true);
     // só na montagem
@@ -259,15 +262,17 @@ export function Produtos() {
 
   return (
     <div>
-      <Abas
-        rotulo="Produtos"
-        abas={[
-          { id: "busca", nome: "Buscar produto" },
-          { id: "vendidos", nome: "Mais vendidos" },
-        ]}
-        atual={aba}
-        aoMudar={trocarAba}
-      />
+      {veVendidos && (
+        <Abas
+          rotulo="Produtos"
+          abas={[
+            { id: "busca", nome: "Buscar produto" },
+            { id: "vendidos", nome: "Mais vendidos" },
+          ]}
+          atual={aba}
+          aoMudar={trocarAba}
+        />
+      )}
 
       {aba === "busca" ? (
         <>

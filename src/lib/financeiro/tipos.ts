@@ -56,6 +56,8 @@ export interface Usuario {
   veDre: boolean;
   ativo: boolean;
   criadoEm: string;
+  /** Sócia sem permissão de lançar: vê tudo, mas não muda nada */
+  somenteVer?: boolean;
 }
 
 /** O que a tela recebe de um usuário — nunca o hash da senha. */

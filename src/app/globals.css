@@ -17,7 +17,7 @@
   /* Laranja original, só para o logo e enfeites (não é texto) */
   --marca: #bc5714;
   --on-brand: #fbf4e8;
-  --good: #2e7d54;
+  --good: #1f6a43;
   --critical: #962f20;
   /* Atenção (vence hoje, reagendado): amarelo escuro o bastante para ser texto */
   --aviso: #8a5a00;
@@ -301,28 +301,23 @@ th.num { text-align: right; }
 
 .empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
 
-.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+}
 .login-card {
   background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px;
-  padding: 36px; width: 340px; display: flex; flex-direction: column; gap: 12px;
-  text-align: center;
+  padding: 32px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px;
 }
-.login-card h1 {
-  font-family: var(--font-serif); font-size: 22px; font-weight: 600;
-  letter-spacing: 0.28em; color: var(--brand);
-}
-.login-card p { color: var(--text-muted); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; margin-top: -6px; }
+.login-card .brand-word { margin: 0 auto 4px; }
+.login-card h1 { font-family: var(--font-serif); font-size: 22px; font-weight: 600; text-align: center; }
 .login-card input {
-  background: var(--page); border: 1px solid var(--border); border-radius: 10px;
-  padding: 11px 12px; font-size: 14px; color: var(--text-primary); font-family: inherit;
-  text-align: center;
+  background: var(--page); border: 1px solid var(--border); border-radius: 10px; min-height: 44px;
+  padding: 10px 12px; font-size: 16px; color: var(--text-primary); font-family: inherit;
 }
-.login-card button {
-  background: var(--brand); color: var(--on-brand); border: none; border-radius: 10px;
-  padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
-  letter-spacing: 0.06em;
-}
-.login-error { color: var(--critical); font-size: 13px; }
+.login-card .btn { width: 100%; min-height: 46px; font-size: 15px; }
+.login-dica { color: var(--text-secondary); font-size: 13px; text-align: center; }
+.login-error { color: var(--critical); font-size: 14px; font-weight: 600; }
 
 
 /* Destaques da home */

@@ -1,68 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { env } from "./lib/env";
+import { areaDaRota, inicio, publica, soLeitura, temArea } from "./lib/acesso/regras";
+import { codigoDeAparelho, sessaoDe } from "./lib/acesso/sessao";
 
 /**
- * Proteção opcional por senha: defina DASHBOARD_PASSWORD nas variáveis de
- * ambiente e o dashboard passa a exigir login. Sem a variável, fica aberto.
+ * Porteiro do sistema: cada página e cada rota de API só abre para quem
+ * entrou e tem o papel certo. As telas de aparelho (TV, loja, caixa) também
+ * abrem com o código da TV na URL, sem login.
  */
-export function middleware(req: NextRequest) {
-  const password = (env("DASHBOARD_PASSWORD") || undefined);
-  if (!password) return NextResponse.next();
+export async function middleware(req: NextRequest) {
+  const { pathname, searchParams } = req.nextUrl;
+  if (publica(pathname) || codigoDeAparelho(req)) return NextResponse.next();
 
-  const { pathname } = req.nextUrl;
-  if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
+  const api = pathname.startsWith("/api/");
+  const recusa = (erro: string, status: number) => NextResponse.json({ erro, error: erro }, { status });
 
-  // Logo e ícone: aparecem também na tela de entrar, na TV e na tela da loja
-  if (/^\/(logo-[a-z]+|icon)\.png$/.test(pathname)) return NextResponse.next();
-
-  // O cron da Vercel chega sem cookie: ele se identifica pelo CRON_SECRET,
-  // conferido dentro da própria rota.
-  if (pathname === "/api/aquecer") return NextResponse.next();
-
-  // Webhook do WhatsApp (WA-AKG / Cloud API) chega sem cookie: a rota confere
-  // o segredo que vai na URL.
-  if (pathname === "/api/crm/webhook") return NextResponse.next();
-
-  // Modo TV, tela da loja e caixa do CRM: rodam sem login no aparelho da
-  // loja, mas com um código na URL —
-  // senão o faturamento por loja fica aberto para quem tiver o link.
-  if (
-    pathname === "/tv" ||
-    pathname === "/api/tv" ||
-    pathname === "/loja" ||
-    pathname === "/api/loja" ||
-    pathname === "/crm/loja" ||
-    pathname === "/api/crm/loja"
-  ) {
-    const codigo = (env("TV_CODE") || undefined);
-    if (codigo && req.nextUrl.searchParams.get("k") === codigo) return NextResponse.next();
+  const s = await sessaoDe(req);
+  if (!s) {
+    if (api) return recusa("Entre com seu usuário.", 401);
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = pathname === "/" ? "" : `?volta=${encodeURIComponent(pathname + req.nextUrl.search)}`;
+    return NextResponse.redirect(url);
   }
 
-  const cookie = req.cookies.get("vs_auth")?.value;
-  if (cookie === expectedCookie(password)) {
-    return NextResponse.next();
+  const area = areaDaRota(pathname, req.method, searchParams);
+  if (area && !temArea(s.papel, area)) {
+    if (api) return recusa("Seu usuário não tem acesso a esta parte.", 403);
+    const url = req.nextUrl.clone();
+    url.pathname = inicio(s.papel);
+    url.search = "";
+    return NextResponse.redirect(url);
   }
-
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (api && area && req.method !== "GET" && soLeitura(s.papel, area)) {
+    return recusa("Seu usuário só pode consultar esta parte.", 403);
   }
-  const loginUrl = req.nextUrl.clone();
-  loginUrl.pathname = "/login";
-  return NextResponse.redirect(loginUrl);
-}
-
-function expectedCookie(password: string): string {
-  // Hash simples (FNV-1a) — evita guardar a senha em texto no cookie.
-  // Roda no Edge runtime, onde node:crypto não está disponível.
-  let h = 0x811c9dc5;
-  const s = `viasol:${password}`;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16);
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Lê as contas do arquivo da máquina: precisa do Node, não do runtime de borda
+  runtime: "nodejs",
 };

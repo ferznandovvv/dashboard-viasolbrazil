@@ -10,6 +10,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { LOJAS } from "../connectors/totvs";
+import { ARQUIVO_ACESSO } from "../acesso/base";
 import { CATEGORIAS_PADRAO, type BaseFinanceira } from "./tipos";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "financeiro");
@@ -169,6 +170,8 @@ export async function copiaDeSeguranca(base: BaseFinanceira, forcar = false): Pr
     await mkdir(dir, { recursive: true });
     const dia = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
     await copyFile(ARQUIVO, join(dir, `financeiro-${dia}.json`));
+    // As contas de acesso ao sistema vão junto (senhas guardadas só como hash)
+    await copyFile(ARQUIVO_ACESSO, join(dir, "acesso.json")).catch(() => {});
     global.__backupFin = Date.now();
     const copias = (await readdir(dir)).filter((n) => /^financeiro-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
     for (const velha of copias.slice(0, Math.max(0, copias.length - MANTER_COPIAS))) {

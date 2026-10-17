@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lerAcesso } from "@/lib/acesso/base";
 import { exigir } from "@/lib/financeiro/auth";
 import { alterarBase, novoId } from "@/lib/financeiro/base";
 import { validarRateio } from "@/lib/financeiro/rateio";
@@ -72,7 +73,8 @@ export async function GET(req: NextRequest) {
     })
     .filter((x) => x.aPagar || x.vencido || x.pago);
 
-  const nomes = new Map(base.usuarios.map((u) => [u.id, u.nome]));
+  // Quem lançou: contas do sistema e, para lançamentos antigos, os usuários do financeiro
+  const nomes = new Map([...base.usuarios.map((u) => [u.id, u.nome] as const), ...(await lerAcesso()).contas.map((c) => [c.id, c.nome] as const)]);
   // Para o painel "pagar hoje", que mostra todas as empresas
   const todasAbertas = base.contas.filter((c) => c.status === "aberta");
   const proximaData = todasAbertas

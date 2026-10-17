@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS } from "@/lib/connectors/totvs";
-import { env } from "@/lib/env";
+import { lojasPermitidas } from "@/lib/acesso/lojas";
 import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
 import { painel } from "@/lib/crm/painel";
 import { conferir } from "@/lib/crm/conferencia";
@@ -16,29 +16,12 @@ import { formatarTelefone, normalizarTelefone } from "@/lib/crm/telefone";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Mesmo hash do middleware: o cookie do login do painel também vale aqui. */
-function cookieEsperado(senha: string): string {
-  let h = 0x811c9dc5;
-  const t = `viasol:${senha}`;
-  for (let i = 0; i < t.length; i++) {
-    h ^= t.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16);
-}
-
 /**
- * O caixa da loja entra de dois jeitos: com o código da tela de metas (TV_CODE)
- * na URL, no celular da loja; ou logado no painel, no computador.
+ * O caixa abre de dois jeitos: no aparelho da loja, com o código da TV na URL
+ * (todas as lojas); ou com o usuário de cada um — o usuário de loja só vê e
+ * mexe na própria loja.
  */
-function autorizado(req: NextRequest): boolean {
-  const senha = env("DASHBOARD_PASSWORD");
-  const codigo = env("TV_CODE");
-  if (!senha && !codigo) return true;
-  if (codigo && req.nextUrl.searchParams.get("k") === codigo) return true;
-  if (senha && req.cookies.get("vs_auth")?.value === cookieEsperado(senha)) return true;
-  return false;
-}
+const foraDaLoja = (loja: string) => NextResponse.json({ erro: `Seu usuário não tem acesso à loja ${loja}.` }, { status: 403 });
 
 function fichaCurta(base: Awaited<ReturnType<typeof lerBase>>, id: string) {
   const c = base.clientes.find((x) => x.id === id)!;
@@ -96,10 +79,12 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
 
 /** Busca por telefone, CPF ou nome; ou o painel da loja (?painel=Nome). */
 export async function GET(req: NextRequest) {
-  if (!autorizado(req)) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
+  const permitidas = await lojasPermitidas(req);
+  if (!permitidas) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
   const produtos = req.nextUrl.searchParams.get("produtos");
   if (produtos) {
     if (!Object.values(LOJAS).includes(produtos)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
+    if (!permitidas.includes(produtos)) return foraDaLoja(produtos);
     const per = req.nextUrl.searchParams.get("periodo");
     const periodo = per === "7" || per === "30" ? per : "mes";
     return NextResponse.json(await produtosDaLoja(produtos, periodo).catch(() => ({ produtos: [], pecas: 0, receita: 0, incompleto: true })));
@@ -109,9 +94,10 @@ export async function GET(req: NextRequest) {
   const base = await lerBase();
   if (painel) {
     if (!Object.values(LOJAS).includes(painel)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
+    if (!permitidas.includes(painel)) return foraDaLoja(painel);
     return NextResponse.json(await painelDaLoja(base, painel));
   }
-  if (!q) return NextResponse.json({ lojas: Object.values(LOJAS), clientes: [] });
+  if (!q) return NextResponse.json({ lojas: permitidas, clientes: [] });
   const dig = q.replace(/\D/g, "");
   const tel = normalizarTelefone(q);
   let lista = base.clientes.filter(
@@ -121,7 +107,7 @@ export async function GET(req: NextRequest) {
     const t = q.toLowerCase();
     lista = base.clientes.filter((c) => c.nome.toLowerCase().includes(t)).slice(0, 10);
   }
-  return NextResponse.json({ lojas: Object.values(LOJAS), clientes: lista.slice(0, 10).map((c) => fichaCurta(base, c.id)) });
+  return NextResponse.json({ lojas: permitidas, clientes: lista.slice(0, 10).map((c) => fichaCurta(base, c.id)) });
 }
 
 type Pedido =
@@ -131,8 +117,10 @@ type Pedido =
   | { acao: "usar-oferta"; codigo: string; loja: string; valorCompra?: number };
 
 export async function POST(req: NextRequest) {
-  if (!autorizado(req)) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
+  const permitidas = await lojasPermitidas(req);
+  if (!permitidas) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
   const p = (await req.json().catch(() => ({}))) as Pedido;
+  if ("loja" in p && !permitidas.includes(p.loja)) return foraDaLoja(p.loja);
   try {
     if (p.acao === "codigo") {
       const base = await lerBase();

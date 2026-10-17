@@ -1,6 +1,8 @@
 "use client";
 
 import { Cabecalho } from "@/components/Moldura";
+import { Abas } from "@/components/Abas";
+import { Pessoas } from "@/components/configurar/Pessoas";
 import { useEffect, useState } from "react";
 import type { Integracao } from "@/lib/integracoes";
 
@@ -28,7 +30,7 @@ const quando = (iso?: string) =>
       })
     : "—";
 
-export default function Configurar() {
+function Integracoes() {
   const [estado, setEstado] = useState<Estado | null>(null);
   const [valores, setValores] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -89,22 +91,14 @@ export default function Configurar() {
     void testar(integ.id);
   };
 
-  if (!estado)
-    return (
-      <main className="wrap">
-        <Cabecalho titulo="Configurações" />
-        <div className="empty">Carregando…</div>
-      </main>
-    );
+  if (!estado) return <div className="empty">Carregando…</div>;
 
   const pronta = (i: Integracao) =>
     [...i.campos.filter((c) => !c.opcional).map((c) => c.nome), ...(i.geradas ?? [])].every((n) => estado.situacao[n]);
   const temCampos = (i: Integracao) => i.campos.filter((c) => !c.opcional).every((c) => estado.situacao[c.nome]);
 
   return (
-    <main className="wrap">
-      <Cabecalho titulo="Configurações" />
-
+    <>
       {!estado.local && (
         <div className="card">
           Este sistema está rodando na Vercel — lá as chaves se configuram no painel dela
@@ -205,6 +199,35 @@ export default function Configurar() {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+type AbaConfig = "integracoes" | "pessoas";
+
+/** Configurações do sistema num lugar só: integrações e quem entra. */
+export default function Configuracoes() {
+  const [aba, setAba] = useState<AbaConfig>("integracoes");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("aba") === "pessoas") setAba("pessoas");
+  }, []);
+  const mudar = (a: AbaConfig) => {
+    setAba(a);
+    window.history.replaceState(null, "", a === "pessoas" ? "?aba=pessoas" : window.location.pathname);
+  };
+  return (
+    <main className="wrap">
+      <Cabecalho titulo="Configurações" />
+      <Abas
+        rotulo="Configurações"
+        abas={[
+          { id: "integracoes", nome: "Integrações" },
+          { id: "pessoas", nome: "Pessoas e acessos" },
+        ]}
+        atual={aba}
+        aoMudar={mudar}
+      />
+      {aba === "pessoas" ? <Pessoas /> : <Integracoes />}
     </main>
   );
 }

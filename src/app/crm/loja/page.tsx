@@ -131,12 +131,16 @@ export default function PainelDaLoja() {
   useEffect(() => {
     if (!pronto) return;
     buscar<{ lojas: string[] }>("/api/crm/loja")
-      .then((r) => setLojas(r.lojas))
+      .then((r) => {
+        setLojas(r.lojas);
+        // Usuário de loja (uma loja só): vai direto nela; loja guardada que não vale mais sai
+        setLoja((atual) => (r.lojas.length === 1 ? r.lojas[0] : r.lojas.includes(atual) ? atual : ""));
+      })
       .catch((e) => setErro(e.message));
   }, [pronto, buscar]);
 
   useEffect(() => {
-    if (!pronto || !loja) return;
+    if (!pronto || !loja || !lojas.includes(loja)) return;
     const carregar = () =>
       buscar<Painel>(`/api/crm/loja?painel=${encodeURIComponent(loja)}`)
         .then((x) => {
@@ -147,7 +151,7 @@ export default function PainelDaLoja() {
     carregar();
     const t = setInterval(carregar, 60000);
     return () => clearInterval(t);
-  }, [pronto, loja, buscar]);
+  }, [pronto, loja, lojas, buscar]);
 
   const escolher = (l: string) => {
     setP(null);
@@ -188,11 +192,13 @@ export default function PainelDaLoja() {
               Cliente veio usar o cashback
             </button>
           )}
-          <select className="fin-select" value={loja} onChange={(e) => escolher(e.target.value)} aria-label="Trocar loja">
-            {lojas.map((l) => (
-              <option key={l}>{l}</option>
-            ))}
-          </select>
+          {lojas.length > 1 && (
+            <select className="fin-select" value={loja} onChange={(e) => escolher(e.target.value)} aria-label="Trocar loja">
+              {lojas.map((l) => (
+                <option key={l}>{l}</option>
+              ))}
+            </select>
+          )}
           {p && <span className="muted">atualizado às {new Date(p.atualizado).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
         </div>
       </header>

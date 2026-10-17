@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exigir, hashSenha, publico } from "@/lib/financeiro/auth";
+import { exigir } from "@/lib/financeiro/auth";
 import { UNIDADES, alterarBase, copiaDeSeguranca, lerBase, novoId } from "@/lib/financeiro/base";
 import { FORMAS, GRUPOS, type GrupoDre, type Papel } from "@/lib/financeiro/tipos";
 
 export const dynamic = "force-dynamic";
 
-/** Empresas, categorias e (para o admin) usuários e configuração. */
+/** Empresas, categorias e (para o admin) a configuração do backup. */
 export async function GET(req: NextRequest) {
   const atual = await exigir(req);
   if (atual instanceof NextResponse) return atual;
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     unidades: UNIDADES,
     grupos: GRUPOS,
     formas: FORMAS,
-    usuarios: admin ? base.usuarios.map(publico) : [],
+    usuarios: [],
     backupDir: admin ? base.config.backupDir ?? "" : undefined,
   });
 }
@@ -79,31 +79,7 @@ export async function POST(req: NextRequest) {
         return `categoria:${c?.id ?? base.categorias[base.categorias.length - 1].id}`;
       }
       if (p.tipo === "usuario") {
-        const login = (p.login ?? "").trim().toLowerCase();
-        if (!p.nome?.trim() || !login) throw new Error("Preencha nome e usuário.");
-        if (base.usuarios.some((u) => u.login === login && u.id !== p.id)) throw new Error("Esse usuário já existe.");
-        if (p.senha && p.senha.length < 6) throw new Error("A senha precisa de pelo menos 6 caracteres.");
-        const u = base.usuarios.find((x) => x.id === p.id);
-        if (u) {
-          const admins = base.usuarios.filter((x) => x.papel === "admin" && x.ativo && x.id !== u.id);
-          if (admins.length === 0 && (p.papel !== "admin" || p.ativo === false))
-            throw new Error("Precisa sobrar pelo menos um administrador ativo.");
-          Object.assign(u, { nome: p.nome.trim(), login, papel: p.papel, veDre: p.veDre, ativo: p.ativo ?? true });
-          if (p.senha) Object.assign(u, hashSenha(p.senha));
-        } else {
-          if (!p.senha) throw new Error("Defina uma senha para o novo usuário.");
-          base.usuarios.push({
-            id: novoId(),
-            nome: p.nome.trim(),
-            login,
-            ...hashSenha(p.senha),
-            papel: p.papel === "admin" ? "admin" : "equipe",
-            veDre: Boolean(p.veDre),
-            ativo: true,
-            criadoEm: new Date().toISOString(),
-          });
-        }
-        return "ok";
+        throw new Error("As pessoas agora são cadastradas em Configurações › Pessoas e acessos.");
       }
       if (p.tipo === "excluir-empresa") {
         const usadas = base.contas.filter((c) => c.empresaId === p.id).length;

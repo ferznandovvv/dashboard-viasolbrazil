@@ -31,8 +31,14 @@ Crie um arquivo `.env.local` só com a senha de acesso:
 DASHBOARD_PASSWORD=sua-senha
 ```
 
-Depois de subir o sistema (passo 3), abra **/configurar** — ou o link
-"configuração" no rodapé da dashboard. Para cada integração:
+Essa senha serve para o primeiro acesso: na tela de entrar, o sistema pede
+para criar a conta do **Dono** (nome, usuário e senha) e confirma com ela.
+Quem já tinha usuário no financeiro entra com o mesmo usuário e senha. As
+outras pessoas e um usuário para cada loja se cadastram em
+**Configurações › Pessoas e acessos**, e lá também se desliga a senha antiga.
+
+Depois de subir o sistema (passo 3), abra **Configurações** no menu lateral.
+Para cada integração:
 
 - **TOTVS, Shopify e Meta** — cole as chaves e clique em Salvar.
 - **TikTok Shop, Mercado Livre e TikTok Ads** — cole as chaves do app, salve
@@ -85,7 +91,9 @@ e a tela de configuração mostra quando foi a última atualização.
 
 ## Se algo não funcionar
 
-- **Página pede senha e não aceita** — confira `DASHBOARD_PASSWORD` no `.env.local`
+- **Não consigo entrar** — use o seu usuário e senha (os mesmos do financeiro).
+  Sem usuário, deixe o campo em branco e use a senha do `DASHBOARD_PASSWORD`
+  (entra como Sócia, e só enquanto ela não for desligada em Pessoas e acessos)
 - **Lojas físicas vazias** — confira as quatro variáveis `TOTVS_`
 - **Estoque demorando** — feche e abra o painel de novo: um minuto depois
   de ligar ele monta a foto completa

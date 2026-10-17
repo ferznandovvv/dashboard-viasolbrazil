@@ -17,7 +17,7 @@ São Paulo.
 - Cada canal só é consultado se as credenciais dele estiverem configuradas.
   Canal sem credencial aparece como **"não conectado"** no dashboard, com a
   lista de variáveis que faltam — o resto continua funcionando normalmente.
-- Proteção por senha opcional via `DASHBOARD_PASSWORD`.
+- Login por pessoa com papéis (Dono, Sócia, Financeiro, Loja), cadastrados em Configurações › Pessoas e acessos.
 
 ## Rodando localmente
 

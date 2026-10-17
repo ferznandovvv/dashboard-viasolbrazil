@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { Categoria, Empresa, GrupoDre, Papel, UsuarioPublico } from "@/lib/financeiro/tipos";
+import type { Categoria, Empresa, GrupoDre } from "@/lib/financeiro/tipos";
 import { type Cadastros as Dados, api } from "./comum";
 
 type Secao = "empresas" | "categorias" | "usuarios" | "backup";
@@ -59,7 +59,7 @@ export function Cadastros({ cad, admin, aoMudar }: { cad: Dados; admin: boolean;
 
       {admin && secao === "empresas" && <Empresas cad={cad} salvar={salvar} />}
       {secao === "categorias" && <Categorias cad={cad} salvar={salvar} />}
-      {admin && secao === "usuarios" && <Usuarios cad={cad} salvar={salvar} />}
+      {admin && secao === "usuarios" && <Usuarios />}
       {admin && secao === "backup" && <Backup cad={cad} salvar={salvar} />}
     </div>
   );
@@ -239,97 +239,17 @@ function Categorias({ cad, salvar }: { cad: Dados; salvar: Salvar }) {
   );
 }
 
-function Usuarios({ cad, salvar }: { cad: Dados; salvar: Salvar }) {
-  const [edit, setEdit] = useState<(Partial<UsuarioPublico> & { senha?: string }) | null>(null);
+function Usuarios() {
   return (
     <div className="card">
-      <div className="goal-head fin-cab">
-        <h2>Usuários do financeiro</h2>
-        <button className="mini" onClick={() => setEdit({ nome: "", login: "", senha: "", papel: "equipe", veDre: false, ativo: true })}>
-          + Novo usuário
-        </button>
-      </div>
-      <p className="muted" style={{ fontSize: 12.5, margin: "0 0 12px" }}>
-        Administrador cadastra empresas e usuários, exclui qualquer conta e vê o DRE. Equipe lança, dá baixa e
-        cadastra categorias; vê o DRE só se você liberar.
+      <h2>Usuários</h2>
+      <p className="fin-sub" style={{ margin: "8px 0 14px" }}>
+        As pessoas agora entram no sistema todo com o mesmo usuário e são cadastradas num lugar só. Quem já tinha
+        usuário aqui continua com a mesma senha.
       </p>
-      <div className="tbl-wrap">
-        <table className="prod-tbl">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Usuário</th>
-              <th>Papel</th>
-              <th>DRE</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {cad.usuarios.map((u) => (
-              <tr key={u.id} className={u.ativo ? "" : "paga"}>
-                <td>{u.nome}</td>
-                <td className="fin-sub">{u.login}</td>
-                <td>{u.papel === "admin" ? "Administrador" : "Equipe"}{!u.ativo && " (inativo)"}</td>
-                <td>{u.papel === "admin" || u.veDre ? "vê" : "—"}</td>
-                <td>
-                  <button className="link" onClick={() => setEdit({ ...u, senha: "" })}>
-                    editar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {edit && (
-        <div className="fin-edit">
-          <div className="fin-grid">
-            <label className="config-campo">
-              <span>Nome</span>
-              <input value={edit.nome ?? ""} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} autoFocus />
-            </label>
-            <label className="config-campo">
-              <span>Usuário (para entrar)</span>
-              <input value={edit.login ?? ""} autoCapitalize="none" onChange={(e) => setEdit({ ...edit, login: e.target.value })} />
-            </label>
-            <label className="config-campo">
-              <span>{edit.id ? "Nova senha (em branco = mantém)" : "Senha"}</span>
-              <input type="password" value={edit.senha ?? ""} onChange={(e) => setEdit({ ...edit, senha: e.target.value })} />
-            </label>
-            <label className="config-campo">
-              <span>Papel</span>
-              <select value={edit.papel} onChange={(e) => setEdit({ ...edit, papel: e.target.value as Papel })}>
-                <option value="equipe">Equipe</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </label>
-          </div>
-          {edit.papel !== "admin" && (
-            <label className="fin-check">
-              <input type="checkbox" checked={!!edit.veDre} onChange={(e) => setEdit({ ...edit, veDre: e.target.checked })} />
-              Pode ver o DRE
-            </label>
-          )}
-          {edit.id && (
-            <label className="fin-check">
-              <input type="checkbox" checked={edit.ativo ?? true} onChange={(e) => setEdit({ ...edit, ativo: e.target.checked })} />
-              Ativo (desmarque para tirar o acesso)
-            </label>
-          )}
-          <div className="config-acoes">
-            <button
-              className="buscar"
-              style={{ width: "auto" }}
-              onClick={async () => (await salvar({ tipo: "usuario", ...edit })) && setEdit(null)}
-            >
-              Salvar usuário
-            </button>
-            <button className="exportar" onClick={() => setEdit(null)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
+      <a className="btn btn-sec btn-sm" href="/configurar?aba=pessoas">
+        Abrir Pessoas e acessos
+      </a>
     </div>
   );
 }

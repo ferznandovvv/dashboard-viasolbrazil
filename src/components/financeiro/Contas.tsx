@@ -499,7 +499,7 @@ export function Contas({
 
   /** Pagar e reagendar, com os campos abrindo no lugar do botão. */
   const acoesRapidas = (c: ContaTela) =>
-    pagando?.id === c.id ? (
+    usuario.somenteVer ? null : pagando?.id === c.id ? (
       <span className="fin-pagar">
         <input type="date" aria-label="Pago em" value={pagando.pagoEm} onChange={(e) => setPagando({ ...pagando, pagoEm: e.target.value })} />
         <input inputMode="decimal" aria-label="Valor pago" value={pagando.valor} onChange={(e) => setPagando({ ...pagando, valor: e.target.value })} />
@@ -532,6 +532,8 @@ export function Contas({
     );
 
   const podeExcluir = (c: ContaTela) => usuario.papel === "admin" || c.criadoPor === usuario.id;
+  /** Sócia sem permissão de lançar: vê tudo, sem os botões de mudar */
+  const soVer = Boolean(usuario.somenteVer);
   const categoriasPorGrupo = cad.grupos
     .map((g) => ({ g, cats: categoriasAtivas.filter((c) => c.grupo === g.id) }))
     .filter((x) => x.cats.length);
@@ -627,7 +629,7 @@ export function Contas({
         onChange={(e) => aoEscolherArquivo(e.target.files?.[0])}
       />
 
-      {!form && (
+      {!form && !soVer && (
         <div className="fin-lancar">
           <button
             className="fin-lancar-btn principal"
@@ -1197,7 +1199,7 @@ export function Contas({
                             )}
                           </td>
                           <td className="fin-acoes">
-                            {pagando?.id === c.id || reagendando?.id === c.id ? (
+                            {soVer ? null : pagando?.id === c.id || reagendando?.id === c.id ? (
                               acoesRapidas(c)
                             ) : (
                               <>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lojasPermitidas } from "@/lib/acesso/lojas";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
 import { addDays, spDateKey, todaySpKey } from "@/lib/types";
@@ -29,9 +30,10 @@ export interface Vendedora {
  */
 export async function GET(req: NextRequest) {
   const nome = (req.nextUrl.searchParams.get("nome") ?? "").trim();
-  const lojas = Object.values(LOJAS);
+  // Usuário de loja só vê a própria; dono, sócia e o aparelho com o código veem todas
+  const lojas = (await lojasPermitidas(req)) ?? [];
   if (!lojas.includes(nome)) {
-    return NextResponse.json({ erro: "Loja não encontrada", lojas }, { status: 400 });
+    return NextResponse.json({ erro: Object.values(LOJAS).includes(nome) ? `Seu usuário não tem acesso à loja ${nome}.` : "Loja não encontrada", lojas }, { status: 400 });
   }
 
   const hoje = todaySpKey();

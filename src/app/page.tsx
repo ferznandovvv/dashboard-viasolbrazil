@@ -6,6 +6,7 @@ import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
 import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
 import { Cabecalho } from "@/components/Moldura";
+import { usePode } from "@/components/sessao";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli" | "shopee";
@@ -81,6 +82,8 @@ function MetaMini({ feito, meta }: { feito: number; meta: number }) {
 
 export default function Dashboard() {
   const [presets] = useState(buildPresets);
+  // Meta é configuração: só o dono muda
+  const podeMeta = usePode("config");
   // Abre no dia de hoje, que é a busca mais leve; o mês vem depois, sozinho,
   // no pré-carregamento — quando você clicar nele já está pronto
   const [period, setPeriod] = useState<Period>(presets[0]);
@@ -655,15 +658,17 @@ export default function Dashboard() {
                       <>
                         {brl.format(data.monthByUnit[unidade] ?? 0)}
                         {metaDe(unidade) > 0 && <> de {brl.format(metaDe(unidade))}</>} no mês{" "}
-                        <button
-                          className="mini ghost"
-                          onClick={() => {
-                            setMetaInput(metaDe(unidade) > 0 ? String(metaDe(unidade)) : "");
-                            setEditandoMeta(true);
-                          }}
-                        >
-                          {metaDe(unidade) > 0 ? "editar meta" : "definir meta"}
-                        </button>
+                        {podeMeta && (
+                          <button
+                            className="mini ghost"
+                            onClick={() => {
+                              setMetaInput(metaDe(unidade) > 0 ? String(metaDe(unidade)) : "");
+                              setEditandoMeta(true);
+                            }}
+                          >
+                            {metaDe(unidade) > 0 ? "editar meta" : "definir meta"}
+                          </button>
+                        )}
                       </>
                     )}
                   </span>

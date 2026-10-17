@@ -1,33 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { criarSessao, encerrarSessao, publico, senhaConfere, usuarioAtual } from "@/lib/financeiro/auth";
-import { lerBase } from "@/lib/financeiro/base";
+import { encerrarSessao, publico, usuarioAtual } from "@/lib/financeiro/auth";
 import { rodandoLocal } from "@/lib/credenciais";
 
 export const dynamic = "force-dynamic";
 
-/** Quem está logado — ou se ainda falta criar o primeiro usuário. */
+/** Quem está logado (o login é o do sistema). */
 export async function GET(req: NextRequest) {
   if (!rodandoLocal()) return NextResponse.json({ local: false });
-  const base = await lerBase();
   const atual = await usuarioAtual(req);
-  return NextResponse.json({
-    local: true,
-    precisaSetup: base.usuarios.length === 0,
-    usuario: atual ? publico(atual.usuario) : null,
-  });
+  return NextResponse.json({ local: true, usuario: atual ? publico(atual.usuario) : null });
 }
 
-/** Entrar. */
-export async function POST(req: NextRequest) {
-  const { login, senha } = (await req.json().catch(() => ({}))) as { login?: string; senha?: string };
-  const base = await lerBase();
-  const u = base.usuarios.find((x) => x.ativo && x.login === (login ?? "").trim().toLowerCase());
-  if (!u || !senha || !senhaConfere(u, senha)) {
-    return NextResponse.json({ erro: "Usuário ou senha não conferem." }, { status: 401 });
-  }
-  const res = NextResponse.json({ usuario: publico(u) });
-  criarSessao(res, req, u, base);
-  return res;
+/** O financeiro não tem mais login próprio. */
+export async function POST() {
+  return NextResponse.json({ erro: "Entre pela tela de entrada do painel, com seu usuário." }, { status: 410 });
 }
 
 /** Sair. */

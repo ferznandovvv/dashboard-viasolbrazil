@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { brl, corDaLoja } from "@/components/viz";
+import { useSessao } from "@/components/sessao";
 
 interface Vendedora {
   nome: string;
@@ -37,14 +38,18 @@ const reais = (v: number) => brl.format(Math.round(v)).replace(/,00$/, "");
  * da loja no mês. Atualiza sozinha.
  */
 export default function TelaLoja() {
+  const sessao = useSessao();
   const [dados, setDados] = useState<Dados | null>(null);
   const [lojas, setLojas] = useState<string[]>([]);
   const [params, setParams] = useState<{ nome: string; k: string } | null>(null);
+  // Usuário de loja vê só a(s) dele; com uma loja só, a tela já abre nela
+  const daSessao = sessao?.papel === "loja" ? sessao.lojas : null;
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    setParams({ nome: p.get("nome") ?? "", k: p.get("k") ?? "" });
-  }, []);
+    const sozinha = daSessao?.length === 1 ? daSessao[0] : "";
+    setParams({ nome: p.get("nome") || sozinha, k: p.get("k") ?? "" });
+  }, [daSessao]);
 
   useEffect(() => {
     if (!params) return;
@@ -73,10 +78,10 @@ export default function TelaLoja() {
 
   // Sem loja escolhida: lista para montar o link de cada tela
   if (params && !params.nome) {
-    return <EscolherLoja k={params.k} />;
+    return <EscolherLoja k={params.k} lojas={daSessao} />;
   }
   if (!dados && lojas.length) {
-    return <EscolherLoja k={params?.k ?? ""} />;
+    return <EscolherLoja k={params?.k ?? ""} lojas={lojas} />;
   }
   if (!dados) return <main className="tela-loja"><div className="empty">Carregando…</div></main>;
 
@@ -167,8 +172,8 @@ export default function TelaLoja() {
 }
 
 /** Lista das lojas, para abrir a tela de cada uma. */
-function EscolherLoja({ k }: { k: string }) {
-  const lojas = [
+function EscolherLoja({ k, lojas: permitidas }: { k: string; lojas: string[] | null }) {
+  const lojas = permitidas ?? [
     "Centro",
     "Fiusa",
     "Loja de Fábrica",
