@@ -220,6 +220,20 @@ Cashback é manual: a cliente mostra a mensagem, a vendedora toca em
 desconto no PDV e dá baixa ali. A baixa é o que impede usar o mesmo
 cashback duas vezes (ou em outra loja) e para os lembretes de vencimento.
 
+**Conferência** (Visão geral, e na tela da loja): a sincronização diária
+traz o desconto de cada nota. Venda com desconto pra cliente que tinha
+saldo, sem baixa até uma semana depois, aparece como "desconto sem baixa";
+baixa sem nenhuma nota com desconto da cliente aparece como "baixa sem
+desconto". Desconto com código de aniversário ou campanha não entra.
+
+**Horário de atendimento** de cada loja em Configurar → Números (ex.:
+10:00-22:00, domingo 14:00-20:00, vazio = fechado). O tempo de resposta só
+conta dentro dele.
+
+**Aviso de SAIR**: a primeira mensagem que cada cliente recebe termina com
+"Se preferir não receber mensagens nossas por aqui, é só responder SAIR"
+(Configurar → Envio, dá pra mudar o texto ou desligar).
+
 Cashback de compra no site só gera mensagem pra quem mora numa cidade com
 loja, lembrando o endereço (preencha em Configurar → Números). Quem mora
 longe não recebe.

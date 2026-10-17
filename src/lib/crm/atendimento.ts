@@ -34,34 +34,54 @@ export interface Pendente {
   texto?: string;
 }
 
+/** Horário de um dia: [abre, fecha] em minutos desde a meia-noite, ou null se fechado. */
+export type Janela = (diaSemana: number) => [number, number] | null;
+
+/** "10:00-22:00" ou "10-22" vira [600, 1320]; vazio ou inválido vira null (fechado). */
+export function lerFaixa(t?: string): [number, number] | null {
+  const m = (t ?? "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(?:-|às|a|até)\s*(\d{1,2})(?::(\d{2}))?$/i);
+  if (!m) return null;
+  const ini = Number(m[1]) * 60 + Number(m[2] ?? 0);
+  const fim = Number(m[3]) * 60 + Number(m[4] ?? 0);
+  return fim > ini && fim <= 24 * 60 ? [ini, fim] : null;
+}
+
 /**
- * Minutos de espera dentro do horário de atendimento (SP, sem domingo).
+ * Horário de atendimento da loja: o que estiver cadastrado em Números, senão
+ * o horário de envio de segunda a sábado (domingo fechado).
+ */
+export function janelaDaLoja(base: BaseCrm, loja: string): Janela {
+  const h = base.config.numeros.find((n) => n.loja === loja)?.horario;
+  const padrao: [number, number] = [base.config.envioInicio * 60, base.config.envioFim * 60];
+  if (!h) return (dia) => (dia === 0 ? null : padrao);
+  return (dia) => (dia === 0 ? lerFaixa(h.domingo) : dia === 6 ? lerFaixa(h.sabado) : lerFaixa(h.semana));
+}
+
+/**
+ * Minutos de espera dentro do horário de atendimento da loja (relógio de SP).
  * Brasil não tem horário de verão desde 2019: SP é UTC-3 fixo, então dá pra
  * fazer a conta direto, sem formatar data minuto a minuto.
  */
-export function minutosUteis(de: Date, ate: Date, inicio: number, fim: number): number {
+export function minutosUteis(de: Date, ate: Date, janela: Janela): number {
   if (ate <= de) return 0;
   const OFF = 3 * 3600000;
   const MIN = 60000;
+  const DIA = 86400000;
   let t = Math.floor((de.getTime() - OFF) / MIN) * MIN; // relógio de SP, em ms "UTC"
   const final = ate.getTime() - OFF;
   let total = 0;
-  while (t < final) {
+  for (let voltas = 0; t < final && voltas < 120; voltas++) {
     const d = new Date(t);
-    const h = d.getUTCHours();
-    const diaUtil = d.getUTCDay() !== 0;
-    if (diaUtil && h >= inicio && h < fim) {
-      // Dentro do expediente: anda até o fim do expediente ou até `final`
-      const fimExp = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), fim);
-      const ate2 = Math.min(fimExp, final);
-      total += Math.max(0, Math.round((ate2 - t) / MIN));
-      t = ate2;
-    } else {
-      // Fora: pula para o próximo início de expediente
-      const base = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), inicio);
-      t = h < inicio && diaUtil ? base : base + 86400000;
+    const meiaNoite = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const j = janela(d.getUTCDay());
+    if (j) {
+      const abre = meiaNoite + j[0] * MIN;
+      const fecha = meiaNoite + j[1] * MIN;
+      const ini = Math.max(t, abre);
+      const fim = Math.min(final, fecha);
+      if (fim > ini) total += Math.round((fim - ini) / MIN);
     }
-    if (total > 45 * 24 * 60) break;
+    t = meiaNoite + DIA;
   }
   return total;
 }
@@ -96,8 +116,8 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
   const desde = desdeIso ?? new Date(agora.getTime() - dias * 86400000).toISOString();
   const eventos = base.atendimento.filter((a) => a.em >= desde).sort((a, b) => a.em.localeCompare(b.em));
   const cfg = base.config;
-  const inicio = cfg.envioInicio;
-  const fim = cfg.envioFim;
+  const janelas = new Map<string, Janela>();
+  const janela = (loja: string) => janelas.get(loja) ?? janelas.set(loja, janelaDaLoja(base, loja)).get(loja)!;
   const nomes = new Map(base.clientes.filter((c) => c.telefone).map((c) => [c.telefone!, c.nome]));
   // Mensagem automática do WhatsApp Business (ausência, saudação): o mesmo
   // texto mandado pela loja para 5+ conversas não conta como resposta
@@ -132,7 +152,7 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
       if (automatica(ev)) continue;
       const a = aberta.get(chave);
       if (a) {
-        const min = minutosUteis(new Date(a.em), new Date(ev.em), inicio, fim);
+        const min = minutosUteis(new Date(a.em), new Date(ev.em), janela(ev.loja));
         l.respondidas++;
         l.tempos.push(min);
         if (min > 60) l.lentas++;
@@ -145,7 +165,7 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
   const pendentes: Pendente[] = [];
   for (const [chave, a] of aberta) {
     const telefone = chave.split("|")[1];
-    const esperando = minutosUteis(new Date(a.em), agora, inicio, fim);
+    const esperando = minutosUteis(new Date(a.em), agora, janela(a.loja));
     if (esperando < 15) continue; // ainda é normal
     pendentes.push({ loja: a.loja, telefone, cliente: nomes.get(telefone), apelido: apelido.get(telefone), esperando, desde: a.em, texto: a.texto });
   }

@@ -270,6 +270,19 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
                   ))}
                 </div>
               </div>
+              <label className="cfg-check">
+                <input type="checkbox" checked={cfg.avisoSair} onChange={b("avisoSair")} />
+                <span>
+                  <b>Avisar como sair, na primeira mensagem de cada cliente</b>
+                  <small>Uma linha no fim da primeira mensagem que ela recebe. Quem tem a saída fácil responde SAIR em vez de denunciar o número.</small>
+                </span>
+              </label>
+              {cfg.avisoSair && (
+                <label className="cfg-campo">
+                  <span>Texto do aviso</span>
+                  <input value={cfg.textoSair} onChange={t("textoSair")} />
+                </label>
+              )}
             </section>
           </>
         )}
@@ -414,6 +427,41 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
                   <button className="link" disabled={!n.sessao || !telTeste} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
                   {teste[n.loja] && <div className="fin-sub">{teste[n.loja]}</div>}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 className="crm-h3">Horário de atendimento</h3>
+      <div className="muted" style={{ marginBottom: 8, fontSize: 12.5 }}>
+        O tempo de resposta só conta dentro desse horário. Use 10:00-22:00; deixe vazio no dia em que a loja não abre. Loja sem nada preenchido usa o horário de envio, de segunda a sábado.
+      </div>
+      <div className="tbl-wrap">
+        <table className="prod-tbl fin-tbl cfg-tabela">
+          <thead>
+            <tr>
+              <th>Loja</th>
+              <th>Segunda a sexta</th>
+              <th>Sábado</th>
+              <th>Domingo e feriado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((n, i) => (
+              <tr key={n.loja}>
+                <td className="fin-desc">{n.loja}</td>
+                {(["semana", "sabado", "domingo"] as const).map((k) => (
+                  <td key={k}>
+                    <input
+                      className="crm-input"
+                      style={{ width: 120 }}
+                      value={n.horario?.[k] ?? ""}
+                      onChange={(e) => muda(i, { horario: { ...n.horario, [k]: e.target.value } })}
+                      placeholder={k === "domingo" ? "fechado" : "10:00-22:00"}
+                    />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

@@ -143,6 +143,8 @@ export function VisaoGeral() {
         </div>
       )}
 
+      <ConferenciaCashback />
+
       {aberta && <DetalheLoja loja={aberta} gatewayUrl={p.gatewayUrl} fechar={() => setAberta(null)} />}
     </div>
   );
@@ -324,7 +326,7 @@ function DetalheLoja({ loja, gatewayUrl, fechar }: { loja: string; gatewayUrl?: 
             </div>
           )}
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            Conta só o horário de atendimento configurado (sem domingo). Uma sequência de mensagens da cliente vale como uma espera, a partir da primeira.
+            Conta só o horário de atendimento da loja (Configurar → Números). "Obrigada", "ok" e figurinha não contam como espera. Uma sequência de mensagens da cliente vale como uma espera, a partir da primeira.
           </div>
 
           {d.pendentes.length > 0 && (
@@ -369,5 +371,110 @@ function DetalheLoja({ loja, gatewayUrl, fechar }: { loja: string; gatewayUrl?: 
         </>
       )}
     </Janela>
+  );
+}
+
+interface ItemConf {
+  tipo: "desconto_sem_baixa" | "baixa_sem_desconto";
+  data: string;
+  loja: string;
+  cliente: string;
+  vendedora?: string;
+  compra?: number;
+  desconto?: number;
+  saldoNaHora?: number;
+  baixa?: number;
+}
+
+/** Cashback manual conferido contra as notas: desconto sem baixa e baixa sem desconto. */
+function ConferenciaCashback() {
+  const [dias, setDias] = useState(14);
+  const [c, setC] = useState<{ vendasConferiveis: number; vendasComDesconto: number; baixas: number; itens: ItemConf[]; porLoja: { loja: string; descontoSemBaixa: number; baixaSemDesconto: number; baixas: number }[] } | null>(null);
+  useEffect(() => {
+    api<NonNullable<typeof c>>(`/api/crm/conferencia?dias=${dias}`).then(setC).catch(() => setC(null));
+  }, [dias]);
+  const reais = (v?: number) => (v === undefined ? "" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+  const semBaixa = c?.itens.filter((i) => i.tipo === "desconto_sem_baixa").length ?? 0;
+  const semDesc = c?.itens.filter((i) => i.tipo === "baixa_sem_desconto").length ?? 0;
+  return (
+    <section className="card">
+      <div className="fin-cab">
+        <h2>Conferência do cashback</h2>
+        <div className="seg">
+          {[7, 14, 30].map((n) => (
+            <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>
+              {n} dias
+            </button>
+          ))}
+        </div>
+      </div>
+      {!c ? (
+        <div className="muted">Carregando…</div>
+      ) : !c.vendasConferiveis ? (
+        <p className="muted">
+          Começa a valer com as vendas sincronizadas a partir de agora: a sincronização diária passou a trazer o desconto de cada nota. Aqui vão aparecer as vendas pra clientes com saldo que tiveram desconto no PDV sem baixa no painel da loja, e as baixas sem desconto na nota.
+        </p>
+      ) : (
+        <>
+          <div className="pg-mini pg-mini-largo cf-resumo">
+            <div>
+              <b>{c.baixas}</b>
+              <small>baixas feitas no painel da loja</small>
+            </div>
+            <div className={semBaixa ? "ruim" : ""}>
+              <b>{semBaixa}</b>
+              <small>vendas com desconto pra cliente com saldo, sem baixa</small>
+            </div>
+            <div className={semDesc ? "medio" : ""}>
+              <b>{semDesc}</b>
+              <small>baixas sem desconto na nota</small>
+            </div>
+          </div>
+          {!c.itens.length ? (
+            <p className="muted" style={{ marginTop: 10 }}>Tudo batendo no período.</p>
+          ) : (
+            <div className="tbl-wrap" style={{ marginTop: 12 }}>
+              <table className="prod-tbl fin-tbl">
+                <thead>
+                  <tr>
+                    <th>Quando</th>
+                    <th>Loja</th>
+                    <th>Cliente</th>
+                    <th>Vendedora</th>
+                    <th className="n">Compra</th>
+                    <th className="n">Desconto</th>
+                    <th className="n">Saldo que tinha</th>
+                    <th>O que olhar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {c.itens.slice(0, 60).map((i, k) => (
+                    <tr key={k}>
+                      <td style={{ whiteSpace: "nowrap" }}>{dataHora(i.data)}</td>
+                      <td>{i.loja}</td>
+                      <td className="fin-desc">{i.cliente}</td>
+                      <td>{i.vendedora ?? ""}</td>
+                      <td className="n">{reais(i.compra)}</td>
+                      <td className="n">{reais(i.desconto)}</td>
+                      <td className="n">{reais(i.saldoNaHora)}</td>
+                      <td>
+                        {i.tipo === "desconto_sem_baixa" ? (
+                          <span className="fin-status vencida">desconto sem baixa</span>
+                        ) : (
+                          <span className="fin-status hoje">baixa de {reais(i.baixa)} sem desconto na nota</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="muted cf-nota">
+            Desconto sem baixa: ou a vendedora esqueceu de dar baixa (e a cliente pode usar o mesmo cashback de novo), ou o desconto foi por outro motivo. Baixa sem desconto: a nota ainda não chegou ou a baixa foi feita sem o desconto. Desconto com código de aniversário ou de campanha não entra aqui.
+          </p>
+        </>
+      )}
+    </section>
   );
 }

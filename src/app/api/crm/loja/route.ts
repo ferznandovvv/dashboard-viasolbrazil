@@ -3,6 +3,7 @@ import { LOJAS } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
 import { painel } from "@/lib/crm/painel";
+import { conferir } from "@/lib/crm/conferencia";
 import { produtosDaLoja, vendasDaLoja } from "@/lib/crm/vendasLoja";
 import { nomearPendentes, telefoneVisivel } from "@/lib/crm/contatos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
@@ -90,6 +91,10 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
     celular: card.cadastro,
     rankingCelular,
     rankingResposta,
+    semBaixa: conferir(base, 14, loja)
+      .itens.filter((i) => i.tipo === "desconto_sem_baixa")
+      .slice(0, 20)
+      .map((i) => ({ cliente: i.cliente, data: i.data, desconto: i.desconto, vendedora: i.vendedora })),
     vendas: await vendasDaLoja(base, loja).catch((e) => ({ configurado: false, erro: e instanceof Error ? e.message : "erro" })),
   };
 }

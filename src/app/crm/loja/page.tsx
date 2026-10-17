@@ -32,6 +32,7 @@ interface Painel {
   rankingCelular: { loja: string; pct: number; vendas: number }[];
   rankingResposta: { loja: string; mediana: number; rapidas: number | null }[];
   vendas: Vendas;
+  semBaixa: { cliente: string; data: string; desconto?: number; vendedora?: string }[];
 }
 
 interface Vendas {
@@ -246,6 +247,27 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
         </section>
       )}
 
+      {p.semBaixa.length > 0 && (
+        <section className="lp-semBaixa">
+          <h2>{p.semBaixa.length === 1 ? "1 desconto sem baixa no cashback" : `${p.semBaixa.length} descontos sem baixa no cashback`}</h2>
+          <p>Essas clientes tinham cashback e a nota saiu com desconto, mas ninguém deu baixa aqui. Se o desconto foi o cashback, dê baixa agora pelo botão lá em cima; senão o mesmo cashback pode ser usado de novo.</p>
+          <div className="lp-espera-lista">
+            {p.semBaixa.map((x, i) => (
+              <div key={i} className="lp-espera-item">
+                <span>
+                  <b>{nomeCurto(x.cliente)}</b>
+                  <small>
+                    {new Date(x.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    {x.vendedora ? ` · ${nomeCurto(x.vendedora)}` : ""}
+                  </small>
+                </span>
+                <span className="lp-espera-tempo">{x.desconto ? reais(x.desconto) : ""}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <BlocoVendas v={p.vendas} loja={p.loja} />
 
       {p.whatsapp.ativo ? (
@@ -351,7 +373,7 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
               </div>
             ))
           )}
-          <p className="muted lp-nota">Mediana dos últimos 7 dias, só no horário de atendimento. Quem responde mais rápido fica em cima.</p>
+          <p className="muted lp-nota">Mediana dos últimos 7 dias, só no horário de cada loja. Quem responde mais rápido fica em cima.</p>
         </section>
       </div>
 

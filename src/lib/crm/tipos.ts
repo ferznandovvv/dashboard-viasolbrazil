@@ -49,6 +49,8 @@ export interface Venda {
   pecas?: number;
   /** CPF da vendedora que registrou a venda no PDV (só dígitos) */
   vendedoraCpf?: string;
+  /** Desconto dado na nota (R$), quando a nota veio com os itens */
+  desconto?: number;
   origem: "totvs" | "shopify" | "csv" | "manual";
 }
 
@@ -243,6 +245,8 @@ export interface NumeroWhatsapp {
   vendedora?: string;
   /** Endereço da loja, pra mensagem da cliente do site que mora na cidade (ex.: "Rua do Comércio, 1200") */
   endereco?: string;
+  /** Horário de atendimento ("10:00-22:00"; vazio = fechado). Sem isso, vale o horário de envio, seg a sáb */
+  horario?: { semana?: string; sabado?: string; domingo?: string };
 }
 
 export interface ConfigCrm {
@@ -308,6 +312,9 @@ export interface ConfigCrm {
   modoSombra: boolean;
   /** Máximo de mensagens por cliente em 30 dias, de qualquer campanha (aviso de cashback da própria compra não conta) */
   maxMensagensMes: number;
+  /** Na primeira mensagem de cada cliente, uma linha explicando como sair */
+  avisoSair: boolean;
+  textoSair: string;
   /** Último dia em que as automações rodaram (YYYY-MM-DD) */
   ultimaAutomacao?: string;
   /** Última sincronização com o TOTVS */
@@ -473,4 +480,6 @@ export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   pausado: false,
   modoSombra: true,
   maxMensagensMes: 2,
+  avisoSair: true,
+  textoSair: "Se preferir não receber mensagens nossas por aqui, é só responder SAIR.",
 };

@@ -11,7 +11,7 @@
  */
 
 import { LOJAS, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
-import { alterarBase, hojeSp, lerBase, somarDias } from "./base";
+import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
 import { conciliarVendas, registrarVenda, salvarCliente } from "./clientes";
 import type { Venda } from "./tipos";
 import { normalizarTelefone } from "./telefone";
@@ -170,8 +170,15 @@ interface VendaLida {
   codigoCliente?: string;
 }
 
+/** Soma do desconto dos produtos da nota (só vem quando a nota é buscada com os itens). */
+function descontoDaNota(inv: Obj): number {
+  let t = 0;
+  for (const it of (inv.items as Obj[] | undefined) ?? []) for (const pr of (it.products as Obj[] | undefined) ?? []) t += Number(pr.discountValue ?? 0) || 0;
+  return Math.round(t * 100) / 100;
+}
+
 /** Notas emitidas entre `de` e `ate` (datas YYYY-MM-DD), paginadas pela data de alteração. */
-async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promise<VendaLida[]> {
+async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens = false): Promise<VendaLida[]> {
   const out: VendaLida[] = [];
   const hoje = hojeSp();
   const changeAte = somarDias(ate, 25) > hoje ? hoje : somarDias(ate, 25);
@@ -181,6 +188,8 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promi
       operationType: "Output",
       change: { startDate: `${de}T00:00:00`, endDate: `${changeAte}T23:59:59` },
     },
+    // Com os itens vem o desconto de cada nota (pra conferir o cashback); pesa, então só na sincronização curta
+    ...(itens ? { expand: "items" } : {}),
     page: pagina,
     pageSize: 100,
   });
@@ -208,6 +217,7 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promi
           nomeNaNota: nomeNota,
           codigoClienteTotvs: generica ? undefined : codigoCliente,
           cpfNaNota: str(inv, "personCpfCnpj", "cpfCnpj", "personDocument", "customerCpf")?.replace(/\D/g, "") || undefined,
+          desconto: itens ? descontoDaNota(inv) : undefined,
           origem: "totvs",
         },
       });
@@ -227,8 +237,8 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300): Promi
 }
 
 /** Um trecho (até um mês): notas, cadastro das clientes que apareceram, ligação e cashback. */
-async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: boolean; pessoasAlteradas?: boolean }): Promise<void> {
-  const vendas = await buscarVendas(de, ate);
+async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: boolean; pessoasAlteradas?: boolean; itens?: boolean }): Promise<void> {
+  const vendas = await buscarVendas(de, ate, 300, opcoes.itens);
   progresso.etapa = `${de} a ${ate}: lendo cadastro de ${vendas.length} notas`;
 
   // Um código que aparece em boa parte das notas não é uma pessoa: é o
@@ -346,7 +356,8 @@ export async function sincronizar(de: string, ate: string, opcoes: { creditar?: 
     const partes = trechos(de, ate).reverse();
     for (let i = 0; i < partes.length; i++) {
       progresso.etapa = `mês ${i + 1} de ${partes.length} (${partes[i].de} a ${partes[i].ate}): buscando notas`;
-      await sincronizarTrecho(partes[i].de, partes[i].ate, opcoes);
+      // Período curto (a diária) vem com os itens, pra ter o desconto de cada nota
+      await sincronizarTrecho(partes[i].de, partes[i].ate, { ...opcoes, itens: diasEntre(de, ate) <= 7 });
     }
     await alterarBase((b) => {
       b.config.ultimaSincTotvsResultado = `${de} a ${ate}: ${progresso.vendasNovas} vendas novas, ${progresso.clientesNovos} clientes novos, ${progresso.clientesAtualizados} atualizados`;

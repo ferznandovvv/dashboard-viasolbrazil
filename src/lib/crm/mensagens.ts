@@ -176,13 +176,16 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
     if (codigo) base.codigos.splice(base.codigos.findIndex((x) => x.codigo === codigo), 1);
     return { motivo: "campanha desligada ou sem texto" };
   }
+  // Primeira mensagem dela: uma linha dizendo como sair (menos denúncia, mais "SAIR")
+  const primeira = !base.mensagens.some((x) => x.clienteId === c.id && conta(base, x));
+  const textoFinal = base.config.avisoSair && primeira && base.config.textoSair ? `${texto}\n\n${base.config.textoSair}` : texto;
   const m: Mensagem = {
     id,
     clienteId: c.id,
     telefone: c.telefone!,
     campanha: p.campanha,
     loja,
-    texto,
+    texto: textoFinal,
     status: base.config.modoSombra ? "simulada" : "fila",
     naoAntesDe: p.naoAntesDe ?? new Date().toISOString(),
     criadoEm: new Date().toISOString(),

@@ -140,6 +140,14 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Aviso de como sair na primeira mensagem de cada cliente
+    id: "aviso-sair",
+    aplicar: (b) => {
+      b.config.avisoSair ??= CONFIG_PADRAO.avisoSair;
+      b.config.textoSair ??= CONFIG_PADRAO.textoSair;
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

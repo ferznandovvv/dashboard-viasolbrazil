@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lerFaixa } from "@/lib/crm/atendimento";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
 import { CAMPANHAS, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
@@ -33,6 +34,20 @@ const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
 };
+
+/** Horário de atendimento da loja: cada campo "10:00-22:00" ou vazio (fechado). Tudo vazio = usa o padrão. */
+function horarioLimpo(h: unknown): { semana?: string; sabado?: string; domingo?: string } | undefined {
+  if (!h || typeof h !== "object") return undefined;
+  const o = h as Record<string, unknown>;
+  const campo = (k: string) => {
+    const t = String(o[k] ?? "").trim();
+    if (!t) return "";
+    if (!lerFaixa(t)) throw new Error(`Horário inválido: "${t}". Use o formato 10:00-22:00.`);
+    return t;
+  };
+  const r = { semana: campo("semana"), sabado: campo("sabado"), domingo: campo("domingo") };
+  return r.semana || r.sabado || r.domingo ? r : undefined;
+}
 
 export async function POST(req: NextRequest) {
   const p = (await req.json().catch(() => ({}))) as Pedido;
@@ -84,7 +99,7 @@ export async function POST(req: NextRequest) {
           numeros: Array.isArray(c.numeros)
             ? c.numeros
                 .filter((n) => n && typeof n.loja === "string")
-                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined, endereco: String(n.endereco ?? "").trim().slice(0, 120) || undefined }))
+                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined, endereco: String(n.endereco ?? "").trim().slice(0, 120) || undefined, horario: horarioLimpo(n.horario) }))
             : atual.numeros,
           envioInicio: num(c.envioInicio, atual.envioInicio, 0, 23),
           envioFim: num(c.envioFim, atual.envioFim, 1, 24),
@@ -97,6 +112,8 @@ export async function POST(req: NextRequest) {
           pausado: c.pausado !== undefined ? Boolean(c.pausado) : atual.pausado,
           modoSombra: c.modoSombra !== undefined ? Boolean(c.modoSombra) : atual.modoSombra,
           maxMensagensMes: num(c.maxMensagensMes, atual.maxMensagensMes, 1, 30),
+          avisoSair: c.avisoSair !== undefined ? Boolean(c.avisoSair) : atual.avisoSair,
+          textoSair: typeof c.textoSair === "string" && /\bSAIR\b/i.test(c.textoSair) ? c.textoSair.trim().slice(0, 200) : atual.textoSair,
           backupDir: c.backupDir !== undefined ? c.backupDir.trim() || undefined : atual.backupDir,
         };
         if (nova.intervaloMaxSeg < nova.intervaloMinSeg) nova.intervaloMaxSeg = nova.intervaloMinSeg;
