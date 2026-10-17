@@ -117,6 +117,7 @@ export function registrarVenda(base: BaseCrm, v: Venda): boolean {
   if (existente) {
     existente.vendedoraCpf ??= v.vendedoraCpf;
     if (v.desconto !== undefined) existente.desconto = v.desconto;
+    if (v.entrega !== undefined) existente.entrega = v.entrega;
     // Venda que chegou antes sem cliente e agora conseguimos ligar
     if (!existente.clienteId && v.clienteId) {
       existente.clienteId = v.clienteId;

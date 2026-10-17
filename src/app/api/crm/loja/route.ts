@@ -5,6 +5,7 @@ import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
 import { painel } from "@/lib/crm/painel";
 import { conferir } from "@/lib/crm/conferencia";
 import { produtosDaLoja, vendasDaLoja } from "@/lib/crm/vendasLoja";
+import { clientesAtendidas, vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
 import { nomearPendentes, telefoneVisivel } from "@/lib/crm/contatos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { creditosAbertos, resgatar, saldoDe, usarOferta } from "@/lib/crm/cashback";
@@ -70,14 +71,8 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
   const n = base.config.numeros.find((x) => x.loja === loja);
   const adaptador = adaptadorDe(base.config);
   const situacao = adaptador && n?.ativo && n.sessao ? await adaptador.situacao(n.sessao).catch(() => null) : null;
-  const rankingCelular = pg.lojas
-    .filter((l) => l.cadastro.vendas30 > 0)
-    .map((l) => ({ loja: l.loja, pct: l.cadastro.pct30 ?? 0, vendas: l.cadastro.vendas30 }))
-    .sort((a, b) => b.pct - a.pct);
-  const rankingResposta = pg.lojas
-    .filter((l) => l.numero.ativo && l.atend.mediana7d !== null)
-    .map((l) => ({ loja: l.loja, mediana: l.atend.mediana7d!, rapidas: l.atend.rapidas7d }))
-    .sort((a, b) => a.mediana - b.mediana);
+  const inicioMes = `${hojeSp().slice(0, 7)}-01`;
+  const whats = vendasPeloWhatsApp(base, loja, inicioMes);
   return {
     loja,
     atualizado: new Date().toISOString(),
@@ -89,13 +84,13 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
       return { nome: p.nomeMostrar, cadastrada: Boolean(p.cliente), telefone: tel ? formatarTelefone(tel) : "", esperando: p.esperando, texto: p.texto };
     }),
     celular: card.cadastro,
-    rankingCelular,
-    rankingResposta,
+    atendidas: clientesAtendidas(base, loja),
+    peloWhats: { vendas: whats.vendas, valor: whats.valor, pctVendas: whats.pctVendas, pctValor: whats.pctValor, comEntrega: whats.comEntrega, lista: whats.lista },
     semBaixa: conferir(base, 14, loja)
       .itens.filter((i) => i.tipo === "desconto_sem_baixa")
       .slice(0, 20)
       .map((i) => ({ cliente: i.cliente, data: i.data, desconto: i.desconto, vendedora: i.vendedora })),
-    vendas: await vendasDaLoja(base, loja).catch((e) => ({ configurado: false, erro: e instanceof Error ? e.message : "erro" })),
+    vendas: await vendasDaLoja(base, loja, whats.porVendedora).catch((e) => ({ configurado: false, erro: e instanceof Error ? e.message : "erro" })),
   };
 }
 
@@ -105,7 +100,9 @@ export async function GET(req: NextRequest) {
   const produtos = req.nextUrl.searchParams.get("produtos");
   if (produtos) {
     if (!Object.values(LOJAS).includes(produtos)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
-    return NextResponse.json(await produtosDaLoja(produtos).catch(() => ({ produtos: [], incompleto: true })));
+    const per = req.nextUrl.searchParams.get("periodo");
+    const periodo = per === "7" || per === "30" ? per : "mes";
+    return NextResponse.json(await produtosDaLoja(produtos, periodo).catch(() => ({ produtos: [], pecas: 0, receita: 0, incompleto: true })));
   }
   const painel = req.nextUrl.searchParams.get("painel");
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();

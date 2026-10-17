@@ -56,11 +56,11 @@ export interface VendasLoja {
   /** Quanto precisa vender por dia, de hoje até o fim do mês, pra bater a meta */
   porDia: number;
   rankingMeta: { loja: string; pct: number | null; vendido: number }[];
-  vendedoras: { nome: string; vendido: number; vendas: number; ticket: number; hoje: number; comCelular: number; pctCelular: number | null }[];
+  vendedoras: { nome: string; vendido: number; vendas: number; ticket: number; hoje: number; comCelular: number; pctCelular: number | null; peloWhats: number }[];
   semVendedora: number;
 }
 
-export async function vendasDaLoja(base: BaseCrm, loja: string): Promise<VendasLoja> {
+export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<string, { n: number; valor: number }>): Promise<VendasLoja> {
   const hoje = hojeSp();
   const inicioMes = `${hoje.slice(0, 7)}-01`;
   const [ano, mes] = hoje.split("-").map(Number);
@@ -140,29 +140,41 @@ export async function vendasDaLoja(base: BaseCrm, loja: string): Promise<VendasL
         hoje: Math.round(v.hoje),
         comCelular: cel.get(v.cpf!) ?? 0,
         pctCelular: v.vendas ? Math.round(((cel.get(v.cpf!) ?? 0) / v.vendas) * 100) : null,
+        peloWhats: peloWhats?.get(v.cpf!)?.n ?? 0,
       }))
       .sort((a, b) => b.vendido - a.vendido),
     semVendedora: Math.round(semVendedora),
   };
 }
 
-/** Produtos que mais saíram na loja nos últimos 30 dias (a busca com itens é cara; o que não couber vem marcado). */
-export async function produtosDaLoja(loja: string): Promise<{ produtos: { nome: string; qtd: number; receita: number }[]; incompleto: boolean }> {
-  if (!totvsConfigured()) return { produtos: [], incompleto: false };
+/** Frete, motoboy e taxa de entrega aparecem como item na nota, mas não são produto. */
+const NAO_PRODUTO = /FRETE|MOTO ?BOY|ENTREGA|TAXA DE|SACOLA|EMBALAGEM PRESENTE/i;
+
+/** Produtos vendidos na loja no período (sem frete), com quantidade e valor. */
+export async function produtosDaLoja(
+  loja: string,
+  periodo: "mes" | "7" | "30" = "mes"
+): Promise<{ produtos: { nome: string; qtd: number; receita: number }[]; pecas: number; receita: number; incompleto: boolean; de: string }> {
   const hoje = hojeSp();
-  const r = await fetchVendasPorProduto(somarDias(hoje, -29), hoje, 20000);
+  const de = periodo === "mes" ? `${hoje.slice(0, 7)}-01` : somarDias(hoje, -(Number(periodo) - 1));
+  if (!totvsConfigured()) return { produtos: [], pecas: 0, receita: 0, incompleto: false, de };
+  const r = await fetchVendasPorProduto(de, hoje, 20000);
   const m = new Map<string, { nome: string; qtd: number; receita: number }>();
   for (const it of r.itens) {
-    if (it.loja !== loja) continue;
+    if (it.loja !== loja || NAO_PRODUTO.test(it.nome)) continue;
     const a = m.get(it.nome) ?? m.set(it.nome, { nome: it.nome, qtd: 0, receita: 0 }).get(it.nome)!;
     a.qtd += it.qtd;
     a.receita += it.receita;
   }
+  const todos = Array.from(m.values());
   return {
-    produtos: Array.from(m.values())
+    produtos: todos
       .sort((a, b) => b.qtd - a.qtd || b.receita - a.receita)
-      .slice(0, 12)
+      .slice(0, 60)
       .map((p) => ({ ...p, receita: Math.round(p.receita) })),
+    pecas: todos.reduce((s, p) => s + p.qtd, 0),
+    receita: Math.round(todos.reduce((s, p) => s + p.receita, 0)),
     incompleto: r.incompleto,
+    de,
   };
 }

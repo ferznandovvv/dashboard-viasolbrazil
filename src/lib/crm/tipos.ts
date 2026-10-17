@@ -51,6 +51,8 @@ export interface Venda {
   vendedoraCpf?: string;
   /** Desconto dado na nota (R$), quando a nota veio com os itens */
   desconto?: number;
+  /** A nota tem frete de motoboy/entrega (venda à distância), quando veio com os itens */
+  entrega?: boolean;
   origem: "totvs" | "shopify" | "csv" | "manual";
 }
 

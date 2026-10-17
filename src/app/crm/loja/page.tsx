@@ -29,8 +29,15 @@ interface Painel {
     clientes: number;
     pctBase: number | null;
   };
-  rankingCelular: { loja: string; pct: number; vendas: number }[];
-  rankingResposta: { loja: string; mediana: number; rapidas: number | null }[];
+  atendidas: { hoje: number; semana: number; mes: number };
+  peloWhats: {
+    vendas: number;
+    valor: number;
+    pctVendas: number | null;
+    pctValor: number | null;
+    comEntrega: boolean;
+    lista: { cliente: string; data: string; valor: number; vendedora?: string; motivo: string }[];
+  };
   vendas: Vendas;
   semBaixa: { cliente: string; data: string; desconto?: number; vendedora?: string }[];
 }
@@ -48,7 +55,7 @@ interface Vendas {
   diasRestantes?: number;
   porDia?: number;
   rankingMeta?: { loja: string; pct: number | null; vendido: number }[];
-  vendedoras?: { nome: string; vendido: number; vendas: number; ticket: number; hoje: number; comCelular: number; pctCelular: number | null }[];
+  vendedoras?: { nome: string; vendido: number; vendas: number; ticket: number; hoje: number; comCelular: number; pctCelular: number | null; peloWhats: number }[];
   semVendedora?: number;
 }
 
@@ -205,20 +212,13 @@ type Buscar = <T>(url: string, corpo?: object) => Promise<T>;
 
 function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
   const a = p.atendimento;
-  const c = p.celular;
-  const delta = c.pct30 !== null && c.pctAnterior !== null ? c.pct30 - c.pctAnterior : null;
   const maxDia = Math.max(1, ...a.dias.map((d) => d.conversas));
-  const posCel = p.rankingCelular.findIndex((r) => r.loja === p.loja) + 1;
-  const posResp = p.rankingResposta.findIndex((r) => r.loja === p.loja) + 1;
-  const maxResp = Math.max(1, ...p.rankingResposta.map((r) => r.mediana));
 
   return (
     <>
       {p.esperandoLista.length > 0 && (
         <section className="lp-espera">
-          <h2>
-            {p.esperandoLista.length === 1 ? "1 cliente esperando resposta" : `${p.esperandoLista.length} clientes esperando resposta`}
-          </h2>
+          <h2>{p.esperandoLista.length === 1 ? "1 cliente esperando resposta" : `${p.esperandoLista.length} clientes esperando resposta`}</h2>
           <div className="lp-espera-lista">
             {p.esperandoLista.map((x, i) => {
               const corpo = (
@@ -268,114 +268,58 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
         </section>
       )}
 
-      <BlocoVendas v={p.vendas} loja={p.loja} />
-
-      {p.whatsapp.ativo ? (
-        <section className="lp-numeros">
-          <div className="lp-num">
-            <span className="lp-num-v">{a.conversasHoje}</span>
-            <span className="lp-num-r">{a.conversasHoje === 1 ? "cliente chamou hoje" : "clientes chamaram hoje"}</span>
-          </div>
-          <div className={`lp-num ${a.esperando ? (a.maiorEsperaMin > 60 ? "ruim" : "medio") : "bom"}`}>
-            <span className="lp-num-v">{a.esperando}</span>
-            <span className="lp-num-r">{a.esperando ? `esperando, a mais antiga há ${minutos(a.maiorEsperaMin)}` : "esperando resposta agora"}</span>
-          </div>
-          <div className={`lp-num ${a.mediana7d !== null ? (a.mediana7d > 15 ? "medio" : "bom") : ""}`}>
-            <span className="lp-num-v">{minutos(a.mediana7d)}</span>
-            <span className="lp-num-r">pra responder, nos últimos 7 dias{a.rapidas7d !== null ? `. ${a.rapidas7d}% respondidas em até 15 min` : ""}</span>
-          </div>
-          <div className={`lp-num ${p.whatsapp.conectado === false ? "ruim" : ""}`}>
-            <span className="lp-num-v lp-num-txt">{p.whatsapp.conectado === false ? "Desconectado" : "Conectado"}</span>
-            <span className="lp-num-r">{p.whatsapp.conectado === false ? "o WhatsApp da loja caiu; avise o Fernando" : "WhatsApp da loja"}</span>
-          </div>
-        </section>
-      ) : (
-        <section className="card lp-aviso">O WhatsApp da loja ainda não está ligado ao painel. Quando estiver, aqui aparecem as conversas e o tempo de resposta.</section>
-      )}
-
-      <div className="lp-dupla">
-        <section className="card">
-          <h2>Celular nas vendas</h2>
-          <div className="lp-cel">
-            <span className="lp-cel-v">{c.pct30 === null ? "–" : `${c.pct30}%`}</span>
-            <span className="lp-cel-r">
-              das vendas dos últimos 30 dias saíram com o celular da cliente ({c.comCelular30} de {c.vendas30})
-              {delta !== null && delta !== 0 && <b className={delta > 0 ? "bom" : "ruim"}>{delta > 0 ? `Subiu ${delta} pontos` : `Caiu ${-delta} pontos`} em relação aos 30 dias anteriores.</b>}
-            </span>
-          </div>
-          <div className="lp-semanas" role="img" aria-label="Vendas com celular, semana a semana">
-            {c.semanas.map((s, i) => (
-              <div key={s.inicio} className="lp-semana" title={`Semana de ${s.inicio.slice(8, 10)}/${s.inicio.slice(5, 7)}: ${s.pct === null ? "sem vendas" : `${s.pct}% de ${s.vendas} vendas`}`}>
-                <span className="lp-semana-v">{s.pct === null ? "" : `${s.pct}%`}</span>
-                <span className="lp-semana-b" style={{ height: `${Math.max(s.pct ? 4 : 1, s.pct ?? 0)}%` }} />
-                <span className="lp-semana-r">{i === c.semanas.length - 1 ? "esta" : `${s.inicio.slice(8, 10)}/${s.inicio.slice(5, 7)}`}</span>
+      <section className="lp-bloco">
+        <h2 className="lp-bloco-titulo">WhatsApp da loja</h2>
+        {!p.whatsapp.ativo ? (
+          <div className="card lp-aviso">O WhatsApp da loja ainda não está ligado ao painel. Quando estiver, aqui aparecem as clientes atendidas, quem está esperando e o tempo de resposta.</div>
+        ) : (
+          <div className="lp-whats">
+            <div className="lp-numeros lp-numeros-3">
+              <div className={`lp-num ${a.esperando ? (a.maiorEsperaMin > 60 ? "ruim" : "medio") : "bom"}`}>
+                <span className="lp-num-v">{a.esperando}</span>
+                <span className="lp-num-r">{a.esperando ? `esperando resposta, a mais antiga há ${minutos(a.maiorEsperaMin)}` : "ninguém esperando resposta"}</span>
               </div>
-            ))}
-          </div>
-          <p className="muted lp-nota">
-            Nesta semana, {c.novas7d === 1 ? "1 cliente nova saiu" : `${c.novas7d} clientes novas saíram`} com celular
-            {c.novas7dSemCelular ? ` e ${c.novas7dSemCelular} sem` : ""}.
-          </p>
-        </section>
-
-        <section className="card">
-          <h2>Conversas por dia</h2>
-          {!p.whatsapp.ativo ? (
-            <p className="muted">Aparece quando o WhatsApp da loja estiver ligado.</p>
-          ) : (
-            <div className="lp-dias" role="img" aria-label="Clientes que chamaram por dia, últimos 7 dias">
-              {a.dias.map((d) => (
-                <div key={d.dia} className="lp-dia">
-                  <span className="lp-dia-v">{d.conversas || ""}</span>
-                  <span className="lp-dia-b" style={{ height: `${Math.max(d.conversas ? 4 : 1, (d.conversas / maxDia) * 100)}%` }} />
-                  <span className="lp-dia-r">{DIAS[new Date(`${d.dia}T12:00:00`).getDay()]}</span>
+              <div className={`lp-num ${a.mediana7d !== null ? (a.mediana7d > 15 ? "medio" : "bom") : ""}`}>
+                <span className="lp-num-v">{minutos(a.mediana7d)}</span>
+                <span className="lp-num-r">pra responder, nos últimos 7 dias{a.rapidas7d !== null ? `. ${a.rapidas7d}% respondidas em até 15 min` : ""}</span>
+              </div>
+              <div className={`lp-num ${p.whatsapp.conectado === false ? "ruim" : ""}`}>
+                <span className="lp-num-v lp-num-txt">{p.whatsapp.conectado === false ? "Desconectado" : "Conectado"}</span>
+                <span className="lp-num-r">{p.whatsapp.conectado === false ? "o WhatsApp da loja caiu; avise o Fernando" : "WhatsApp da loja"}</span>
+              </div>
+            </div>
+            <div className="card lp-atendidas">
+              <div className="lp-atendidas-n">
+                <div>
+                  <b>{p.atendidas.hoje}</b>
+                  <small>{p.atendidas.hoje === 1 ? "cliente atendida hoje" : "clientes atendidas hoje"}</small>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <div className="lp-dupla">
-        <section className="card">
-          <div className="lp-rank-cab">
-            <h2>Ranking: celular nas vendas</h2>
-            {posCel > 0 && <span className="lp-pos">{posCel}º de {p.rankingCelular.length}</span>}
-          </div>
-          {p.rankingCelular.map((r, i) => (
-            <div key={r.loja} className={`lp-rank ${r.loja === p.loja ? "eu" : ""}`}>
-              <span className="lp-rank-pos">{i + 1}</span>
-              <span className="lp-rank-nome">{r.loja}</span>
-              <span className="lp-rank-linha">
-                <i style={{ width: `${r.pct}%` }} />
-              </span>
-              <span className="lp-rank-v">{r.pct}%</span>
-            </div>
-          ))}
-        </section>
-
-        <section className="card">
-          <div className="lp-rank-cab">
-            <h2>Ranking: tempo de resposta</h2>
-            {posResp > 0 && <span className="lp-pos">{posResp}º de {p.rankingResposta.length}</span>}
-          </div>
-          {!p.rankingResposta.length ? (
-            <p className="muted">Aparece quando os WhatsApps das lojas estiverem ligados ao painel.</p>
-          ) : (
-            p.rankingResposta.map((r, i) => (
-              <div key={r.loja} className={`lp-rank ${r.loja === p.loja ? "eu" : ""}`}>
-                <span className="lp-rank-pos">{i + 1}</span>
-                <span className="lp-rank-nome">{r.loja}</span>
-                <span className="lp-rank-linha lento">
-                  <i style={{ width: `${(r.mediana / maxResp) * 100}%` }} />
-                </span>
-                <span className="lp-rank-v">{minutos(r.mediana)}</span>
+                <div>
+                  <b>{p.atendidas.semana}</b>
+                  <small>nos últimos 7 dias</small>
+                </div>
+                <div>
+                  <b>{p.atendidas.mes}</b>
+                  <small>no mês</small>
+                </div>
               </div>
-            ))
-          )}
-          <p className="muted lp-nota">Mediana dos últimos 7 dias, só no horário de cada loja. Quem responde mais rápido fica em cima.</p>
-        </section>
-      </div>
+              <div className="lp-dias lp-dias-baixo" role="img" aria-label="Clientes que chamaram por dia, últimos 7 dias">
+                {a.dias.map((d) => (
+                  <div key={d.dia} className="lp-dia">
+                    <span className="lp-dia-v">{d.conversas || ""}</span>
+                    <span className="lp-dia-b" style={{ height: `${Math.max(d.conversas ? 4 : 1, (d.conversas / maxDia) * 100)}%` }} />
+                    <span className="lp-dia-r">{DIAS[new Date(`${d.dia}T12:00:00`).getDay()]}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <VendasWhats w={p.peloWhats} mes={p.vendas.mes} ativo={p.whatsapp.ativo} />
+
+      <BlocoVendas v={p.vendas} celular={p.celular} />
 
       <Vendedoras v={p.vendas} />
 
@@ -395,67 +339,105 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
   );
 }
 
-function BlocoVendas({ v, loja }: { v: Vendas; loja: string }) {
-  if (!v.configurado) return null;
-  const pos = (v.rankingMeta ?? []).findIndex((r) => r.loja === loja) + 1;
-  const pct = v.pct ?? null;
+function VendasWhats({ w, mes, ativo }: { w: Painel["peloWhats"]; mes?: string; ativo: boolean }) {
   return (
-    <section className="lp-vendas">
-      <div className="card lp-vendas-mes">
-        <h2>Vendas de {v.mes}</h2>
-        <div className="lp-vendas-topo">
-          <span className="lp-vendas-v">{reais(v.vendido ?? 0)}</span>
-          {pct !== null && <span className={`lp-vendas-pct ${pct >= 100 ? "bom" : ""}`}>{pct}% da meta</span>}
+    <section className="card lp-pw">
+      <div className="lp-pw-cab">
+        <div>
+          <h2>Vendas pelo WhatsApp{mes ? ` em ${mes}` : ""}</h2>
+          <p className="muted lp-nota">Venda com frete de motoboy, ou de cliente que conversou com a loja no WhatsApp nos 7 dias antes de comprar.</p>
         </div>
-        {v.meta ? (
-          <>
-            <div className="lp-meta" role="progressbar" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100}>
-              <i style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
-            </div>
-            <div className="lp-vendas-info">
-              <span>Meta {reais(v.meta)}</span>
-              {v.porDia ? (
-                <span>
-                  Faltam <b>{reais(v.porDia)} por dia</b> nos {v.diasRestantes} dias que restam
-                </span>
-              ) : (
-                <span className="bom">Meta batida</span>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="muted lp-nota">Sem meta cadastrada pra loja.</p>
-        )}
-        <div className="lp-vendas-mini">
-          <div>
-            <b>{reais(v.hoje ?? 0)}</b>
-            <small>vendido hoje</small>
-          </div>
-          <div>
-            <b>{v.vendas ?? 0}</b>
-            <small>vendas no mês</small>
-          </div>
-          <div>
-            <b>{reais(v.ticket ?? 0)}</b>
-            <small>ticket médio</small>
-          </div>
+        <div className="lp-pw-n">
+          <span>
+            <b>{w.vendas}</b>
+            <small>{w.vendas === 1 ? "venda" : "vendas"}{w.pctVendas !== null ? `, ${w.pctVendas}% das vendas` : ""}</small>
+          </span>
+          <span>
+            <b>{reais(w.valor)}</b>
+            <small>{w.pctValor !== null ? `${w.pctValor}% do faturamento` : "faturamento"}</small>
+          </span>
         </div>
       </div>
-      <div className="card">
-        <div className="lp-rank-cab">
-          <h2>Ranking: meta do mês</h2>
-          {pos > 0 && <span className="lp-pos">{pos}º de {v.rankingMeta?.length}</span>}
+      {w.lista.length ? (
+        <div className="tbl-wrap">
+          <table className="prod-tbl fin-tbl">
+            <thead>
+              <tr>
+                <th>Quando</th>
+                <th>Cliente</th>
+                <th>Vendedora</th>
+                <th className="n">Valor</th>
+                <th>Como</th>
+              </tr>
+            </thead>
+            <tbody>
+              {w.lista.map((x, i) => (
+                <tr key={i}>
+                  <td style={{ whiteSpace: "nowrap" }}>{new Date(x.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</td>
+                  <td className="fin-desc">{nomeCurto(x.cliente)}</td>
+                  <td>{x.vendedora ?? ""}</td>
+                  <td className="n">{reais(x.valor)}</td>
+                  <td className="muted">{x.motivo}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        {(v.rankingMeta ?? []).map((r, i) => (
-          <div key={r.loja} className={`lp-rank ${r.loja === loja ? "eu" : ""}`}>
-            <span className="lp-rank-pos">{i + 1}</span>
-            <span className="lp-rank-nome">{r.loja}</span>
-            <span className="lp-rank-linha">
-              <i style={{ width: `${Math.min(100, r.pct ?? 0)}%` }} />
-            </span>
-            <span className="lp-rank-v">{r.pct === null ? "–" : `${r.pct}%`}</span>
+      ) : (
+        <p className="muted">
+          {!ativo && !w.comEntrega
+            ? "Começa a contar quando o WhatsApp da loja estiver ligado e as notas trouxerem o frete de motoboy."
+            : "Nenhuma venda pelo WhatsApp no mês ainda."}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function BlocoVendas({ v, celular }: { v: Vendas; celular: Painel["celular"] }) {
+  if (!v.configurado) return null;
+  const pct = v.pct ?? null;
+  return (
+    <section className="card lp-vendas-mes">
+      <h2>Vendas de {v.mes}</h2>
+      <div className="lp-vendas-topo">
+        <span className="lp-vendas-v">{reais(v.vendido ?? 0)}</span>
+        {pct !== null && <span className={`lp-vendas-pct ${pct >= 100 ? "bom" : ""}`}>{pct}% da meta</span>}
+      </div>
+      {v.meta ? (
+        <>
+          <div className="lp-meta" role="progressbar" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100}>
+            <i style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
           </div>
-        ))}
+          <div className="lp-vendas-info">
+            <span>Meta {reais(v.meta)}</span>
+            {v.porDia ? (
+              <span>
+                Faltam <b>{reais(v.porDia)} por dia</b> nos {v.diasRestantes} dias que restam
+              </span>
+            ) : (
+              <span className="bom">Meta batida</span>
+            )}
+          </div>
+        </>
+      ) : null}
+      <div className="lp-vendas-mini lp-vendas-mini-4">
+        <div>
+          <b>{reais(v.hoje ?? 0)}</b>
+          <small>vendido hoje</small>
+        </div>
+        <div>
+          <b>{v.vendas ?? 0}</b>
+          <small>vendas no mês</small>
+        </div>
+        <div>
+          <b>{reais(v.ticket ?? 0)}</b>
+          <small>ticket médio</small>
+        </div>
+        <div>
+          <b>{celular.pct30 === null ? "–" : `${celular.pct30}%`}</b>
+          <small>das vendas com celular da cliente (30 dias)</small>
+        </div>
       </div>
     </section>
   );
@@ -473,11 +455,12 @@ function Vendedoras({ v }: { v: Vendas }) {
           <thead>
             <tr>
               <th>Vendedora</th>
-              <th style={{ width: "30%" }}>Vendido no mês</th>
+              <th style={{ width: "28%" }}>Vendido no mês</th>
               <th className="n">Vendas</th>
               <th className="n">Ticket</th>
               <th className="n">Hoje</th>
-              <th style={{ width: "20%" }}>Com celular da cliente</th>
+              <th className="n">Pelo WhatsApp</th>
+              <th style={{ width: "18%" }}>Com celular da cliente</th>
             </tr>
           </thead>
           <tbody>
@@ -495,6 +478,7 @@ function Vendedoras({ v }: { v: Vendas }) {
                 <td className="n">{x.vendas}</td>
                 <td className="n">{reais(x.ticket)}</td>
                 <td className="n">{x.hoje ? reais(x.hoje) : ""}</td>
+                <td className="n">{x.peloWhats || ""}</td>
                 <td>
                   <span className="lp-barra-v">
                     <span className="lp-rank-linha">
@@ -513,36 +497,76 @@ function Vendedoras({ v }: { v: Vendas }) {
   );
 }
 
+type DadosProdutos = { produtos: { nome: string; qtd: number; receita: number }[]; pecas: number; receita: number; incompleto: boolean };
+
 function Produtos({ loja, buscar }: { loja: string; buscar: Buscar }) {
-  const [d, setD] = useState<{ produtos: { nome: string; qtd: number; receita: number }[]; incompleto: boolean } | null>(null);
+  const [periodo, setPeriodo] = useState<"mes" | "7" | "30">("mes");
+  const [ordem, setOrdem] = useState<"qtd" | "receita">("qtd");
+  const [todos, setTodos] = useState(false);
+  const [d, setD] = useState<DadosProdutos | null>(null);
   useEffect(() => {
     setD(null);
-    buscar<{ produtos: { nome: string; qtd: number; receita: number }[]; incompleto: boolean }>(`/api/crm/loja?produtos=${encodeURIComponent(loja)}`)
+    buscar<DadosProdutos>(`/api/crm/loja?produtos=${encodeURIComponent(loja)}&periodo=${periodo}`)
       .then(setD)
-      .catch(() => setD({ produtos: [], incompleto: true }));
-  }, [loja, buscar]);
-  const max = Math.max(1, ...(d?.produtos ?? []).map((x) => x.qtd));
+      .catch(() => setD({ produtos: [], pecas: 0, receita: 0, incompleto: true }));
+  }, [loja, periodo, buscar]);
+  const lista = (d?.produtos ?? []).slice().sort((a, b) => (ordem === "qtd" ? b.qtd - a.qtd || b.receita - a.receita : b.receita - a.receita));
+  const mostrar = todos ? lista : lista.slice(0, 12);
+  const max = Math.max(1, ...mostrar.map((x) => (ordem === "qtd" ? x.qtd : x.receita)));
   return (
     <section className="card">
-      <h2>O que mais vendeu nos últimos 30 dias</h2>
+      <div className="lp-prod-cab">
+        <h2>Produtos vendidos</h2>
+        <div className="lp-prod-filtros">
+          <div className="seg">
+            {(
+              [
+                ["mes", "Este mês"],
+                ["7", "7 dias"],
+                ["30", "30 dias"],
+              ] as const
+            ).map(([k, nome]) => (
+              <button key={k} className={periodo === k ? "on" : ""} onClick={() => setPeriodo(k)}>
+                {nome}
+              </button>
+            ))}
+          </div>
+          <div className="seg">
+            <button className={ordem === "qtd" ? "on" : ""} onClick={() => setOrdem("qtd")}>
+              Por quantidade
+            </button>
+            <button className={ordem === "receita" ? "on" : ""} onClick={() => setOrdem("receita")}>
+              Por valor
+            </button>
+          </div>
+        </div>
+      </div>
       {!d ? (
         <p className="muted">Buscando os produtos…</p>
-      ) : !d.produtos.length ? (
+      ) : !lista.length ? (
         <p className="muted">{d.incompleto ? "Ainda juntando as vendas por produto. Atualize em alguns minutos." : "Sem vendas por produto no período."}</p>
       ) : (
         <>
+          <p className="muted lp-nota" style={{ marginTop: 0 }}>
+            {d.pecas} peças, {reais(d.receita)} no período. Frete de motoboy não entra.
+          </p>
           <ol className="lp-prod">
-            {d.produtos.map((x) => (
+            {mostrar.map((x) => (
               <li key={x.nome}>
                 <span className="lp-prod-nome">{x.nome}</span>
                 <span className="lp-rank-linha marca">
-                  <i style={{ width: `${(x.qtd / max) * 100}%` }} />
+                  <i style={{ width: `${((ordem === "qtd" ? x.qtd : x.receita) / max) * 100}%` }} />
                 </span>
-                <span className="lp-prod-q">{x.qtd} pç</span>
-                <span className="lp-prod-r">{reais(x.receita)}</span>
+                <span className={`lp-prod-q ${ordem === "qtd" ? "forte" : ""}`}>{x.qtd} pç</span>
+                <span className={`lp-prod-r ${ordem === "receita" ? "forte" : ""}`}>{reais(x.receita)}</span>
               </li>
             ))}
           </ol>
+          {lista.length > 12 && (
+            <button className="link" style={{ marginTop: 8 }} onClick={() => setTodos(!todos)}>
+              {todos ? "mostrar menos" : `ver os ${lista.length} produtos`}
+            </button>
+          )}
           {d.incompleto && <p className="muted lp-nota">Ainda faltam alguns dias na conta; atualize daqui a pouco.</p>}
         </>
       )}

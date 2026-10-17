@@ -211,6 +211,14 @@ function descontoDaNota(inv: Obj): number {
   return Math.round(t * 100) / 100;
 }
 
+/** Item de frete (motoboy, entrega): não é produto, e marca venda feita à distância. */
+export const ITEM_FRETE = /FRETE|MOTO ?BOY|ENTREGA|TAXA DE ENTREGA/i;
+
+/** A nota tem frete de motoboy/entrega entre os itens? */
+function temFrete(inv: Obj): boolean {
+  return ((inv.items as Obj[] | undefined) ?? []).some((it) => ITEM_FRETE.test(String(it.name ?? it.productName ?? "")));
+}
+
 /** Notas emitidas entre `de` e `ate` (datas YYYY-MM-DD), paginadas pela data de alteração. */
 async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens = false): Promise<VendaLida[]> {
   const out: VendaLida[] = [];
@@ -252,6 +260,7 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens 
           codigoClienteTotvs: generica ? undefined : codigoCliente,
           cpfNaNota: str(inv, "personCpfCnpj", "cpfCnpj", "personDocument", "customerCpf")?.replace(/\D/g, "") || undefined,
           desconto: itens ? descontoDaNota(inv) : undefined,
+          entrega: itens ? temFrete(inv) : undefined,
           origem: "totvs",
         },
       });
