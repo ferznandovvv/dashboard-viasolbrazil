@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { limparCache } from "@/lib/cache";
 import { totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
+import { type SwaggerDoc, camposDoCorpo, contrato } from "@/lib/swagger";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
@@ -65,12 +66,56 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
       client_secret: credenciais.client_secret,
     });
   if (!token) {
-    // 3) O caminho do login mudou? O manual da API diz quais existem
+    // 3) O caminho do login mudou? O manual da API diz quais existem — e
+    // o login novo de integração é tentado com os campos que ele pede
     try {
       const r = await fetch(`${base}/api/totvsmoda/authorization/v2/swagger/v1/swagger.json`, { cache: "no-store" });
       const t = await r.text();
-      const caminhos = r.ok ? Object.keys((JSON.parse(t) as { paths?: object }).paths ?? {}) : [];
-      det.push(r.ok ? `Caminhos de login no manual: ${caminhos.join(", ") || "nenhum"}` : `Manual do login: ${resumo(r.status, t)}`);
+      if (!r.ok) det.push(`Manual do login: ${resumo(r.status, t)}`);
+      else {
+        const doc = JSON.parse(t) as SwaggerDoc;
+        const caminhos = Object.keys(doc.paths ?? {});
+        det.push(`Caminhos de login no manual: ${caminhos.join(", ") || "nenhum"}`);
+        for (const caminho of caminhos.filter((c) => /integration\/token$/.test(c))) {
+          det.push("", contrato(doc, caminho));
+          const c = camposDoCorpo(doc, caminho);
+          if (!c?.campos.length) continue;
+          // Cada campo pedido recebe a credencial que o nome indica
+          const valor = (nome: string) =>
+            /secret/i.test(nome)
+              ? credenciais.client_secret
+              : /client.?id|^id$/i.test(nome)
+                ? credenciais.client_id
+                : /pass|senha/i.test(nome)
+                  ? credenciais.password
+                  : /user|login|usuario/i.test(nome)
+                    ? credenciais.username
+                    : /grant/i.test(nome)
+                      ? "client_credentials"
+                      : "";
+          const corpo = Object.fromEntries(c.campos.map((n) => [n, valor(n)]).filter(([, v]) => v));
+          try {
+            const resp = await fetch(`${base}${caminho}`, {
+              method: "POST",
+              headers: { "Content-Type": c.formulario ? "application/x-www-form-urlencoded" : "application/json" },
+              body: c.formulario ? new URLSearchParams(corpo) : JSON.stringify(corpo),
+              cache: "no-store",
+            });
+            const txt = await resp.text();
+            det.push(`Login de integração (${Object.keys(corpo).join(", ")}): ${resumo(resp.status, txt)}`);
+            if (/access_token|accessToken/.test(txt)) {
+              return {
+                ok: false,
+                mensagem:
+                  "O login NOVO de integração funcionou com essas chaves — a atualização mudou a forma de entrar. Me mande este resultado que eu ajusto o painel.",
+                detalhes: det,
+              };
+            }
+          } catch (e) {
+            det.push(`Login de integração: não conectou — ${e instanceof Error ? e.message : e}`);
+          }
+        }
+      }
     } catch (e) {
       det.push(`Manual do login: não conectou — ${e instanceof Error ? e.message : e}`);
     }
