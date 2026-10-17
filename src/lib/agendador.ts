@@ -71,14 +71,16 @@ export function iniciarAgendador(): void {
 
   const feitos = new Set<string>();
 
-  // Uma vez só: procura o celular que as lojas anotam no endereço do cadastro
-  setTimeout(() => {
+  // Uma vez só: procura o celular que as lojas anotam no endereço do cadastro.
+  // Se o TOTVS estiver fora, tenta de novo a cada hora até conseguir.
+  const celularNoEndereco = () =>
     lerBaseCrm()
       .then((b) => {
         if (!b.config.telefonesNoEndereco) void executarCrm("crm celular no endereço", () => completarTelefones());
       })
       .catch(() => {});
-  }, 90_000);
+  setTimeout(celularNoEndereco, 90_000);
+  setInterval(celularNoEndereco, 60 * 60_000);
   setInterval(() => {
     const { dia, hora } = horaSp();
     for (const h of HORARIOS) {

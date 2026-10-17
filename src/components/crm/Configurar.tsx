@@ -425,6 +425,17 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
                 <td className="fin-acoes">
                   <button className="link" disabled={!n.sessao} onClick={() => testar(n.loja)}>situação</button>
                   <button className="link" disabled={!n.sessao || !telTeste} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
+                  <button
+                    className="link"
+                    title="Apaga o histórico de conversas desta loja no painel (tempo de resposta, quem está esperando). Não mexe no WhatsApp."
+                    onClick={async () => {
+                      if (!confirm(`Apagar as conversas registradas da ${n.loja} no painel? Serve pra limpar teste. O WhatsApp não é afetado.`)) return;
+                      const r = await api<{ apagados: number }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "limpar-atendimento", loja: n.loja }) });
+                      setTeste({ ...teste, [n.loja]: `${r.apagados} registros apagados` });
+                    }}
+                  >
+                    apagar conversas
+                  </button>
                   {teste[n.loja] && <div className="fin-sub">{teste[n.loja]}</div>}
                 </td>
               </tr>

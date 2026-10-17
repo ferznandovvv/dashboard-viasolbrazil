@@ -28,7 +28,8 @@ type Pedido =
   | { tipo: "config"; config: Partial<ConfigCrm> }
   | { tipo: "modelo"; modelo: Modelo }
   | { tipo: "testar-numero"; loja: string }
-  | { tipo: "backup" };
+  | { tipo: "backup" }
+  | { tipo: "limpar-atendimento"; loja: string };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
   const n = Number(v);
@@ -59,6 +60,16 @@ export async function POST(req: NextRequest) {
       const n = base.config.numeros.find((x) => x.loja === p.loja);
       if (!n?.sessao) return NextResponse.json({ erro: "Essa loja não tem sessão configurada." }, { status: 400 });
       return NextResponse.json(await adaptador.situacao(n.sessao));
+    }
+    if (p.tipo === "limpar-atendimento") {
+      // Apaga as conversas registradas de uma loja (ex.: o número de teste)
+      const n = await alterarBase((b) => {
+        const antes = b.atendimento.length + b.recebidas.length;
+        b.atendimento = b.atendimento.filter((a) => a.loja !== p.loja);
+        b.recebidas = b.recebidas.filter((r) => r.loja !== p.loja);
+        return antes - b.atendimento.length - b.recebidas.length;
+      });
+      return NextResponse.json({ apagados: n });
     }
     if (p.tipo === "backup") {
       const base = await lerBase();

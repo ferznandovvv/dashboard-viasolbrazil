@@ -163,7 +163,10 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
   }
 
   const pendentes: Pendente[] = [];
+  // Só cobra resposta de loja com WhatsApp ligado agora (número de teste apagado não fica "esperando" pra sempre)
+  const ligadas = new Set(base.config.numeros.filter((n) => n.ativo && n.sessao).map((n) => n.loja));
   for (const [chave, a] of aberta) {
+    if (!ligadas.has(a.loja)) continue;
     const telefone = chave.split("|")[1];
     const esperando = minutosUteis(new Date(a.em), agora, janela(a.loja));
     if (esperando < 15) continue; // ainda é normal
