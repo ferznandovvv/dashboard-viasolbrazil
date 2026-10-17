@@ -22,7 +22,7 @@ const MANTER_COPIAS = 60;
 const INTERVALO_BACKUP_MS = 30 * 60000;
 
 /** Lojas e canais que podem virar receita de uma empresa. */
-export const UNIDADES = [...Object.values(LOJAS), "Site", "TikTok Shop", "Mercado Livre"];
+export const UNIDADES = [...Object.values(LOJAS), "Site", "TikTok Shop", "Mercado Livre", "Shopee"];
 
 export const novoId = () => randomUUID().slice(0, 8);
 
@@ -90,6 +90,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseFinanceira) => void }[] = [
     },
   },
 ];
+
+MIGRACOES.push({
+  // Shopee entrou como canal: vai para a empresa que já tem os outros canais online
+  id: "canal-shopee",
+  aplicar: (b) => {
+    if (b.empresas.some((e) => e.unidades.includes("Shopee"))) return;
+    const dona = b.empresas.find((e) => e.unidades.includes("Mercado Livre") || e.unidades.includes("Site"));
+    if (dona) dona.unidades.push("Shopee");
+  },
+});
 
 MIGRACOES.push({
   // Rateio deixou de ser por loja: cada parte vai para a empresa dona da loja

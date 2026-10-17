@@ -8,9 +8,9 @@ import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
 import { NavPrincipal } from "@/components/NavPrincipal";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
-type Canal = "shopify" | "tiktok" | "meli";
+type Canal = "shopify" | "tiktok" | "meli" | "shopee";
 
-const ONLINE: ("shopify" | "tiktok" | "meli")[] = ["shopify", "tiktok", "meli"];
+const ONLINE: Canal[] = ["shopify", "tiktok", "meli", "shopee"];
 
 function Delta({ now, before }: { now: number; before: number }) {
   if (before <= 0) return null;
@@ -165,6 +165,11 @@ export default function Dashboard() {
     }
     const code = params.get("code");
     if (!code) return;
+    // Shopee volta com shop_id
+    if (params.get("shop_id")) {
+      window.location.replace(`/api/shopee/setup?code=${encodeURIComponent(code)}&shop_id=${encodeURIComponent(params.get("shop_id") ?? "")}`);
+      return;
+    }
     const target = params.get("state") === "meli" ? "meli" : "tiktok";
     window.location.replace(`/api/${target}/setup?code=${encodeURIComponent(code)}`);
   }, []);
@@ -247,7 +252,7 @@ export default function Dashboard() {
   })();
   const dailySeries: DailyPoint[] = (data?.daily ?? []).map((d) => ({
     ...d,
-    site: d.shopify + d.tiktok + d.meli,
+    site: d.shopify + d.tiktok + d.meli + (d.shopee ?? 0),
   }));
 
   const spendSeries = (() => {

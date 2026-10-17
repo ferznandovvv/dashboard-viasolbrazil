@@ -12,6 +12,7 @@ interface TvData {
     shopify: number;
     tiktok: number;
     meli: number;
+    shopee: number;
     lojas: number;
   };
   daily: DailyPoint[];

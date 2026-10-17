@@ -62,6 +62,17 @@ export const INTEGRACOES: Integracao[] = [
     autorizar: "/api/meli/setup",
   },
   {
+    id: "shopee",
+    nome: "Shopee",
+    para: "Pedidos da Shopee",
+    campos: [
+      { nome: "SHOPEE_PARTNER_ID", rotulo: "Partner ID", dica: "open.shopee.com → Console → seu app" },
+      { nome: "SHOPEE_PARTNER_KEY", rotulo: "Partner Key", dica: "open.shopee.com → Console → seu app (Live)" },
+    ],
+    geradas: ["SHOPEE_REFRESH_TOKEN", "SHOPEE_SHOP_ID"],
+    autorizar: "/api/shopee/setup",
+  },
+  {
     id: "tiktok-ads",
     nome: "TikTok Ads",
     para: "Gasto de anúncios do TikTok",

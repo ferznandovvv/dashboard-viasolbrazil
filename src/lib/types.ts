@@ -1,4 +1,4 @@
-export type ChannelId = "shopify" | "tiktok" | "meli" | "lojas";
+export type ChannelId = "shopify" | "tiktok" | "meli" | "shopee" | "lojas";
 
 export interface OrderItem {
   title: string;
@@ -47,6 +47,7 @@ export interface DailyPoint {
   shopify: number;
   tiktok: number;
   meli: number;
+  shopee: number;
   lojas: number;
   /** Uma chave por loja física: "loja:Centro" etc. */
   [serie: string]: number | string;

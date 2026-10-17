@@ -22,6 +22,11 @@ export const CHANNEL_META: Record<
     cssVar: "var(--c-meli)",
     envVars: ["ML_CLIENT_ID", "ML_CLIENT_SECRET", "ML_REFRESH_TOKEN"],
   },
+  shopee: {
+    name: "Shopee",
+    cssVar: "var(--c-shopee)",
+    envVars: ["SHOPEE_PARTNER_ID", "SHOPEE_PARTNER_KEY", "SHOPEE_REFRESH_TOKEN", "SHOPEE_SHOP_ID"],
+  },
   lojas: {
     name: "Lojas físicas",
     cssVar: "var(--c-lojas)",
@@ -30,7 +35,7 @@ export const CHANNEL_META: Record<
 };
 
 // Ordem fixa de empilhamento/legenda — nunca muda com filtros
-export const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli", "lojas"];
+export const CHANNEL_ORDER: ChannelId[] = ["shopify", "tiktok", "meli", "shopee", "lojas"];
 
 /** Cor fixa de cada loja física (ordem validada para daltonismo). */
 export const LOJA_CORES: Record<string, string> = {

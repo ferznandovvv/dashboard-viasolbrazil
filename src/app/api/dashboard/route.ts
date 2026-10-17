@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
+import { fetchShopeeOrders } from "@/lib/connectors/shopee";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import {
   ChannelId,
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
     .filter(([, nome]) => unitsPre.includes(nome))
     .map(([codigo]) => Number(codigo));
 
-  const [shopifyRes, tiktokRes, meliRes, lojasRes, lojasItens, adsRes, ttAdsRes] = await Promise.all([
+  const [shopifyRes, tiktokRes, meliRes, lojasRes, lojasItens, adsRes, ttAdsRes, shopeeRes] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
       : Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] }),
     fetchMetaSpend(prevFrom, to),
     fetchTikTokAdsSpend(prevFrom, to),
+    fetchShopeeOrders(fetchStart),
   ]);
   // Onde houver a versão com itens, ela substitui a leve da mesma nota
   const comItens = new Map(lojasItens.orders.map((o) => [o.id, o]));
@@ -103,7 +105,7 @@ export async function GET(req: NextRequest) {
     ? { ...lojasRes, orders: lojasRes.orders.map((o) => comItens.get(o.id) ?? o) }
     : lojasRes;
 
-  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes, lojasFinal];
+  const results: ChannelResult[] = [shopifyRes, tiktokRes, meliRes, shopeeRes, lojasFinal];
 
   // Filtro opcional por canal (?channel=shopify|tiktok|meli) — os cards de
   // canal continuam mostrando os três; o resto do dashboard respeita o filtro.
@@ -113,7 +115,7 @@ export async function GET(req: NextRequest) {
   const querSite = units.includes("Site");
   const lojasSel = units.filter((u) => u !== "Site");
   const channelParam = sp.get("channel") ?? "";
-  const channelFilter: ChannelId | null = ["shopify", "tiktok", "meli"].includes(channelParam)
+  const channelFilter: ChannelId | null = ["shopify", "tiktok", "meli", "shopee"].includes(channelParam)
     ? (channelParam as ChannelId)
     : null;
 
@@ -148,7 +150,7 @@ export async function GET(req: NextRequest) {
   const dayMap = new Map<string, DailyPoint>();
   for (let i = 0; i < windowDays; i++) {
     const key = addDays(from, i);
-    dayMap.set(key, { date: key, shopify: 0, tiktok: 0, meli: 0, lojas: 0 });
+    dayMap.set(key, { date: key, shopify: 0, tiktok: 0, meli: 0, shopee: 0, lojas: 0 });
   }
   for (const o of current) {
     const p = dayMap.get(spDateKey(o.createdAt));

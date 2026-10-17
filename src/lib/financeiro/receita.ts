@@ -5,6 +5,7 @@
 
 import { comCache } from "../cache";
 import { fetchMeliOrders } from "../connectors/mercadolivre";
+import { fetchShopeeOrders } from "../connectors/shopee";
 import { fetchShopifyOrders } from "../connectors/shopify";
 import { fetchTikTokOrders } from "../connectors/tiktok";
 import { fetchTotvsSales } from "../connectors/totvs";
@@ -14,6 +15,7 @@ const NOME_CANAL: Record<string, string> = {
   shopify: "Site",
   tiktok: "TikTok Shop",
   meli: "Mercado Livre",
+  shopee: "Shopee",
 };
 
 export interface ReceitaAno {
@@ -41,6 +43,7 @@ async function buscar(ano: number): Promise<ReceitaAno> {
     fetchShopifyOrders(desde),
     fetchTikTokOrders(desde),
     fetchMeliOrders(desde),
+    fetchShopeeOrders(desde),
   ]);
 
   for (const r of resultados) {
