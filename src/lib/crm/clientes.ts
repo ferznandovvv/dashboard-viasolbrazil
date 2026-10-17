@@ -5,6 +5,7 @@
 
 import { diasEntre, hojeSp, novoId, somarDias } from "./base";
 import { creditarVenda, saldoDe, vencendoAte } from "./cashback";
+import { perfis } from "./perfil";
 import type { BaseCrm, Cliente, ClienteResumo, Venda } from "./tipos";
 import { normalizarCpf, normalizarData, normalizarTelefone } from "./telefone";
 
@@ -225,10 +226,32 @@ export function noSegmento(base: BaseCrm, r: ClienteResumo, seg: Segmento, hoje 
   }
 }
 
+/**
+ * Todas as clientes resumidas de uma vez. Agrupa vendas, mensagens e
+ * cashback por cliente antes (em vez de varrer a base inteira para cada
+ * uma) e junta a faixa (Ouro, Prata...).
+ */
+export function resumirTodos(base: BaseCrm, hoje = hojeSp()): ClienteResumo[] {
+  const agrupar = <T extends { clienteId?: string }>(lista: T[]) => {
+    const m = new Map<string, T[]>();
+    for (const x of lista) if (x.clienteId) (m.get(x.clienteId) ?? m.set(x.clienteId, []).get(x.clienteId)!).push(x);
+    return m;
+  };
+  const vendas = agrupar(base.vendas);
+  const msgs = agrupar(base.mensagens);
+  const cash = agrupar(base.cashback);
+  const prf = perfis(base, hoje);
+  const vazio: never[] = [];
+  return base.clientes.map((c) => {
+    // Uma "base" só com os dados dela: as mesmas funções, sem varrer tudo
+    const mini = { ...base, vendas: vendas.get(c.id) ?? vazio, mensagens: msgs.get(c.id) ?? vazio, cashback: cash.get(c.id) ?? vazio } as BaseCrm;
+    return { ...resumir(mini, c, hoje), faixa: prf.get(c.id)?.faixa };
+  });
+}
+
 export function listarSegmento(base: BaseCrm, seg: Segmento, loja?: string): ClienteResumo[] {
   const hoje = hojeSp();
-  return base.clientes
-    .map((c) => resumir(base, c, hoje))
+  return resumirTodos(base, hoje)
     .filter((r) => noSegmento(base, r, seg, hoje))
     .filter((r) => !loja || r.lojaOrigem === loja || r.ultimaLoja === loja)
     .sort((a, b) => b.totalGasto - a.totalGasto);

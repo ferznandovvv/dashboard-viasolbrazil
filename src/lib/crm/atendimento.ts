@@ -64,6 +64,20 @@ export function minutosUteis(de: Date, ate: Date, inicio: number, fim: number): 
   return total;
 }
 
+/**
+ * Mensagem da cliente que encerra a conversa e não pede resposta
+ * ("obrigada!", "ok", "👍", figurinha). Não abre espera: senão toda
+ * conversa terminada com um agradecimento viraria "esperando".
+ */
+const ENCERRAMENTO = /^(ok(ay|ey)?|t[aá]( bom)?|beleza|blz|show|combinado|perfeito|[oó]timo|massa|valeu|vlw|obrigad[ao]s?|obg|brigad[ao]|muito obrigad[ao]|de nada|imagina|tchau|at[eé] (mais|logo|amanh[aã])|boa noite|bom dia|boa tarde|entendi|certo|top|amei|maravilha)[\s!.,😘🥰❤️💕🙏👍😊☺️🤗✨😍🧡]*$/i;
+const SO_EMOJI = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u;
+export function encerraConversa(texto?: string): boolean {
+  const t = (texto ?? "").trim();
+  if (!t) return false;
+  if (t === "[sticker]" || t === "[stickermessage]" || t === "[reaction]" || t === "[reactionmessage]") return true;
+  return ENCERRAMENTO.test(t) || SO_EMOJI.test(t);
+}
+
 export interface ResumoAtendimento {
   lojas: ResumoLoja[];
   pendentes: Pendente[];
@@ -83,6 +97,15 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
   const inicio = cfg.envioInicio;
   const fim = cfg.envioFim;
   const nomes = new Map(base.clientes.filter((c) => c.telefone).map((c) => [c.telefone!, c.nome]));
+  // Mensagem automática do WhatsApp Business (ausência, saudação): o mesmo
+  // texto mandado pela loja para 5+ conversas não conta como resposta
+  const repeticoes = new Map<string, Set<string>>();
+  for (const ev of eventos) {
+    if (ev.de !== "loja" || !ev.texto || ev.texto.length < 20) continue;
+    const k = `${ev.loja}|${ev.texto}`;
+    (repeticoes.get(k) ?? repeticoes.set(k, new Set()).get(k)!).add(ev.telefone);
+  }
+  const automatica = (ev: { loja: string; texto?: string }) => Boolean(ev.texto && (repeticoes.get(`${ev.loja}|${ev.texto}`)?.size ?? 0) >= 5);
 
   const porLoja = new Map<string, { conversas: Set<string>; msgs: number; respondidas: number; tempos: number[]; lentas: number; rapidas: number }>();
   // Por conversa: última mensagem da cliente ainda sem resposta
@@ -94,10 +117,14 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
     if (ev.de === "cliente") {
       l.conversas.add(ev.telefone);
       l.msgs++;
-      // Uma sequência de mensagens da cliente conta como uma espera só, a partir da primeira
-      if (!aberta.has(chave)) aberta.set(chave, { em: ev.em, texto: ev.texto, loja: ev.loja });
+      // Uma sequência de mensagens da cliente conta como uma espera só, a partir da primeira;
+      // "obrigada!" e figurinha não abrem espera
+      if (!aberta.has(chave)) {
+        if (!encerraConversa(ev.texto)) aberta.set(chave, { em: ev.em, texto: ev.texto, loja: ev.loja });
+      }
       else aberta.get(chave)!.texto = ev.texto ?? aberta.get(chave)!.texto;
     } else {
+      if (automatica(ev)) continue;
       const a = aberta.get(chave);
       if (a) {
         const min = minutosUteis(new Date(a.em), new Date(ev.em), inicio, fim);

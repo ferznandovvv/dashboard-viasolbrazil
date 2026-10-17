@@ -142,6 +142,8 @@ export interface EventoRecebido {
   idExterno?: string;
   status?: string;
   fromMe?: boolean;
+  /** Quando a mensagem foi mandada (ISO), se o provedor informar */
+  em?: string;
 }
 
 const OPT_OUT = /^\s*(sair|parar|pare|stop|cancelar|cancela|remover|descadastrar|n[aã]o quero( mais)?( receber)?)\b/i;
@@ -176,7 +178,7 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
   if (ev.fromMe) {
     await alterarBase((b) => {
       if (!loja) return;
-      b.atendimento.push({ loja, telefone: ev.telefone, de: "loja", em: new Date().toISOString() });
+      b.atendimento.push({ loja, telefone: ev.telefone, de: "loja", em: ev.em ?? new Date().toISOString(), texto: (ev.texto ?? "").slice(0, 120) || undefined });
       if (b.atendimento.length > 30000) b.atendimento.splice(0, b.atendimento.length - 30000);
     });
     return loja ? "resposta da loja" : "ignorado";
@@ -185,7 +187,7 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
   let feito = "recebida";
   await alterarBase((b) => {
     if (loja) {
-      b.atendimento.push({ loja, telefone: ev.telefone, de: "cliente", em: new Date().toISOString(), texto: texto.slice(0, 120) });
+      b.atendimento.push({ loja, telefone: ev.telefone, de: "cliente", em: ev.em ?? new Date().toISOString(), texto: texto.slice(0, 120) });
       if (b.atendimento.length > 30000) b.atendimento.splice(0, b.atendimento.length - 30000);
     }
     const cliente = b.clientes.find((c) => c.telefone === ev.telefone);

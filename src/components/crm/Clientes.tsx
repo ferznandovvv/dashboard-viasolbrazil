@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { CodigoResgate, FiltroCampanha, Mensagem, MovimentoCashback, Recebida, Venda } from "@/lib/crm/tipos";
+import type { CodigoResgate, FaixaCliente, FiltroCampanha, Mensagem, MovimentoCashback, Recebida, Venda } from "@/lib/crm/tipos";
+import { Chips, SeletorFaixas, SeloFaixa } from "./faixa";
 import { type ClienteResumo, type Resumo, STATUS_NOME, api, brl, dataBrAno, dataHora, lerValor } from "./comum";
 import { formatarTelefone } from "@/lib/crm/telefone";
 
@@ -16,9 +17,9 @@ interface Ficha {
 }
 
 /** Lista de clientes por segmento, com ficha e ações. */
-/** Segmento da lista vira o filtro inicial de uma campanha. */
-function filtroDoSegmento(segmento: string, loja: string): Partial<FiltroCampanha> {
-  const f: Partial<FiltroCampanha> = { lojas: loja ? [loja] : [] };
+/** Filtros da lista viram o filtro inicial de uma campanha. */
+function filtroDaLista(segmento: string, loja: string, faixa?: FaixaCliente): Partial<FiltroCampanha> {
+  const f: Partial<FiltroCampanha> = { lojas: loja ? [loja] : [], faixas: faixa ? [faixa] : [] };
   if (segmento === "aniversariantes") f.aniversariantes = true;
   if (segmento === "com_saldo" || segmento === "cashback_vencendo") f.comSaldo = true;
   if (segmento === "compraram_recente") f.compraramDias = 30;
@@ -26,99 +27,230 @@ function filtroDoSegmento(segmento: string, loja: string): Partial<FiltroCampanh
   return f;
 }
 
-export function Clientes({ r, segmentoInicial, recarregar, novaCampanha }: { r: Resumo; segmentoInicial?: string; recarregar: () => Promise<void>; novaCampanha: (f: Partial<FiltroCampanha>) => void }) {
-  const [segmento, setSegmento] = useState(segmentoInicial ?? "todos");
+type Ordem = "gasto" | "recente" | "parada" | "saldo" | "compras" | "nome";
+const ORDENS: [Ordem, string][] = [
+  ["gasto", "Quem mais gastou"],
+  ["recente", "Compra mais recente"],
+  ["parada", "Mais tempo sem comprar"],
+  ["compras", "Mais compras"],
+  ["saldo", "Maior cashback"],
+  ["nome", "Nome"],
+];
+
+interface Lista {
+  total: number;
+  comTelefone: number;
+  gastoMedio: number;
+  saldoTotal: number;
+  contagens: { faixas: Partial<Record<FaixaCliente, number>>; lojas: Record<string, number> };
+  clientes: ClienteResumo[];
+}
+
+const haQuanto = (d?: string) => {
+  if (!d) return "";
+  const dias = Math.round((Date.now() - new Date(`${d}T12:00:00-03:00`).getTime()) / 86400000);
+  if (dias <= 0) return "hoje";
+  if (dias === 1) return "ontem";
+  if (dias < 30) return `há ${dias} dias`;
+  if (dias < 365) return `há ${Math.round(dias / 30)} ${Math.round(dias / 30) === 1 ? "mês" : "meses"}`;
+  const anos = Math.floor(dias / 365);
+  return `há ${anos} ${anos === 1 ? "ano" : "anos"}`;
+};
+
+/** Lista de clientes: faixas no topo, filtros de loja e situação, ficha ao clicar. */
+export function Clientes({ r, recarregar, novaCampanha }: { r: Resumo; recarregar: () => Promise<void>; novaCampanha: (f: Partial<FiltroCampanha>) => void }) {
+  const [segmento, setSegmento] = useState("todos");
   const [loja, setLoja] = useState("");
+  const [faixa, setFaixa] = useState<FaixaCliente | undefined>();
   const [busca, setBusca] = useState("");
-  const [dados, setDados] = useState<{ total: number; clientes: ClienteResumo[] } | null>(null);
+  const [ordem, setOrdem] = useState<Ordem>("gasto");
+  const [limite, setLimite] = useState(100);
+  const [dados, setDados] = useState<Lista | null>(null);
+  const [carregando, setCarregando] = useState(false);
   const [fichaId, setFichaId] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
 
-  useEffect(() => {
-    if (segmentoInicial) setSegmento(segmentoInicial);
-  }, [segmentoInicial]);
-
   const carregar = useCallback(async () => {
-    const qs = new URLSearchParams({ segmento, ...(loja ? { loja } : {}), ...(busca ? { busca } : {}) });
-    setDados(await api(`/api/crm/clientes?${qs}`));
-  }, [segmento, loja, busca]);
+    setCarregando(true);
+    const qs = new URLSearchParams({ segmento, ordem, limite: String(limite), ...(loja ? { loja } : {}), ...(faixa ? { faixa } : {}), ...(busca ? { busca } : {}) });
+    try {
+      setDados(await api(`/api/crm/clientes?${qs}`));
+    } finally {
+      setCarregando(false);
+    }
+  }, [segmento, loja, faixa, busca, ordem, limite]);
 
   useEffect(() => {
-    const t = setTimeout(() => carregar().catch(() => setDados({ total: 0, clientes: [] })), busca ? 300 : 0);
+    const t = setTimeout(() => carregar().catch(() => setDados(null)), busca ? 300 : 0);
     return () => clearTimeout(t);
   }, [carregar, busca]);
 
-  const seg = r.segmentos.find((s) => s.id === segmento);
+  // Filtro novo volta pro começo da lista
+  useEffect(() => setLimite(100), [segmento, loja, faixa, busca, ordem]);
+
+  const situacoes = r.segmentos.filter((s) => s.id !== "todos");
+  const filtrando = segmento !== "todos" || loja || faixa || busca;
+  const totalLojas = dados ? Object.values(dados.contagens.lojas).reduce((a, b) => a + b, 0) : undefined;
+  const totalFaixas = dados ? Object.values(dados.contagens.faixas).reduce((a, b) => a + (b ?? 0), 0) : undefined;
+  const lojasComClientes = r.lojas.map((l) => ({ id: l, nome: l }));
+  const podeCampanha = !["sem_telefone", "opt_out", "funcionarias"].includes(segmento);
+
   return (
-    <div>
-      <div className="fin-barra">
-        <select className="fin-select" value={segmento} onChange={(e) => setSegmento(e.target.value)}>
-          {r.segmentos.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nome} ({s.total})
-            </option>
-          ))}
-        </select>
-        <select className="fin-select" value={loja} onChange={(e) => setLoja(e.target.value)}>
-          <option value="">Todas as lojas</option>
-          {r.lojas.map((l) => (
-            <option key={l}>{l}</option>
-          ))}
-        </select>
-        <input className="fin-busca config-campo" placeholder="Buscar por nome, telefone ou CPF" value={busca} onChange={(e) => setBusca(e.target.value)} />
+    <div className="cl">
+      <div className="cl-topo">
+        <label className="cl-busca">
+          <span className="sr-only">Buscar</span>
+          <svg viewBox="0 0 20 20" aria-hidden width="16" height="16">
+            <circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M14 14l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <input placeholder="Buscar por nome, celular ou CPF" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          {busca && (
+            <button className="link" onClick={() => setBusca("")}>
+              limpar
+            </button>
+          )}
+        </label>
         <button className="mini ghost" onClick={() => setNova(true)}>
           Nova cliente
         </button>
-        {segmento !== "sem_telefone" && segmento !== "opt_out" && segmento !== "funcionarias" && (
-          <button className="mini" onClick={() => novaCampanha(filtroDoSegmento(segmento, loja))}>
-            Criar campanha com essas clientes
-          </button>
-        )}
       </div>
-      {seg?.dica && <div className="muted" style={{ marginBottom: 10 }}>{seg.dica}</div>}
 
-      <div className="card">
+      <SeletorFaixas
+        contagens={dados?.contagens.faixas}
+        marcadas={faixa ? [faixa] : []}
+        alternar={(f) => setFaixa(faixa === f ? undefined : f)}
+        limpar={() => setFaixa(undefined)}
+        total={totalFaixas}
+      />
+
+      <div className="cl-filtros">
+        <div className="cl-filtro">
+          <span className="cl-rotulo">Loja</span>
+          <Chips opcoes={lojasComClientes} marcadas={loja ? [loja] : []} alternar={(l) => setLoja(loja === l ? "" : l)} limpar={() => setLoja("")} contagens={dados?.contagens.lojas} totalTodas={totalLojas} />
+        </div>
+        <div className="cl-filtro">
+          <span className="cl-rotulo">Situação</span>
+          <Chips
+            opcoes={situacoes.map((s) => ({ id: s.id, nome: s.nome }))}
+            marcadas={segmento === "todos" ? [] : [segmento]}
+            alternar={(id) => setSegmento(segmento === id ? "todos" : id)}
+            limpar={() => setSegmento("todos")}
+            rotuloTodas="Qualquer"
+          />
+        </div>
+      </div>
+
+      <div className="cl-resumo">
+        <div className="cl-resumo-n">
+          {dados ? (
+            <>
+              <b>{dados.total.toLocaleString("pt-BR")}</b> {dados.total === 1 ? "cliente" : "clientes"}
+              <span>
+                {dados.total ? `${Math.round((dados.comTelefone / dados.total) * 100)}% com celular` : ""}
+                {dados.gastoMedio ? ` · gasto médio ${brl.format(dados.gastoMedio)}` : ""}
+                {dados.saldoTotal ? ` · ${brl.format(dados.saldoTotal)} de cashback em aberto` : ""}
+              </span>
+            </>
+          ) : (
+            <span>Carregando…</span>
+          )}
+        </div>
+        <div className="cl-resumo-acoes">
+          {filtrando && (
+            <button
+              className="link"
+              onClick={() => {
+                setSegmento("todos");
+                setLoja("");
+                setFaixa(undefined);
+                setBusca("");
+              }}
+            >
+              limpar filtros
+            </button>
+          )}
+          <label className="cl-ordem">
+            <span>Ordenar</span>
+            <select className="fin-select" value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)}>
+              {ORDENS.map(([id, nome]) => (
+                <option key={id} value={id}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          {podeCampanha && dados && dados.total > 0 && (
+            <button className="mini" onClick={() => novaCampanha(filtroDaLista(segmento, loja, faixa))}>
+              Criar campanha com essas
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={`card cl-tabela ${carregando ? "carregando" : ""}`}>
         {!dados ? (
           <div className="empty">Carregando…</div>
         ) : !dados.clientes.length ? (
-          <div className="empty">Ninguém aqui ainda.</div>
+          <div className="empty">Nenhuma cliente com esses filtros.</div>
         ) : (
           <div className="tbl-wrap">
             <table className="prod-tbl fin-tbl">
               <thead>
                 <tr>
                   <th>Cliente</th>
-                  <th>Telefone</th>
+                  <th>Faixa</th>
                   <th>Loja</th>
                   <th className="n">Compras</th>
-                  <th className="n">Total gasto</th>
+                  <th className="n">Gastou</th>
                   <th>Última compra</th>
-                  <th className="n">Saldo</th>
+                  <th className="n">Cashback</th>
                   <th>Aniversário</th>
                 </tr>
               </thead>
               <tbody>
                 {dados.clientes.map((c) => (
                   <tr key={c.id} className="clicavel" onClick={() => setFichaId(c.id)}>
-                    <td className="fin-desc">{c.nome}</td>
-                    <td>{formatarTelefone(c.telefone) || <span className="muted">sem telefone</span>}</td>
-                    <td>{c.ultimaLoja ?? c.lojaOrigem ?? ""}</td>
-                    <td className="n">{c.compras}</td>
-                    <td className="n">{brl.format(c.totalGasto)}</td>
-                    <td>{dataBrAno(c.ultimaCompra)}</td>
-                    <td className="n">
-                      {c.saldo ? brl.format(c.saldo) : ""}
-                      {c.vencendo > 0 && <div className="fin-sub">vence {dataBrAno(c.vencendoEm)}</div>}
+                    <td>
+                      <div className="fin-desc">
+                        {c.nome}
+                        {c.optOut && <span className="badge err cl-selo">não receber</span>}
+                      </div>
+                      <div className="fin-sub">{formatarTelefone(c.telefone) || <span className="cl-semtel">sem celular</span>}</div>
                     </td>
                     <td>
-                      {c.nascimento ? c.nascimento.slice(8, 10) + "/" + c.nascimento.slice(5, 7) : ""}
-                      {c.optOut && <span className="badge err" style={{ marginLeft: 8 }}>não receber</span>}
+                      <SeloFaixa f={c.faixa} />
                     </td>
+                    <td>{c.ultimaLoja ?? c.lojaOrigem ?? ""}</td>
+                    <td className="n">{c.compras || ""}</td>
+                    <td className="n">{c.totalGasto ? brl.format(c.totalGasto) : ""}</td>
+                    <td>
+                      {c.ultimaCompra && (
+                        <>
+                          <div>{haQuanto(c.ultimaCompra)}</div>
+                          <div className="fin-sub">{dataBrAno(c.ultimaCompra)}</div>
+                        </>
+                      )}
+                    </td>
+                    <td className="n">
+                      {c.saldo ? brl.format(c.saldo) : ""}
+                      {c.vencendo > 0 && <div className="fin-sub cl-vence">vence {dataBrAno(c.vencendoEm)}</div>}
+                    </td>
+                    <td>{c.nascimento ? c.nascimento.slice(8, 10) + "/" + c.nascimento.slice(5, 7) : ""}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {dados.total > dados.clientes.length && <div className="muted" style={{ marginTop: 8 }}>Mostrando {dados.clientes.length} de {dados.total}. Refine a busca para ver o resto.</div>}
+          </div>
+        )}
+        {dados && dados.total > dados.clientes.length && (
+          <div className="cl-mais">
+            <span className="muted">
+              Mostrando {dados.clientes.length.toLocaleString("pt-BR")} de {dados.total.toLocaleString("pt-BR")}
+            </span>
+            <button className="mini ghost" onClick={() => setLimite(limite + 200)}>
+              Mostrar mais
+            </button>
           </div>
         )}
       </div>

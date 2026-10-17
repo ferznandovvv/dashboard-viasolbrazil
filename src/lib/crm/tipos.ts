@@ -219,7 +219,7 @@ export interface Atendimento {
   de: "cliente" | "loja";
   /** ISO */
   em: string;
-  /** Só das clientes, para a lista de pendentes */
+  /** Começo do texto: da cliente (lista de quem espera) e da loja (pra reconhecer mensagem automática) */
   texto?: string;
 }
 
@@ -346,6 +346,7 @@ export interface ClienteResumo extends Cliente {
   ultimaLoja?: string;
   ultimaMensagem?: string;
   podeMarketing: boolean;
+  faixa?: FaixaCliente;
 }
 
 /** Cidade de cada loja, para avisar a cliente do site que tem loja perto dela. */

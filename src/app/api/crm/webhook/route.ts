@@ -38,6 +38,20 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+/**
+ * Hora em que a mensagem foi mandada (não a que chegou aqui): se o
+ * computador ficou desligado, as mensagens da noite chegam todas de manhã
+ * e não podem parecer que a loja respondeu na hora.
+ */
+function quando(ts: unknown): string | undefined {
+  const n = typeof ts === "object" && ts !== null && "low" in ts ? Number((ts as { low: number }).low) : Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const ms = n > 1e12 ? n : n * 1000;
+  const agora = Date.now();
+  if (ms > agora + 5 * 60000 || ms < agora - 3 * 86400000) return undefined;
+  return new Date(ms).toISOString();
+}
+
 const telefoneDoJid = (jid: unknown) => String(jid ?? "").split("@")[0].split(":")[0].replace(/\D/g, "");
 
 function extrair(c: Record<string, unknown>): EventoRecebido[] {
@@ -56,6 +70,7 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
       const tel = telefoneDoJid(c.event === "message.sent" ? (d.receiver ?? key.remoteJid) : (key.remoteJid ?? d.from));
       if (!tel || tel.length < 10) return out;
       out.push({
+        em: quando(d.messageTimestamp),
         tipo: "mensagem",
         sessao,
         telefone: tel,
@@ -77,7 +92,7 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
       const sessao = String(((v.metadata ?? {}) as Record<string, unknown>).phone_number_id ?? "");
       for (const m of (v.messages ?? []) as Record<string, unknown>[]) {
         const texto = ((m.text ?? {}) as { body?: string }).body ?? `[${String(m.type ?? "mídia")}]`;
-        out.push({ tipo: "mensagem", sessao, telefone: String(m.from ?? "").replace(/\D/g, ""), texto, idExterno: String(m.id ?? "") });
+        out.push({ tipo: "mensagem", sessao, telefone: String(m.from ?? "").replace(/\D/g, ""), texto, idExterno: String(m.id ?? ""), em: quando(m.timestamp) });
       }
       for (const s of (v.statuses ?? []) as Record<string, unknown>[]) {
         out.push({ tipo: "status", sessao, telefone: String(s.recipient_id ?? ""), idExterno: String(s.id ?? ""), status: String(s.status ?? "").toUpperCase() });

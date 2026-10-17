@@ -14,61 +14,90 @@ import { CAMPANHAS, type BaseCrm, type CampanhaManual, type Cliente, type FaixaC
 export interface Previa {
   /** Clientes no filtro (antes das regras de envio) */
   noFiltro: number;
-  /** Quantas vão receber */
+  /** Dessas, quantas podem receber pelas regras (telefone, aceite, limite do mês, loja com número) */
+  podem: number;
+  /** Quantas vão receber (podem, cortado no máximo escolhido) */
   recebem: number;
-  puladas: Record<string, number>;
+  /** Quem ficou de fora pelas regras, agrupado; `detalhe` abre por loja quando é "loja sem número" */
+  fora: { motivo: string; n: number; detalhe?: { loja: string; n: number }[] }[];
   /** Por número que vai mandar */
   porLoja: { loja: string; n: number; teto: number; jaHoje: number; naFila: number }[];
-  /** Contagem por faixa, só com o filtro de loja aplicado (pra escolher a faixa) */
+  /** Contagem por faixa com os outros filtros (menos faixa), pra mostrar nos botões */
   faixas: Record<FaixaCliente, number>;
+  /** Contagem por loja com os outros filtros (menos loja) */
+  lojas: Record<string, number>;
   amostra: { nome: string; faixa: FaixaCliente; total: number; compras: number; ultima?: string; loja?: string }[];
-  /** Texto de exemplo, renderizado para a primeira cliente */
-  exemplo?: string;
+  /** A mensagem renderizada para as primeiras clientes, alternando as versões */
+  exemplos: { nome: string; loja: string; texto: string }[];
   /** Minutos que leva no mínimo, pelo intervalo mínimo entre mensagens do mesmo número */
   minimoMin: number;
   modoSombra: boolean;
 }
 
-function noFiltro(base: BaseCrm, c: Cliente, p: Perfil | undefined, f: FiltroCampanha, hoje: string, comFaixa = true): boolean {
-  if (f.lojas.length && !f.lojas.includes(p?.loja ?? "")) return false;
-  if (comFaixa && f.faixas.length && !f.faixas.includes(p?.faixa ?? "Sem compra")) return false;
+function noFiltro(c: Cliente, p: Perfil | undefined, f: FiltroCampanha, hoje: string, saldo: (id: string) => number, ignorar?: "faixa" | "loja"): boolean {
+  if (ignorar !== "loja" && f.lojas.length && !f.lojas.includes(p?.loja ?? "")) return false;
+  if (ignorar !== "faixa" && f.faixas.length && !f.faixas.includes(p?.faixa ?? "Sem compra")) return false;
   if (f.semComprarDias && (!p?.ultima || p.ultima > somarDias(hoje, -f.semComprarDias))) return false;
   if (f.compraramDias && (!p?.ultima || p.ultima <= somarDias(hoje, -f.compraramDias))) return false;
   if (f.gastoMinimo && (p?.total ?? 0) < f.gastoMinimo) return false;
   if (f.aniversariantes && c.nascimento?.slice(5, 7) !== hoje.slice(5, 7)) return false;
-  if (f.comSaldo && saldoDe(base, c.id, hoje) <= 0) return false;
+  if (f.comSaldo && saldo(c.id) <= 0) return false;
   return true;
+}
+
+/** Saldo de cashback de todas de uma vez (agrupando os movimentos antes). */
+function saldos(base: BaseCrm, hoje: string): (id: string) => number {
+  let mapa: Map<string, number> | null = null;
+  return (id) => {
+    if (!mapa) {
+      mapa = new Map();
+      const grupos = new Map<string, BaseCrm["cashback"]>();
+      for (const m of base.cashback) (grupos.get(m.clienteId) ?? grupos.set(m.clienteId, []).get(m.clienteId)!).push(m);
+      for (const [cid, movs] of grupos) mapa.set(cid, saldoDe({ ...base, cashback: movs }, cid, hoje));
+    }
+    return mapa.get(id) ?? 0;
+  };
 }
 
 /** Quem recebe, já com as regras de envio aplicadas, das que mais gastaram para as que menos. */
 function selecionar(base: BaseCrm, f: FiltroCampanha) {
   const hoje = hojeSp();
   const prf = perfis(base, hoje);
+  const saldo = saldos(base, hoje);
   const faixas = { Ouro: 0, Prata: 0, Bronze: 0, Nova: 0, Parada: 0, "Sem compra": 0 } as Record<FaixaCliente, number>;
+  const lojas: Record<string, number> = {};
   const alvo: { c: Cliente; p: Perfil }[] = [];
   for (const c of base.clientes) {
     const p = prf.get(c.id)!;
-    if (!noFiltro(base, c, p, f, hoje, false)) continue;
-    faixas[p.faixa]++;
-    if (f.faixas.length && !f.faixas.includes(p.faixa)) continue;
-    alvo.push({ c, p });
+    if (noFiltro(c, p, f, hoje, saldo, "faixa")) faixas[p.faixa]++;
+    if (noFiltro(c, p, f, hoje, saldo, "loja")) lojas[p.loja ?? ""] = (lojas[p.loja ?? ""] ?? 0) + 1;
+    if (noFiltro(c, p, f, hoje, saldo)) alvo.push({ c, p });
   }
   alvo.sort((a, b) => b.p.total - a.p.total);
   const puladas: Record<string, number> = {};
-  const ok: { c: Cliente; p: Perfil; loja: string }[] = [];
-  const limite = f.limite && f.limite > 0 ? f.limite : Infinity;
+  const semNumero: Record<string, number> = {};
+  const podem: { c: Cliente; p: Perfil; loja: string }[] = [];
   for (const x of alvo) {
-    if (ok.length >= limite) {
-      puladas["acima do limite de clientes"] = (puladas["acima do limite de clientes"] ?? 0) + 1;
+    const motivo = motivoBloqueio(base, x.c, "avulsa");
+    if (motivo) {
+      puladas[motivo] = (puladas[motivo] ?? 0) + 1;
       continue;
     }
-    let motivo = motivoBloqueio(base, x.c, "avulsa");
-    const loja = motivo ? undefined : lojaDeEnvio(base, x.p.loja);
-    if (!motivo && !loja) motivo = x.p.loja && x.p.loja !== "Site" ? `loja ${x.p.loja} ainda sem número` : "nenhum número de WhatsApp configurado";
-    if (motivo) puladas[motivo] = (puladas[motivo] ?? 0) + 1;
-    else ok.push({ ...x, loja: loja! });
+    const loja = lojaDeEnvio(base, x.p.loja);
+    if (!loja) {
+      if (x.p.loja && x.p.loja !== "Site") semNumero[x.p.loja] = (semNumero[x.p.loja] ?? 0) + 1;
+      else puladas["nenhum número de WhatsApp ligado"] = (puladas["nenhum número de WhatsApp ligado"] ?? 0) + 1;
+      continue;
+    }
+    podem.push({ ...x, loja });
   }
-  return { alvo, ok, puladas, faixas, hoje };
+  const limite = f.limite && f.limite > 0 ? f.limite : Infinity;
+  const ok = podem.slice(0, limite);
+  const fora: Previa["fora"] = Object.entries(puladas).map(([motivo, n]) => ({ motivo, n }));
+  const nSem = Object.values(semNumero).reduce((a, b) => a + b, 0);
+  if (nSem) fora.push({ motivo: "loja ainda sem WhatsApp no CRM", n: nSem, detalhe: Object.entries(semNumero).map(([loja, n]) => ({ loja, n })).sort((a, b) => b.n - a.n) });
+  fora.sort((a, b) => b.n - a.n);
+  return { alvo, podem, ok, puladas: { ...puladas, ...Object.fromEntries(Object.entries(semNumero).map(([l, n]) => [`loja ${l} ainda sem número`, n])) }, fora, faixas, lojas, hoje };
 }
 
 /** Variáveis de uma cliente: vendedora da loja, saldo de cashback e quando vence. */
@@ -79,16 +108,16 @@ function variaveisDe(base: BaseCrm, c: Cliente, loja: string, hoje: string) {
 }
 
 export function previa(base: BaseCrm, f: FiltroCampanha, variacoes: string[] = [], oferta?: string): Previa {
-  const { alvo, ok, puladas, faixas, hoje } = selecionar(base, f);
+  const { alvo, podem, ok, fora, faixas, lojas, hoje } = selecionar(base, f);
   const porLoja = new Map<string, number>();
   for (const x of ok) porLoja.set(x.loja, (porLoja.get(x.loja) ?? 0) + 1);
-  const primeira = ok[0];
-  const texto = variacoes.map((t) => t.trim()).find(Boolean);
+  const textos = variacoes.map((t) => t.trim()).filter(Boolean);
   const maior = Math.max(0, ...porLoja.values());
   return {
     noFiltro: alvo.length,
+    podem: podem.length,
     recebem: ok.length,
-    puladas,
+    fora,
     porLoja: Array.from(porLoja, ([loja, n]) => {
       const num = base.config.numeros.find((x) => x.loja === loja);
       return {
@@ -100,11 +129,14 @@ export function previa(base: BaseCrm, f: FiltroCampanha, variacoes: string[] = [
       };
     }),
     faixas,
+    lojas,
     amostra: ok.slice(0, 8).map(({ c, p }) => ({ nome: c.nome, faixa: p.faixa, total: p.total, compras: p.compras, ultima: p.ultima, loja: p.loja })),
-    exemplo:
-      primeira && texto
-        ? renderizar(texto, primeira.c, primeira.p.loja ?? primeira.loja, { ...variaveisDe(base, primeira.c, primeira.p.loja ?? primeira.loja, hoje), oferta, codigo: oferta ? "AB12CD" : undefined })
-        : undefined,
+    exemplos: textos.length
+      ? ok.slice(0, 6).map((x, i) => {
+          const ref = x.p.loja ?? x.loja;
+          return { nome: x.c.nome, loja: ref, texto: renderizar(textos[i % textos.length], x.c, ref, { ...variaveisDe(base, x.c, ref, hoje), oferta, codigo: oferta ? "AB12CD" : undefined }) };
+        })
+      : [],
     minimoMin: Math.ceil((maior * base.config.intervaloMinSeg) / 60),
     modoSombra: base.config.modoSombra,
   };

@@ -5,13 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import { type Resumo, api } from "@/components/crm/comum";
 import { VisaoGeral } from "@/components/crm/VisaoGeral";
 import { Clientes } from "@/components/crm/Clientes";
-import { Mensagens } from "@/components/crm/Mensagens";
 import { Configurar } from "@/components/crm/Configurar";
 import { Campanhas } from "@/components/crm/Campanhas";
 import type { FiltroCampanha } from "@/lib/crm/tipos";
 import { Analise } from "@/components/crm/Analise";
 
-type Aba = "geral" | "campanhas" | "clientes" | "mensagens" | "analise" | "configurar";
+type Aba = "geral" | "campanhas" | "clientes" | "analise" | "configurar";
 
 /** CRM das lojas físicas: clientes, cashback e mensagens de WhatsApp. */
 export default function Crm() {
@@ -52,7 +51,7 @@ export default function Crm() {
         <NavPrincipal atual="/crm" />
         <span className="updated">
           <a href="/crm/loja" target="_blank" rel="noreferrer">
-            tela do caixa
+            painel das lojas
           </a>
         </span>
       </div>
@@ -69,7 +68,6 @@ export default function Crm() {
                 ["geral", "Visão geral"],
                 ["campanhas", "Campanhas"],
                 ["clientes", "Clientes"],
-                ["mensagens", "Mensagens"],
                 ["analise", "Análise"],
                 ["configurar", "Configurar"],
               ] as [Aba, string][]
@@ -81,10 +79,9 @@ export default function Crm() {
           </div>
           {aba === "geral" && <VisaoGeral />}
           {aba === "campanhas" && (
-            <Campanhas lojas={r.lojas} filtroInicial={filtroCampanha} limparFiltroInicial={() => setFiltroCampanha(undefined)} irPara={setAba} />
+            <Campanhas lojas={r.lojas} filtroInicial={filtroCampanha} limparFiltroInicial={() => setFiltroCampanha(undefined)} irPara={setAba} recarregar={carregar} />
           )}
           {aba === "clientes" && <Clientes r={r} recarregar={carregar} novaCampanha={novaCampanha} />}
-          {aba === "mensagens" && <Mensagens recarregar={carregar} />}
           {aba === "analise" && <Analise validade={r.validade} />}
           {aba === "configurar" && <Configurar r={r} recarregar={carregar} />}
         </>

@@ -123,12 +123,21 @@ Análise mostra qual campanha trouxe cliente de verdade.
 
 ## Análise
 
-A aba **Análise** calcula da base: % de clientes com celular e com
-aniversário, % de vendas com cliente identificado (por loja e por
-vendedora), taxa de recompra e em quantos dias ela acontece (pra calibrar a
-validade do cashback), faixas RFM (Ouro, Prata, Bronze, Nova, Parada) com
-receita de cada uma, resultado por campanha (resposta, SAIR, código usado,
-compra em 14 dias) e o extrato geral do cashback.
+A aba **Análise** mostra: clientes ativas e gasto médio no ano, recompra,
+onde está o dinheiro (cada faixa: % das clientes contra % da receita), em
+quantos dias a cliente volta comparado com a validade do cashback, o que
+aconteceu com o cashback creditado, receita e cobertura de celular por
+loja, tempo de resposta por loja, % de celular por vendedora e o resultado
+das mensagens.
+
+A aba **Clientes** abre com as faixas (Ouro, Prata, Bronze, Nova, Parada,
+Sem compra) como filtro, mais loja, situação, busca e ordem. "Criar campanha
+com essas" leva os filtros pra uma campanha nova.
+
+O tempo de resposta conta toda conversa, inclusive quando a cliente chama
+primeiro. "Obrigada", "ok", emoji e figurinha não abrem espera; mensagem
+automática do WhatsApp Business (o mesmo texto mandado pra 5+ conversas)
+não conta como resposta; vale a hora em que a mensagem foi mandada.
 
 ## Visão geral (painel gerencial)
 
@@ -164,7 +173,10 @@ com as suas, em intervalos irregulares. O que cair fora do horário de envio
 ou passar do teto do dia fica para o próximo horário. Cada campanha mostra
 entregues, lidas, respostas, SAIR, código usado e quem comprou em 14 dias;
 "Parar campanha" cancela o que ainda não saiu. Embaixo, o resultado das
-automáticas nos últimos 30 dias.
+automáticas nos últimos 30 dias. Quatro ideias prontas (boas clientes
+sumidas, cashback esquecido, segunda compra, lançamento) já trazem público e
+texto pra ajustar. "Fila de envio" mostra o que o sistema tem pra mandar,
+o que deu erro e o que ficou simulado; as conversas em si ficam na WA-AKG.
 
 ## Shopify (site)
 
@@ -192,21 +204,14 @@ diagnóstico, o app precisa da permissão `read_customers`.
 Cashback de compra no site é opcional (Configurar → Cashback). Faz sentido
 se a ideia é trazer a cliente do site para a loja.
 
-## Caixa da loja
+## Painel da loja
 
-`/crm/loja?k=CODIGO` (o mesmo `TV_CODE` da tela de metas). No celular ou
-tablet da loja, duas abas. **Caixa**: buscar a cliente por celular, CPF ou
-nome; cadastrar na hora com o aceite de mensagens; ver saldo; registrar
-resgate; dar baixa num código de oferta. **Minha loja**: o % de clientes da
-loja com celular (e a posição no ranking das lojas), o informativo de por
-que pedir o celular, e quem dá pra chamar esta semana (cashback vencendo e
-aniversariantes do mês, com botão direto pro WhatsApp). O resgate aqui só
-registra no CRM, o desconto na venda do TOTVS continua sendo lançado pela
-vendedora.
-
-A cliente também pode receber um **código de resgate** gerado na ficha dela
-(vale 7 dias, uma vez só): ela mostra no caixa, a vendedora digita, e o
-sistema confere.
+`/crm/loja?k=CODIGO_DA_TV&loja=Centro`, pra gerente e vendedoras (o código
+é o mesmo da tela de metas). Não é caixa: venda e cashback continuam no
+PDV. Mostra quem está esperando resposta no WhatsApp (com botão pra abrir a
+conversa), conversas do dia, tempo de resposta, % das vendas de 30 dias com
+celular semana a semana, o ranking das lojas nas duas coisas e o % de cada
+vendedora. Atualiza sozinho a cada minuto.
 
 ## Automações
 

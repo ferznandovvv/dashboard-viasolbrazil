@@ -4,7 +4,8 @@
  * loja e por vendedora, e o que as campanhas estão rendendo.
  */
 
-import { diasEntre, hojeSp } from "./base";
+import { diasEntre, hojeSp, somarDias } from "./base";
+import { resumoAtendimento } from "./atendimento";
 import type { BaseCrm, Venda } from "./tipos";
 import { faixaDe } from "./perfil";
 
@@ -18,6 +19,8 @@ const mediana = (v: number[]) => {
 export interface Analise {
   periodo: { de?: string; ate?: string; meses: number };
   base: { clientes: number; comTelefone: number; comAniversario: number; vendasIdentificadas: number; vendasTotal: number };
+  /** Últimos 12 meses: clientes que compraram, receita identificada e gasto médio por cliente */
+  ano: { ativas: number; receita: number; gastoMedio: number; ticket: number; compradoras2x: number };
   recompra: {
     /** Clientes cuja primeira compra tem pelo menos 180 dias */
     elegiveis: number;
@@ -30,8 +33,9 @@ export interface Analise {
     /** Quantas voltam dentro do prazo de validade do cashback configurado */
     dentroDaValidade: number | null;
   };
-  rfm: { faixa: string; descricao: string; clientes: number; receita: number; pctReceita: number; ticket: number }[];
-  porLoja: { loja: string; vendas: number; identificadas: number; pctIdentificadas: number; clientes: number; comTelefone: number; pctTelefone: number }[];
+  rfm: { faixa: string; descricao: string; clientes: number; pctClientes: number; receita: number; pctReceita: number; ticket: number }[];
+  porLoja: { loja: string; vendas: number; receita: number; ticket: number; identificadas: number; pctIdentificadas: number; clientes: number; comTelefone: number; pctTelefone: number }[];
+  atendimento: { loja: string; conversas: number; medianaMin: number | null; rapidas: number | null; lentas: number }[];
   porVendedora: { vendedora: string; loja: string; vendas: number; identificadas: number; pctIdentificadas: number; comTelefone: number; pctTelefone: number }[];
   campanhas: { campanha: string; enviadas: number; respondidas: number; sair: number; codigosUsados: number; compraram14d: number; receita14d: number }[];
   cashback: { creditado: number; resgatado: number; expirado: number; emAberto: number; taxaResgate: number | null };
@@ -92,7 +96,7 @@ export function analisar(base: BaseCrm): Analise {
   }
   const linhaRfm = (faixa: string, descricao: string, v: number[]) => {
     const receita = v.reduce((s, x) => s + x, 0);
-    return { faixa, descricao, clientes: v.length, receita: arred(receita, 2), pctReceita: receitaTotal ? arred((receita / receitaTotal) * 100) : 0, ticket: v.length ? arred(receita / v.length, 2) : 0 };
+    return { faixa, descricao, clientes: v.length, pctClientes: porCliente.size ? arred((v.length / porCliente.size) * 100) : 0, receita: arred(receita, 2), pctReceita: receitaTotal ? arred((receita / receitaTotal) * 100) : 0, ticket: v.length ? arred(receita / v.length, 2) : 0 };
   };
   const rfm = [
     linhaRfm("Ouro", "3+ compras ou R$ 1.500+, ativa no último ano", faixas.ouro),
@@ -104,11 +108,12 @@ export function analisar(base: BaseCrm): Analise {
 
   // Cobertura por loja e por vendedora: a venda tem cliente? o cliente tem telefone?
   const telefoneDe = new Map(base.clientes.map((c) => [c.id, Boolean(c.telefone)]));
-  const lojaAgg = new Map<string, { vendas: number; identificadas: number; clientes: Set<string>; comTelefone: Set<string> }>();
+  const lojaAgg = new Map<string, { vendas: number; receita: number; identificadas: number; clientes: Set<string>; comTelefone: Set<string> }>();
   const vendAgg = new Map<string, { loja: string; vendas: number; identificadas: number; comTelefone: number }>();
   for (const v of vendas) {
-    const l = lojaAgg.get(v.loja) ?? lojaAgg.set(v.loja, { vendas: 0, identificadas: 0, clientes: new Set(), comTelefone: new Set() }).get(v.loja)!;
+    const l = lojaAgg.get(v.loja) ?? lojaAgg.set(v.loja, { vendas: 0, receita: 0, identificadas: 0, clientes: new Set(), comTelefone: new Set() }).get(v.loja)!;
     l.vendas++;
+    l.receita += v.valor;
     if (v.clienteId) {
       l.identificadas++;
       l.clientes.add(v.clienteId);
@@ -128,6 +133,8 @@ export function analisar(base: BaseCrm): Analise {
   const porLoja = Array.from(lojaAgg, ([loja, l]) => ({
     loja,
     vendas: l.vendas,
+    receita: arred(l.receita, 2),
+    ticket: l.vendas ? arred(l.receita / l.vendas, 2) : 0,
     identificadas: l.identificadas,
     pctIdentificadas: l.vendas ? arred((l.identificadas / l.vendas) * 100) : 0,
     clientes: l.clientes.size,
@@ -184,8 +191,32 @@ export function analisar(base: BaseCrm): Analise {
     taxaResgate: encerrado ? arred((resgatado / encerrado) * 100) : null,
   };
 
+  // Últimos 12 meses
+  const anoAtras = somarDias(hoje, -365);
+  let ativas = 0;
+  let receitaAno = 0;
+  let vendasAno = 0;
+  let duas = 0;
+  for (const l of porCliente.values()) {
+    const doAno = l.filter((v) => v.data.slice(0, 10) > anoAtras);
+    if (!doAno.length) continue;
+    ativas++;
+    vendasAno += doAno.length;
+    receitaAno += doAno.reduce((s, v) => s + v.valor, 0);
+    if (doAno.length >= 2) duas++;
+  }
+  const ano = { ativas, receita: arred(receitaAno, 2), gastoMedio: ativas ? arred(receitaAno / ativas, 2) : 0, ticket: vendasAno ? arred(receitaAno / vendasAno, 2) : 0, compradoras2x: duas };
+
+  const at = resumoAtendimento(base, 30);
+  const atendimento = at.lojas
+    .filter((l) => l.mensagensClientes > 0)
+    .map((l) => ({ loja: l.loja, conversas: l.conversas, medianaMin: l.medianaMin, rapidas: l.respondidas ? arred((l.rapidas / l.respondidas) * 100, 0) : null, lentas: l.lentas }))
+    .sort((a, b) => (a.medianaMin ?? 9999) - (b.medianaMin ?? 9999));
+
   return {
     periodo: { de, ate, meses },
+    ano,
+    atendimento,
     base: {
       clientes: base.clientes.length,
       comTelefone: base.clientes.filter((c) => c.telefone).length,
