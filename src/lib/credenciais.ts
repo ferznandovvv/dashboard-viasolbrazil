@@ -64,7 +64,9 @@ export function detalheCredenciais(nomes: string[]): Record<string, { final: str
     nomes.map((n) => {
       const v = (process.env[n] ?? "").trim();
       if (vazio(v)) return [n, null];
-      return [n, { final: v.length > 6 ? `…${v.slice(-4)}` : "•••", origem: salvas[n]?.trim() === v ? "tela" : "arquivo .env" }];
+      // Endereço não é segredo: mostra inteiro
+      const final = n.endsWith("_URL") ? v : v.length > 6 ? `…${v.slice(-4)}` : "•••";
+      return [n, { final, origem: salvas[n]?.trim() === v ? "tela" : "arquivo .env" }];
     })
   );
 }

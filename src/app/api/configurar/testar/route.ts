@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { limparCache } from "@/lib/cache";
-import { getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { env } from "@/lib/env";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
@@ -12,6 +13,96 @@ import type { ChannelResult } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+/**
+ * Login da TOTVS passo a passo, mostrando o que a TOTVS respondeu de fato
+ * (código HTTP e o começo da resposta). Serve para descobrir o que mudou
+ * quando a TOTVS atualiza: endereço, caminho do login ou forma de entrar.
+ */
+async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; detalhes: string[] }> {
+  const det: string[] = [];
+  if (!totvsConfigured()) return { ok: false, mensagem: "Faltam chaves: Client ID, secret, usuário e senha.", detalhes: det };
+  const base = totvsBaseUrl();
+  det.push(`Endereço: ${base}`);
+  const resumo = (status: number, texto: string) => `HTTP ${status} — ${texto.replace(/\s+/g, " ").slice(0, 280)}`;
+  const tentar = async (rotulo: string, url: string, corpo: Record<string, string>) => {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(corpo),
+        cache: "no-store",
+      });
+      const t = await r.text();
+      det.push(`${rotulo}: ${resumo(r.status, t)}`);
+      let token = "";
+      try {
+        token = (JSON.parse(t) as { access_token?: string }).access_token ?? "";
+      } catch {
+        /* não é JSON */
+      }
+      return token;
+    } catch (e) {
+      det.push(`${rotulo}: não conectou — ${e instanceof Error ? e.message : e}`);
+      return "";
+    }
+  };
+
+  const credenciais = {
+    client_id: env("TOTVS_CLIENT_ID"),
+    client_secret: env("TOTVS_CLIENT_SECRET"),
+    username: env("TOTVS_USERNAME"),
+    password: env("TOTVS_PASSWORD"),
+  };
+  const urlToken = `${base}/api/totvsmoda/authorization/v2/token`;
+  // 1) Como sempre funcionou: usuário e senha
+  let token = await tentar("Login (usuário e senha)", urlToken, { grant_type: "password", ...credenciais });
+  // 2) Algumas versões só aceitam as credenciais do app
+  if (!token)
+    token = await tentar("Login (só client id/secret)", urlToken, {
+      grant_type: "client_credentials",
+      client_id: credenciais.client_id,
+      client_secret: credenciais.client_secret,
+    });
+  if (!token) {
+    // 3) O caminho do login mudou? O manual da API diz quais existem
+    try {
+      const r = await fetch(`${base}/api/totvsmoda/authorization/v2/swagger/v1/swagger.json`, { cache: "no-store" });
+      const t = await r.text();
+      const caminhos = r.ok ? Object.keys((JSON.parse(t) as { paths?: object }).paths ?? {}) : [];
+      det.push(r.ok ? `Caminhos de login no manual: ${caminhos.join(", ") || "nenhum"}` : `Manual do login: ${resumo(r.status, t)}`);
+    } catch (e) {
+      det.push(`Manual do login: não conectou — ${e instanceof Error ? e.message : e}`);
+    }
+    const tudo = det.join(" ");
+    const mensagem = /não conectou/.test(tudo) && !/HTTP/.test(tudo)
+      ? `Não consegui falar com a TOTVS em ${base}. Sem internet ou o endereço mudou — veja o novo com a TOTVS e coloque em "Endereço da API".`
+      : /HTTP 404/.test(tudo)
+        ? "O endereço do login não existe mais (404). A atualização deve ter mudado o endereço da API — peça o novo à TOTVS."
+        : /invalid_client|unauthorized_client/i.test(tudo)
+          ? "A TOTVS não reconhece o Client ID / secret. Confira na LOGFC006 se o app está ativo e se o secret foi copiado inteiro."
+          : /invalid_grant/i.test(tudo)
+            ? "Client ID e secret aceitos, mas usuário ou senha recusados (ADMFM026) — ou o usuário perdeu a permissão de API."
+            : "A TOTVS recusou o login. Veja abaixo o que ela respondeu.";
+    return { ok: false, mensagem, detalhes: det };
+  }
+
+  // Login ok: testa a busca de notas com o token recém-obtido
+  const hoje = todaySpKey();
+  try {
+    const r = await totvsFetch("/api/totvsmoda/fiscal/v2/invoices/search", {
+      filter: { branchCodeList: [1], operationType: "Output", change: { startDate: `${hoje}T00:00:00`, endDate: `${hoje}T23:59:59` } },
+      page: 1,
+      pageSize: 1,
+    });
+    det.push(`Busca de notas: ${resumo(r.status, r.text)}`);
+    if (r.status !== 200) return { ok: false, mensagem: "Login OK, mas a busca de notas falhou — a atualização pode ter mudado essa parte da API.", detalhes: det };
+  } catch (e) {
+    det.push(`Busca de notas: ${e instanceof Error ? e.message : e}`);
+    return { ok: false, mensagem: "Login OK, mas a busca de notas deu erro.", detalhes: det };
+  }
+  return { ok: true, mensagem: "Login na TOTVS OK e a busca de notas respondeu.", detalhes: det };
+}
 
 /** Resume o resultado de um canal de vendas em uma frase. */
 function canal(r: ChannelResult): { ok: boolean; mensagem: string } {
@@ -30,28 +121,7 @@ export async function POST(req: NextRequest) {
   const hoje = todaySpKey();
   const semana = new Date(Date.now() - 7 * 86400000);
   try {
-    if (id === "totvs") {
-      if (!totvsConfigured()) return NextResponse.json({ ok: false, mensagem: "Faltam chaves: Client ID, secret, usuário e senha." });
-      try {
-        await getTotvsToken();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "erro";
-        return NextResponse.json({
-          ok: false,
-          mensagem:
-            msg === "fetch failed"
-              ? `Não consegui falar com a TOTVS em ${totvsBaseUrl()} (sem internet ou endereço errado).`
-              : `A TOTVS recusou o login: ${msg}. Confira Client ID e secret (tela LOGFC006) e usuário/senha.`,
-        });
-      }
-      const r = await totvsFetch("/api/totvsmoda/fiscal/v2/invoices/search", {
-        filter: { branchCodeList: [1], operationType: "Output", change: { startDate: `${hoje}T00:00:00`, endDate: `${hoje}T23:59:59` } },
-        page: 1,
-        pageSize: 1,
-      });
-      if (r.status !== 200) return NextResponse.json({ ok: false, mensagem: `Login OK, mas a busca de notas falhou: HTTP ${r.status} — ${r.text.slice(0, 200)}` });
-      return NextResponse.json({ ok: true, mensagem: "Login na TOTVS OK e a busca de notas respondeu." });
-    }
+    if (id === "totvs") return NextResponse.json(await diagnosticoTotvs());
     if (id === "shopify") return NextResponse.json(canal(await fetchShopifyOrders(semana)));
     if (id === "tiktok") return NextResponse.json(canal(await fetchTikTokOrders(semana)));
     if (id === "meli") return NextResponse.json(canal(await fetchMeliOrders(semana)));

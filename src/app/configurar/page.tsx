@@ -33,14 +33,14 @@ export default function Configurar() {
   const [valores, setValores] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState<string | null>(null);
   const [aviso, setAviso] = useState("");
-  const [testes, setTestes] = useState<Record<string, { ok: boolean; mensagem: string } | "testando">>({});
+  const [testes, setTestes] = useState<Record<string, { ok: boolean; mensagem: string; detalhes?: string[] } | "testando">>({});
 
   /** Testa a integração agora, com as chaves que estão valendo. */
   const testar = async (id: string) => {
     setTestes((t) => ({ ...t, [id]: "testando" }));
     try {
       const r = await fetch(`/api/configurar/testar?id=${id}`, { method: "POST" });
-      const j = (await r.json()) as { ok: boolean; mensagem: string };
+      const j = (await r.json()) as { ok: boolean; mensagem: string; detalhes?: string[] };
       setTestes((t) => ({ ...t, [id]: j }));
     } catch {
       setTestes((t) => ({ ...t, [id]: { ok: false, mensagem: "O painel não respondeu." } }));
@@ -92,8 +92,8 @@ export default function Configurar() {
   if (!estado) return <main className="wrap"><div className="empty">Carregando…</div></main>;
 
   const pronta = (i: Integracao) =>
-    [...i.campos.map((c) => c.nome), ...(i.geradas ?? [])].every((n) => estado.situacao[n]);
-  const temCampos = (i: Integracao) => i.campos.every((c) => estado.situacao[c.nome]);
+    [...i.campos.filter((c) => !c.opcional).map((c) => c.nome), ...(i.geradas ?? [])].every((n) => estado.situacao[n]);
+  const temCampos = (i: Integracao) => i.campos.filter((c) => !c.opcional).every((c) => estado.situacao[c.nome]);
 
   return (
     <main className="wrap">
@@ -166,7 +166,7 @@ export default function Configurar() {
                   {c.rotulo} {estado.situacao[c.nome] && <b className="ok">✓</b>}
                 </span>
                 <input
-                  type="password"
+                  type={c.visivel ? "text" : "password"}
                   autoComplete="off"
                   placeholder={estado.situacao[c.nome] ? "já salvo — deixe em branco para manter" : ""}
                   value={valores[c.nome] ?? ""}
@@ -201,6 +201,9 @@ export default function Configurar() {
               <div className={`config-teste ${(testes[i.id] as { ok: boolean }).ok ? "ok" : "falha"}`}>
                 {(testes[i.id] as { ok: boolean }).ok ? "✓ " : "✗ "}
                 {(testes[i.id] as { mensagem: string }).mensagem}
+                {!(testes[i.id] as { ok: boolean }).ok && ((testes[i.id] as { detalhes?: string[] }).detalhes?.length ?? 0) > 0 && (
+                  <pre className="config-detalhes">{(testes[i.id] as { detalhes: string[] }).detalhes.join("\n")}</pre>
+                )}
               </div>
             )}
           </div>

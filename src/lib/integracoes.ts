@@ -8,7 +8,7 @@ export interface Integracao {
   /** Para que serve, em uma linha */
   para: string;
   /** Chaves que a pessoa cola */
-  campos: { nome: string; rotulo: string; dica?: string }[];
+  campos: { nome: string; rotulo: string; dica?: string; opcional?: boolean; visivel?: boolean }[];
   /** Chaves que a autorização gera sozinha */
   geradas?: string[];
   /** Tela que faz a autorização, quando há */
@@ -25,6 +25,13 @@ export const INTEGRACOES: Integracao[] = [
       { nome: "TOTVS_CLIENT_SECRET", rotulo: "Client secret", dica: "Tela LOGFC006 do TOTVS" },
       { nome: "TOTVS_USERNAME", rotulo: "Usuário", dica: "Usuário do TOTVS (ADMFM026)" },
       { nome: "TOTVS_PASSWORD", rotulo: "Senha", dica: "Senha desse usuário" },
+      {
+        nome: "TOTVS_API_URL",
+        rotulo: "Endereço da API (só se a TOTVS mudar)",
+        dica: "Em branco = https://apitotvsmoda.bhan.com.br",
+        opcional: true,
+        visivel: true,
+      },
     ],
   },
   {
