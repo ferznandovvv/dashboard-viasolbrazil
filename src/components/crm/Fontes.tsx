@@ -89,6 +89,11 @@ function CardFonte({ titulo, fonte, rota, dicaVazia, ocupado, acao }: { titulo: 
               Sincronizar últimos 3 dias
             </button>
             <CargaHistorica desabilitado={p.rodando || ocupado} aoRodar={(de, ate) => acao("carga", () => api(rota, { method: "POST", body: JSON.stringify({ acao: "sincronizar", de, ate, creditar: false }) }))} />
+            {rota === "/api/crm/totvs" && (
+              <button className="link" disabled={p.rodando || ocupado} onClick={() => acao("tel", () => api(rota, { method: "POST", body: JSON.stringify({ acao: "telefones" }) }))} title="Relê o cadastro de quem está sem celular, olhando também o complemento e a referência do endereço">
+                procurar celular no endereço
+              </button>
+            )}
           </div>
         </>
       )}

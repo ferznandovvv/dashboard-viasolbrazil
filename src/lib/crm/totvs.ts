@@ -63,6 +63,8 @@ interface PessoaLida {
   nascimento?: string;
   telefone?: string;
   email?: string;
+  cidade?: string;
+  uf?: string;
   /** Marcado como cliente no TOTVS (e não só fornecedor, funcionária, representante) */
   ehCliente: boolean;
 }
@@ -72,20 +74,50 @@ export const NOME_GENERICO = /CONSUMIDOR|N[AÃ]O IDENTIFICAD|CLIENTE (PADR|BALC|
 /** Cadastro de funcionária com nome marcado: compra, mas não é cliente para mensagens. */
 export const NOME_FUNCIONARIA = /FUNCION[AÁ]RI|COLABORADOR|VENDEDOR[A]?\b|GERENTE|USO INTERNO/i;
 
+/**
+ * Celulares escritos em texto livre. Nas lojas o campo de telefone do TOTVS
+ * dá trabalho e as vendedoras anotam o celular no complemento do endereço
+ * ("16 982165086"); aqui achamos qualquer número com DDD no meio do texto.
+ */
+export function telefonesNoTexto(t?: string): string[] {
+  if (!t) return [];
+  const achados = t.match(/(?:\+?55[\s.-]*)?\(?\d{2}\)?[\s.-]*9?[\s.-]*\d{4}[\s.-]*\d{4}/g) ?? [];
+  return achados.map((x) => normalizarTelefone(x)).filter((n): n is string => Boolean(n));
+}
+
 /** Lê uma pessoa da API, tentando os nomes de campo prováveis. */
 function lerPessoa(p: Obj): PessoaLida {
   // Telefones: lista de objetos, ou campos soltos
-  let telefone: string | undefined;
+  const nums: string[] = [];
   const lista = (p.phones ?? p.telephones ?? p.phoneNumbers) as Obj[] | undefined;
   if (Array.isArray(lista)) {
-    const nums = lista
-      .map((t) => str(t, "number", "phoneNumber", "phone", "telephone", "value"))
-      .map((n) => normalizarTelefone(n))
-      .filter((n): n is string => Boolean(n));
-    // Prefere celular (DDD + 9)
-    telefone = nums.find((n) => n.length === 13 && n[4] === "9") ?? nums[0];
+    for (const t of lista) {
+      const n = normalizarTelefone(str(t, "number", "phoneNumber", "phone", "telephone", "value"));
+      if (n) nums.push(n);
+    }
   }
-  telefone ??= normalizarTelefone(str(p, "cellPhone", "cellphone", "mobilePhone", "mobile", "phoneNumber", "phone", "telephone"));
+  const solto = normalizarTelefone(str(p, "cellPhone", "cellphone", "mobilePhone", "mobile", "phoneNumber", "phone", "telephone"));
+  if (solto) nums.push(solto);
+  // Endereços: o celular costuma estar no complemento ou na referência; e dali vem a cidade
+  let cidade: string | undefined;
+  let uf: string | undefined;
+  const enderecos = (p.addresses ?? p.address) as Obj[] | Obj | undefined;
+  for (const e of Array.isArray(enderecos) ? enderecos : enderecos ? [enderecos] : []) {
+    for (const v of Object.values(e)) if (typeof v === "string") nums.push(...telefonesNoTexto(v));
+    cidade ??= str(e, "cityName", "city", "municipality", "municipalityName");
+    uf ??= str(e, "stateAbbreviation", "uf", "state", "stateCode");
+  }
+  // Observações (texto solto ou lista de objetos)
+  for (const k of ["observation", "observations", "comments", "notes"]) {
+    const v = p[k];
+    const itens = Array.isArray(v) ? v : [v];
+    for (const it of itens) {
+      if (typeof it === "string") nums.push(...telefonesNoTexto(it));
+      else if (it && typeof it === "object") for (const x of Object.values(it as Obj)) if (typeof x === "string") nums.push(...telefonesNoTexto(x));
+    }
+  }
+  // Prefere celular (DDD + 9)
+  const telefone = nums.find((n) => n.length === 13 && n[4] === "9") ?? nums[0];
   let email = str(p, "email", "mainEmail");
   const emails = (p.emails ?? p.emailAddresses) as Obj[] | undefined;
   if (!email && Array.isArray(emails)) email = str(emails[0] ?? {}, "email", "address", "value");
@@ -99,6 +131,8 @@ function lerPessoa(p: Obj): PessoaLida {
     nascimento: str(p, "birthDate", "birthday", "dateOfBirth")?.slice(0, 10),
     telefone,
     email,
+    cidade: cidade && cidade.length > 1 ? cidade : undefined,
+    uf: uf && uf.length === 2 ? uf.toUpperCase() : undefined,
     ehCliente,
   };
 }
@@ -107,7 +141,7 @@ const pessoaValida = (p: PessoaLida) => Boolean(p.nome) && p.ehCliente && !NOME_
 
 /** O que pedir junto do cadastro: telefones e e-mails vêm null sem isto. */
 let expandPessoa: string | null | undefined; // undefined = ainda não sabemos o que a API aceita
-const EXPANDS = ["phones,emails", "phones", null];
+const EXPANDS = ["phones,emails,addresses,observations", "phones,emails,addresses", "phones,addresses", "phones,emails", "phones", null];
 
 /** Consulta pessoas, descobrindo na primeira chamada qual `expand` a API aceita. */
 async function consultarPessoas(filter: Record<string, unknown>, pagina = 1): Promise<{ status: number; json: Record<string, unknown> | null; text: string }> {
@@ -298,7 +332,7 @@ async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: b
     const foraDoPerfil = new Set(pessoas.filter((p) => p.codigo && !pessoaValida(p)).map((p) => p.codigo!));
     for (const p of pessoas) {
       if (!pessoaValida(p)) continue;
-      const { nova } = salvarCliente(b, { nome: p.nome!, telefone: p.telefone, cpf: p.cpf, email: p.email, nascimento: p.nascimento, codigoTotvs: p.codigo }, "totvs");
+      const { nova } = salvarCliente(b, { nome: p.nome!, telefone: p.telefone, cpf: p.cpf, email: p.email, nascimento: p.nascimento, codigoTotvs: p.codigo, cidade: p.cidade, uf: p.uf }, "totvs");
       if (nova) progresso.clientesNovos++;
       else progresso.clientesAtualizados++;
     }
@@ -381,6 +415,57 @@ export async function sincronizarDiaria(): Promise<typeof progresso | null> {
   if (!totvsConfigured() || progresso.rodando) return null;
   const hoje = hojeSp();
   return sincronizar(somarDias(hoje, -3), hoje, { creditar: true, pessoasAlteradas: true });
+}
+
+/**
+ * Relê o cadastro de toda cliente do TOTVS que está sem celular no CRM,
+ * agora olhando também o endereço (complemento, referência). Roda uma vez
+ * sozinha depois da atualização e pelo botão em Configurar → Dados.
+ */
+export async function completarTelefones(): Promise<{ consultadas: number; achados: number; cidades: number }> {
+  if (!totvsConfigured()) throw new Error("TOTVS não está configurado.");
+  if (progresso.rodando) throw new Error("Já tem uma sincronização rodando.");
+  Object.assign(progresso, { rodando: true, etapa: "procurando celular nos cadastros", inicio: Date.now(), vendasNovas: 0, clientesNovos: 0, clientesAtualizados: 0, erro: undefined, fim: undefined });
+  try {
+    const base = await lerBase();
+    const codigos = base.clientes.filter((c) => c.codigoTotvs && (!c.telefone || !c.cidade)).map((c) => c.codigoTotvs!);
+    let achados = 0;
+    let cidades = 0;
+    for (let i = 0; i < codigos.length; i += 200) {
+      progresso.etapa = `procurando celular nos cadastros (${Math.min(i + 200, codigos.length)} de ${codigos.length})`;
+      const pessoas = await buscarPessoasPorCodigo(codigos.slice(i, i + 200));
+      await alterarBase((b) => {
+        for (const p of pessoas) {
+          const c = p.codigo ? b.clientes.find((x) => x.codigoTotvs === p.codigo) : undefined;
+          if (!c) continue;
+          if (!c.telefone && p.telefone && !b.clientes.some((x) => x.telefone === p.telefone)) {
+            c.telefone = p.telefone;
+            achados++;
+          }
+          if (!c.cidade && p.cidade) {
+            c.cidade = p.cidade;
+            c.uf ??= p.uf;
+            cidades++;
+          }
+          c.atualizadoEm = new Date().toISOString();
+        }
+      });
+      progresso.clientesAtualizados = achados;
+    }
+    await alterarBase((b) => {
+      b.config.telefonesNoEndereco = true;
+      b.config.ultimaSincTotvsResultado = `celular no endereço: ${achados} clientes ganharam celular (de ${codigos.length} consultadas)`;
+    });
+    progresso.etapa = "concluído";
+    return { consultadas: codigos.length, achados, cidades };
+  } catch (e) {
+    progresso.erro = e instanceof Error ? e.message : String(e);
+    progresso.etapa = "falhou";
+    throw e;
+  } finally {
+    progresso.rodando = false;
+    progresso.fim = Date.now();
+  }
 }
 
 /** Resposta crua de uma nota e de uma pessoa, para conferir os nomes dos campos. */

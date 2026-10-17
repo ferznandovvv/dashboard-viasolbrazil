@@ -388,7 +388,7 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
           <p>
             Na hora de fechar: <b>&quot;Me passa seu celular que eu já deixo seu cashback guardado no seu nome?&quot;</b> E aproveita pra pedir o aniversário.
           </p>
-          <p>Cadastra direto no PDV, com DDD. É o que conta pro número lá em cima.</p>
+          <p>No PDV, pode anotar no campo de celular ou no complemento do endereço, como vocês já fazem: só o número com DDD (16 98216-5086). O painel acha nos dois.</p>
         </div>
       </section>
     </>

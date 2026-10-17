@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { diagnostico, explorar, progresso, sincronizar } from "@/lib/crm/totvs";
+import { completarTelefones, diagnostico, explorar, progresso, sincronizar } from "@/lib/crm/totvs";
 import { hojeSp, somarDias } from "@/lib/crm/base";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,8 @@ export async function GET() {
 type Pedido =
   | { acao: "sincronizar"; de?: string; ate?: string; creditar?: boolean; pessoasAlteradas?: boolean }
   | { acao: "diag" }
-  | { acao: "explorar" };
+  | { acao: "explorar" }
+  | { acao: "telefones" };
 
 /**
  * Dispara a sincronização (roda em segundo plano; a tela acompanha pelo GET)
@@ -24,6 +25,12 @@ export async function POST(req: NextRequest) {
   try {
     if (p.acao === "diag") return NextResponse.json(await diagnostico());
     if (p.acao === "explorar") return NextResponse.json(await explorar());
+    if (p.acao === "telefones") {
+      if (progresso.rodando) return NextResponse.json({ erro: "Já tem uma sincronização rodando." }, { status: 409 });
+      void completarTelefones().catch(() => {});
+      await new Promise((r) => setTimeout(r, 300));
+      return NextResponse.json(progresso);
+    }
     if (p.acao === "sincronizar") {
       const hoje = hojeSp();
       const de = p.de ?? somarDias(hoje, -3);

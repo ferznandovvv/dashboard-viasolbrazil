@@ -326,6 +326,8 @@ export interface ConfigCrm {
   ultimaSincShopifyResultado?: string;
   sincShopifyDesde?: string;
   backupDir?: string;
+  /** Já procurou o celular no endereço de todas as clientes do TOTVS */
+  telefonesNoEndereco?: boolean;
   migracoes?: string[];
 }
 

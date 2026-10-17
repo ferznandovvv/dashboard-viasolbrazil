@@ -7,7 +7,7 @@
 
 import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
-import { sincronizarDiaria } from "./crm/totvs";
+import { completarTelefones, sincronizarDiaria } from "./crm/totvs";
 import { sincronizarShopifyDiaria } from "./crm/shopify";
 import { rodarAutomacoes } from "./crm/automacoes";
 import { processarFila } from "./crm/fila";
@@ -70,6 +70,15 @@ export function iniciarAgendador(): void {
   iniciado = true;
 
   const feitos = new Set<string>();
+
+  // Uma vez só: procura o celular que as lojas anotam no endereço do cadastro
+  setTimeout(() => {
+    lerBaseCrm()
+      .then((b) => {
+        if (!b.config.telefonesNoEndereco) void executarCrm("crm celular no endereço", () => completarTelefones());
+      })
+      .catch(() => {});
+  }, 90_000);
   setInterval(() => {
     const { dia, hora } = horaSp();
     for (const h of HORARIOS) {
