@@ -3,6 +3,8 @@
 import { Cabecalho } from "@/components/Moldura";
 import { Abas } from "@/components/Abas";
 import { Pessoas } from "@/components/configurar/Pessoas";
+import { Metas } from "@/components/configurar/Metas";
+import { Aparelhos } from "@/components/configurar/Aparelhos";
 import { useEffect, useState } from "react";
 import type { Integracao } from "@/lib/integracoes";
 
@@ -203,31 +205,57 @@ function Integracoes() {
   );
 }
 
-type AbaConfig = "integracoes" | "pessoas";
+const ABAS_CONFIG = [
+  { id: "integracoes", nome: "Integrações" },
+  { id: "metas", nome: "Metas das lojas" },
+  { id: "pessoas", nome: "Pessoas e acessos" },
+  { id: "aparelhos", nome: "TV e telas da loja" },
+  { id: "outras", nome: "CRM e financeiro" },
+] as const;
+type AbaConfig = (typeof ABAS_CONFIG)[number]["id"];
 
-/** Configurações do sistema num lugar só: integrações e quem entra. */
+/** Onde ficam as configurações que têm tela própria no módulo */
+function Outras() {
+  return (
+    <div className="pessoas">
+      <section className="card">
+        <h2>CRM</h2>
+        <p className="pessoas-ajuda">Cashback, automações, envio das mensagens, números de WhatsApp de cada loja e os textos.</p>
+        <a className="btn btn-sec btn-sm" href="/crm?aba=configurar">
+          Abrir as configurações do CRM
+        </a>
+      </section>
+      <section className="card">
+        <h2>Financeiro</h2>
+        <p className="pessoas-ajuda">Empresas, categorias e a pasta do backup ficam no Financeiro, na aba Cadastros.</p>
+        <a className="btn btn-sec btn-sm" href="/financeiro">
+          Abrir o Financeiro
+        </a>
+      </section>
+    </div>
+  );
+}
+
+/** Configurações do sistema num lugar só. */
 export default function Configuracoes() {
   const [aba, setAba] = useState<AbaConfig>("integracoes");
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("aba") === "pessoas") setAba("pessoas");
+    const a = new URLSearchParams(window.location.search).get("aba");
+    if (ABAS_CONFIG.some((x) => x.id === a)) setAba(a as AbaConfig);
   }, []);
   const mudar = (a: AbaConfig) => {
     setAba(a);
-    window.history.replaceState(null, "", a === "pessoas" ? "?aba=pessoas" : window.location.pathname);
+    window.history.replaceState(null, "", a === "integracoes" ? window.location.pathname : `?aba=${a}`);
   };
   return (
     <main className="wrap">
       <Cabecalho titulo="Configurações" />
-      <Abas
-        rotulo="Configurações"
-        abas={[
-          { id: "integracoes", nome: "Integrações" },
-          { id: "pessoas", nome: "Pessoas e acessos" },
-        ]}
-        atual={aba}
-        aoMudar={mudar}
-      />
-      {aba === "pessoas" ? <Pessoas /> : <Integracoes />}
+      <Abas rotulo="Configurações" abas={[...ABAS_CONFIG]} atual={aba} aoMudar={mudar} />
+      {aba === "integracoes" && <Integracoes />}
+      {aba === "metas" && <Metas />}
+      {aba === "pessoas" && <Pessoas />}
+      {aba === "aparelhos" && <Aparelhos />}
+      {aba === "outras" && <Outras />}
     </main>
   );
 }

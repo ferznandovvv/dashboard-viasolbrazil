@@ -50,7 +50,6 @@ export default function TvPage() {
         <div className="logo">
           <div>
             <span className="brand-word lg" role="img" aria-label="Via Sol" />
-            <span className="tag">vendas de hoje</span>
           </div>
         </div>
         {data && (
@@ -71,7 +70,7 @@ export default function TvPage() {
         <>
           <div className="tv-row">
             <div>
-              <div className="hero-label">Faturamento de hoje</div>
+              <h1 className="hero-label">Vendas de hoje</h1>
               <div className="hero">{brl.format(data.today.revenue)}</div>
             </div>
             <div className="tv-ch">

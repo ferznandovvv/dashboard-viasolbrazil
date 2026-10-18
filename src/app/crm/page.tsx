@@ -35,6 +35,12 @@ export default function Crm() {
     return () => clearInterval(t);
   }, [carregar]);
 
+  // Link direto para uma aba (Configurações › CRM abre ?aba=configurar)
+  useEffect(() => {
+    const a = new URLSearchParams(window.location.search).get("aba");
+    if (a === "geral" || a === "campanhas" || a === "clientes" || a === "analise" || a === "configurar") setAba(a);
+  }, []);
+
   const novaCampanha = (f: Partial<FiltroCampanha>) => {
     setFiltroCampanha(f);
     setAba("campanhas");

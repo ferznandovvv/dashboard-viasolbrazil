@@ -301,3 +301,27 @@
   .prod-cartao-lojas .negativo dd { color: var(--text-muted); }
   .prod-cartao-lojas .loja-sel { box-shadow: inset 0 0 0 1px var(--brand); }
 }
+
+/* ——— Configurações › Metas e aparelhos ——— */
+.metas-cfg { display: flex; flex-direction: column; gap: var(--e-4); }
+.metas-cfg-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: var(--e-4); }
+.metas-cfg-valor { display: flex; align-items: center; gap: var(--e-2); }
+.metas-cfg-valor span { color: var(--text-secondary); font-size: var(--fs-2); }
+.metas-cfg-valor input {
+  flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: var(--r-1); border: 1px solid var(--border);
+  background: var(--page); color: var(--text-primary); font: inherit; font-size: 15px; font-variant-numeric: tabular-nums;
+}
+.metas-cfg-ok { font-size: var(--fs-2); color: var(--good); font-weight: 600; align-self: center; }
+.pessoas-acoes .erro-campo { align-self: center; font-size: var(--fs-2); color: var(--critical); font-weight: 600; }
+.aparelhos-lista { list-style: none; display: flex; flex-direction: column; }
+.aparelhos-lista li {
+  display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) auto; align-items: center; gap: var(--e-3);
+  padding: var(--e-2) 0; border-top: 1px solid var(--border);
+}
+.aparelhos-lista li:first-child { border-top: 0; }
+.aparelhos-nome { font-weight: 600; font-size: var(--fs-3); }
+.aparelhos-url { font-size: var(--fs-2); color: var(--text-secondary); overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .aparelhos-lista li { grid-template-columns: 1fr auto; }
+  .aparelhos-url { grid-column: 1 / -1; grid-row: 2; }
+}
