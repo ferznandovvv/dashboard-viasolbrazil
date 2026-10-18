@@ -362,15 +362,11 @@ th.num { text-align: right; }
 @media (max-width: 640px) {
   .wrap { padding: 16px 12px 48px; }
 
-  /* Filtros numa linha só, rolável com o dedo */
-  .filters {
-    flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity;
-    margin: 0 -12px 16px; padding: 0 12px 4px; scrollbar-width: none;
-  }
-  .filters::-webkit-scrollbar { display: none; }
-  .filters button { scroll-snap-align: start; padding: 7px 14px; font-size: 13px; }
+  /* Filtros quebram em linhas: nenhuma opção fica escondida para fora da tela */
+  .filters { gap: 6px; margin-bottom: 16px; }
+  .filters button { padding: 8px 12px; font-size: 13px; }
   .custom-range input[type="date"] { flex: 1 1 130px; }
-  .custom-range .apply { flex: 1 1 100%; }
+  .custom-range label { display: contents; }
 
   .topbar { margin-bottom: 14px; }
   .brand-word { width: 170px; height: 24px; }

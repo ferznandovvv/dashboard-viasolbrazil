@@ -7,6 +7,7 @@ import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/v
 import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
 import { Cabecalho } from "@/components/Moldura";
 import { usePode } from "@/components/sessao";
+import { SeletorPeriodo } from "@/components/SeletorPeriodo";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli" | "shopee";
@@ -87,9 +88,6 @@ export default function Dashboard() {
   // Abre no dia de hoje, que é a busca mais leve; o mês vem depois, sozinho,
   // no pré-carregamento — quando você clicar nele já está pronto
   const [period, setPeriod] = useState<Period>(presets[0]);
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
   const [sel, setSel] = useState<string[]>([]);
   const [canal, setCanal] = useState<Canal | "">("");
   const [data, setData] = useState<DashboardData | null>(null);
@@ -113,6 +111,38 @@ export default function Dashboard() {
       atual.includes(nome) ? atual.filter((x) => x !== nome) : [...atual, nome]
     );
   };
+
+  // O endereço acompanha o detalhe aberto: o voltar do celular fecha o
+  // detalhe e dá para mandar o link de uma loja
+  const [enderecoLido, setEnderecoLido] = useState(false);
+  const lerEndereco = useCallback(() => {
+    const q = new URLSearchParams(window.location.search);
+    const ch = q.get("canal") as Canal | null;
+    if (ch && ONLINE.includes(ch)) {
+      setSel(["Site"]);
+      setCanal(ch);
+    } else {
+      setCanal("");
+      setSel(q.get("lojas")?.split(",").filter(Boolean) ?? []);
+    }
+  }, []);
+  useEffect(() => {
+    lerEndereco();
+    setEnderecoLido(true);
+    window.addEventListener("popstate", lerEndereco);
+    return () => window.removeEventListener("popstate", lerEndereco);
+  }, [lerEndereco]);
+  useEffect(() => {
+    if (!enderecoLido) return;
+    const q = new URLSearchParams();
+    if (canal) q.set("canal", canal);
+    else if (sel.length) q.set("lojas", sel.join(","));
+    const novo = q.size ? `?${q}` : "";
+    if (novo === window.location.search) return;
+    // Abrir um detalhe vira um passo no histórico; mexer dentro dele, não
+    const abrindo = !window.location.search && Boolean(novo);
+    window.history[abrindo ? "pushState" : "replaceState"](null, "", novo || window.location.pathname);
+  }, [sel, canal, enderecoLido]);
 
   useEffect(() => {
     try {
@@ -207,6 +237,20 @@ export default function Dashboard() {
   const lojasCh = data?.channels.find((c) => c.channel === "lojas");
   const totalAds = (data?.ads.spend ?? 0) + (data?.tiktokAds.spend ?? 0);
   const conectados = ONLINE.filter((id) => data?.channels.find((c) => c.channel === id)?.connected);
+
+  /** Card que abre o detalhe: clique, toque ou teclado (Enter ou espaço). */
+  const clicavel = (ativar: () => void, ligado: boolean) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-pressed": ligado,
+    onClick: ativar,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        ativar();
+      }
+    },
+  });
 
   /** Clicar num canal online filtra só ele; clicar de novo volta para tudo. */
   const filtrarCanal = (id: Canal) => {
@@ -353,41 +397,9 @@ export default function Dashboard() {
         )}
       </Cabecalho>
 
-      <div className="filters" role="group" aria-label="Período">
-        {presets.map((p) => (
-          <button
-            key={p.key}
-            className={period.key === p.key ? "active" : ""}
-            onClick={() => {
-              setCustomOpen(false);
-              setPeriod(p);
-            }}
-          >
-            {p.key}
-          </button>
-        ))}
-        <button
-          className={period.key === "custom" ? "active" : ""}
-          onClick={() => setCustomOpen((v) => !v)}
-        >
-          Personalizado
-        </button>
-      </div>
+      <SeletorPeriodo opcoes={presets} atual={period} aoMudar={setPeriod} />
 
-      {customOpen && (
-        <div className="custom-range">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-            <span className="muted">até</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-          <button
-            className="apply"
-            disabled={!customFrom || !customTo || customFrom > customTo}
-            onClick={() => setPeriod({ key: "custom", from: customFrom, to: customTo })}
-          >
-            Aplicar
-          </button>
-        </div>
-      )}
+      {sel.length === 0 && data && <p className="dica-toque">Toque numa loja ou num canal para ver o detalhe dele.</p>}
 
       {fetchError && <div className="card">{fetchError}</div>}
       {loading && !data && <div className="empty">Carregando…</div>}
@@ -508,12 +520,12 @@ export default function Dashboard() {
                 return (
                   <div
                     key={id}
-                    className={`channel-card clickable${ativo ? " sel" : ""}${
+                    className={`channel-card${c.connected ? " clickable" : ""}${ativo ? " sel" : ""}${
                       (canal && !ativo) || (sel.length > 0 && !sel.includes("Site")) ? " dim" : ""
                     }`}
                     style={{ ["--ch-color" as string]: meta.cssVar }}
-                    onClick={() => filtrarCanal(id)}
-                    title={ativo ? "Clique para tirar do filtro" : `Ver só ${meta.name}`}
+                    {...(c.connected ? clicavel(() => filtrarCanal(id), ativo) : {})}
+                    title={c.connected ? (ativo ? "Tirar do filtro" : `Ver só ${meta.name}`) : undefined}
                   >
                     <div className="head">
                       <span className="name">
@@ -521,7 +533,7 @@ export default function Dashboard() {
                         {id === "shopify" ? "Site" : meta.name}
                       </span>
                       {ativo ? (
-                        <span className="badge sel-badge">✕</span>
+                        <span className="badge sel-badge" aria-hidden="true">✕</span>
                       ) : c.error ? (
                         <span className="badge err">erro</span>
                       ) : null}
@@ -577,15 +589,15 @@ export default function Dashboard() {
                     sel.length > 0 && !ativo ? " dim" : ""
                   }`}
                   style={{ ["--ch-color" as string]: u.cor }}
-                  onClick={() => alternar(u.nome)}
-                  title={ativo ? "Clique para tirar do filtro" : "Clique para somar ao filtro"}
+                  {...clicavel(() => alternar(u.nome), ativo)}
+                  title={ativo ? "Tirar do filtro" : "Ver esta loja (toque em outra para somar)"}
                 >
                   <div className="head">
                     <span className="name">
                       <span className="ch-dot" style={{ background: u.cor }} />
                       {u.nome}
                     </span>
-                    {ativo && <span className="badge sel-badge">✕</span>}
+                    {ativo && <span className="badge sel-badge" aria-hidden="true">✕</span>}
                   </div>
                   <div className="rev">
                     {brl.format(u.receita)} <Delta now={u.receita} before={u.anterior} />

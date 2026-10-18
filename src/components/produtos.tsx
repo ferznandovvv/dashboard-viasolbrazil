@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Period, buildPresets, spToday } from "@/lib/periodos";
+import { type Period, buildPresets } from "@/lib/periodos";
 import { fmtDay } from "@/components/viz";
 import { Abas } from "@/components/Abas";
 import { usePode } from "@/components/sessao";
+import { SeletorPeriodo } from "@/components/SeletorPeriodo";
 
 interface Linha {
   produto: string;
@@ -80,9 +81,6 @@ export function Produtos() {
   const [periodo, setPeriodo] = useState<Period>(
     () => presets.find((p) => p.key === "Mês passado") ?? presets[0]
   );
-  const [customAberto, setCustomAberto] = useState(false);
-  const [customDe, setCustomDe] = useState("");
-  const [customAte, setCustomAte] = useState("");
   const [lojasSel, setLojasSel] = useState<string[]>([]);
   const [top, setTop] = useState(20);
   const [dados, setDados] = useState<Resposta | null>(null);
@@ -111,13 +109,6 @@ export function Produtos() {
     }
   };
 
-  /** Mudou uma data do personalizado: vale na hora, sem botão de aplicar. */
-  const trocarDatas = (de: string, ate: string) => {
-    setCustomDe(de);
-    setCustomAte(ate);
-    if (de && ate && de <= ate) setPeriodo({ key: "custom", from: de, to: ate });
-  };
-  const customValido = periodo.key !== "custom" || !customDe || !customAte || customDe <= customAte;
 
   const verMaisVendidos = (p = periodo, ls = lojasSel, t = top) => {
     setAba("vendidos");
@@ -148,11 +139,7 @@ export function Produtos() {
     if (lsUrl.length) setLojasSel(lsUrl);
     setTop(tUrl);
     if (perUrl) setPeriodo(perUrl);
-    if (perUrl?.key === "custom") {
-      setCustomDe(perUrl.from);
-      setCustomAte(perUrl.to);
-    }
-    if (p.get("aba") === "vendidos" && veVendidos) verMaisVendidos(perUrl ?? periodo, lsUrl, tUrl);
+    if (p.get("aba") === "vendidos" && veVendidos) setAba("vendidos");
     else if (p.get("q")) setQ(p.get("q") ?? "");
     setPronto(true);
     // só na montagem
@@ -189,6 +176,15 @@ export function Produtos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, aba, pronto]);
 
+  // Mais vendidos: mudou loja, período ou quantidade, a lista já se refaz
+  // (com uma pausa curta, para tocar em várias lojas seguidas virar uma busca só)
+  useEffect(() => {
+    if (!pronto || aba !== "vendidos") return;
+    const t = setTimeout(() => verMaisVendidos(periodo, lojasSel, top), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pronto, aba, periodo, lojasSel, top]);
+
   const trocarAba = (a: Aba) => {
     if (a === aba) return;
     pedido.current++; // descarta resposta em voo da outra aba
@@ -203,6 +199,20 @@ export function Produtos() {
   const ordenar = (col: string) =>
     setOrdem((o) => ({ col, desc: o?.col === col ? !o.desc : true }));
   const seta = (col: string) => (ordem?.col === col ? (ordem.desc ? " ↓" : " ↑") : "");
+  /** Cabeçalho que ordena: botão de verdade, para funcionar no teclado e no leitor de tela */
+  const cabOrdem = (col: string, rotulo: React.ReactNode, classe = "", titulo?: string) => (
+    <th
+      key={col}
+      className={`ord ${classe}`.trim()}
+      title={titulo}
+      aria-sort={ordem?.col === col ? (ordem.desc ? "descending" : "ascending") : undefined}
+    >
+      <button type="button" className="ord-btn" onClick={() => ordenar(col)}>
+        {rotulo}
+        {seta(col)}
+      </button>
+    </th>
+  );
 
   const colunasLojas = lojas.length ? lojas : dados?.lojas ?? [];
   const tabelas = dados?.tabelas ?? [];
@@ -290,13 +300,17 @@ export function Produtos() {
       ) : (
         <>
           <div className="passo">
-            <span className="passo-num">1</span> Loja <span className="muted">(nenhuma = todas)</span>
+            <span className="passo-num">1</span> Loja
           </div>
           <div className="filters" role="group" aria-label="Lojas">
+            <button className={lojasSel.length === 0 ? "active" : ""} aria-pressed={lojasSel.length === 0} onClick={() => setLojasSel([])}>
+              Todas
+            </button>
             {colunasLojas.map((loja) => (
               <button
                 key={loja}
                 className={lojasSel.includes(loja) ? "active" : ""}
+                aria-pressed={lojasSel.includes(loja)}
                 onClick={() => alternarLoja(loja)}
               >
                 {loja}
@@ -307,60 +321,19 @@ export function Produtos() {
           <div className="passo">
             <span className="passo-num">2</span> Vendas de quando
           </div>
-          <div className="filters" role="group" aria-label="Período">
-            {presets.map((p) => (
-              <button
-                key={p.key}
-                className={periodo.key === p.key ? "active" : ""}
-                onClick={() => {
-                  setCustomAberto(false);
-                  setPeriodo(p);
-                }}
-              >
-                {p.key}
-              </button>
-            ))}
-            <button
-              className={periodo.key === "custom" ? "active" : ""}
-              onClick={() => {
-                // Já sai marcado e com as datas do período atual, para só ajustar
-                const de = customDe || periodo.from;
-                const ate = customAte || periodo.to;
-                setCustomDe(de);
-                setCustomAte(ate);
-                setCustomAberto(true);
-                setPeriodo({ key: "custom", from: de, to: ate });
-              }}
-            >
-              Personalizado
-            </button>
-          </div>
-          {(customAberto || periodo.key === "custom") && (
-            <div className="custom-range">
-              <input type="date" value={customDe} max={spToday()} onChange={(e) => trocarDatas(e.target.value, customAte)} />
-              <span className="muted">até</span>
-              <input type="date" value={customAte} max={spToday()} onChange={(e) => trocarDatas(customDe, e.target.value)} />
-              {!customValido && <span className="err-msg">a data inicial precisa ser antes da final</span>}
-            </div>
-          )}
+          <SeletorPeriodo opcoes={presets} atual={periodo} aoMudar={setPeriodo} rotulo="Vendas de quando" />
 
           <div className="passo">
             <span className="passo-num">3</span> Quantos produtos
           </div>
           <div className="seg" role="group" aria-label="Quantos">
             {TOPS.map((t) => (
-              <button key={t} className={top === t ? "on" : ""} onClick={() => {
-                  setTop(t);
-                  if (dados?.modo === "vendidos") verMaisVendidos(periodo, lojasSel, t);
-                }}>
+              <button key={t} className={top === t ? "on" : ""} aria-pressed={top === t} onClick={() => setTop(t)}>
                 {t} mais vendidos
               </button>
             ))}
           </div>
 
-          <button className="buscar" onClick={() => verMaisVendidos()} disabled={carregando || !customValido}>
-            {carregando ? "Buscando as vendas…" : "Ver os mais vendidos"}
-          </button>
           {carregando && (
             <div className="rank-aviso" style={{ margin: "6px 0 0" }}>
               Na primeira vez que um período é pedido, a TOTVS demora alguns minutos para mandar as
@@ -421,7 +394,36 @@ export function Produtos() {
                 {dados.modo === "busca" ? "Nenhum produto com estoque com esse nome." : "Nada para mostrar."}
               </div>
             ) : (
-              <div className="tbl-wrap">
+              <>
+              {/* Celular: um cartão por produto, com o estoque de cada loja à vista, sem arrastar de lado */}
+              <ul className="prod-cartoes">
+                {lista.map((l) => (
+                  <li key={l.produto}>
+                    <b>
+                      {dados.modo === "vendidos" && <span className="pos">{posicao.get(l.produto)}º</span>}
+                      {l.produto}
+                    </b>
+                    {(tabelas.length > 0 || dados.modo === "vendidos") && (
+                      <p className="prod-cartao-precos">
+                        {tabelas.map((t) => `${t} ${preco(l.precos?.[t])}`).join(" · ")}
+                        {dados.modo === "vendidos" && `${tabelas.length ? " · " : ""}${l.vendidas} vendidas`}
+                      </p>
+                    )}
+                    <dl className="prod-cartao-lojas">
+                      {colunasLojas.map((loja) => {
+                        const v = l.porLoja[loja] ?? 0;
+                        return (
+                          <div key={loja} className={`${tom(v)}${escolhidas.includes(loja) ? " loja-sel" : ""}`}>
+                            <dt>{curto(loja)}</dt>
+                            <dd>{v}</dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+              <div className="tbl-wrap prod-tabela">
                 <table className="prod-tbl">
                   <thead>
                     {tabelas.length > 0 && (
@@ -433,36 +435,19 @@ export function Produtos() {
                       </tr>
                     )}
                     <tr>
-                      <th className="ord" onClick={() => ordenar("produto")}>
-                        Produto{seta("produto")}
-                      </th>
-                      {tabelas.map((t, i) => (
-                        <th
-                          key={t}
-                          className={`n ord preco${i === tabelas.length - 1 ? " fim-preco" : ""}`}
-                          title={`Tabela ${t}${LOJAS_DA_TABELA[t] ? ` — vale em ${LOJAS_DA_TABELA[t]}` : ""}`}
-                          onClick={() => ordenar(`preco:${t}`)}
-                        >
-                          {t}
-                          {seta(`preco:${t}`)}
-                        </th>
-                      ))}
-                      {dados.modo === "vendidos" && (
-                        <th className="n ord" onClick={() => ordenar("vendidas")}>
-                          Vendidas{seta("vendidas")}
-                        </th>
+                      {cabOrdem("produto", "Produto")}
+                      {tabelas.map((t, i) =>
+                        cabOrdem(
+                          `preco:${t}`,
+                          t,
+                          `n preco${i === tabelas.length - 1 ? " fim-preco" : ""}`,
+                          `Tabela ${t}${LOJAS_DA_TABELA[t] ? ` — vale em ${LOJAS_DA_TABELA[t]}` : ""}`
+                        )
                       )}
-                      {colunasLojas.map((loja) => (
-                        <th
-                          key={loja}
-                          className={`n ord${escolhidas.includes(loja) ? " loja-sel" : ""}`}
-                          title={loja}
-                          onClick={() => ordenar(`loja:${loja}`)}
-                        >
-                          {curto(loja)}
-                          {seta(`loja:${loja}`)}
-                        </th>
-                      ))}
+                      {dados.modo === "vendidos" && cabOrdem("vendidas", "Vendidas", "n")}
+                      {colunasLojas.map((loja) =>
+                        cabOrdem(`loja:${loja}`, <abbr title={loja}>{curto(loja)}</abbr>, `n${escolhidas.includes(loja) ? " loja-sel" : ""}`, loja)
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -501,6 +486,7 @@ export function Produtos() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
 
             {lista.length > 0 && (
@@ -524,7 +510,7 @@ export function Produtos() {
               )}
               {dados.modo === "vendidos" &&
                 "Vendidas = peças vendidas no período nas lojas escolhidas."}
-              {" "}Clique no nome de uma coluna para ordenar.
+              <span className="so-tela-grande"> Clique no nome de uma coluna para ordenar.</span>
             </div>
           </div>
         </div>
