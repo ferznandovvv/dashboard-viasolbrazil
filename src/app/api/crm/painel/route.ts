@@ -7,6 +7,7 @@ import { detalheLoja, painel } from "@/lib/crm/painel";
 import { nomearPendentes } from "@/lib/crm/contatos";
 import { aprenderVendedoras } from "@/lib/crm/vendasLoja";
 import { vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
+import { acessosDasLojas } from "@/lib/crm/acessos";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
       eventos: base.atendimento.length,
     },
     pendentes: await nomearPendentes(base, p.semana.pendentes.slice(0, 12)),
+    acessos: await acessosDasLojas().catch(() => []),
     envio: {
       modoSombra: cfg.modoSombra,
       pausado: cfg.pausado,

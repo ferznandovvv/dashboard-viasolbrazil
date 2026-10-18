@@ -1470,4 +1470,6 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 }
 .pg-esperando { border-color: var(--critical); }
 .pg-semnumero { font-size: 12.5px; margin: -4px 0 14px; }
+.pg-aberto { margin-top: 16px; }
+.fin-tbl td.pg-aberto-agora { color: var(--good); font-weight: 600; }
 .pg-nota { font-size: 12.5px; margin-bottom: 10px; }

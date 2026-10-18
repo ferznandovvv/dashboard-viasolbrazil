@@ -34,6 +34,7 @@ interface Painel {
     eventos: number;
   };
   pendentes: Pendente[];
+  acessos?: { loja: string; ultimo: string | null; hoje: { primeiro: string; ultimo: string; minutos: number } | null; dias7: number }[];
   envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number };
   gatewayUrl?: string;
 }
@@ -147,8 +148,60 @@ export function PainelAtendimento() {
         <p className="muted pg-semnumero">Sem WhatsApp ligado ao painel: {semNumero.map((l) => l.loja).join(", ")}.</p>
       )}
 
+      {p.acessos && p.acessos.length > 0 && <PainelAberto acessos={p.acessos} />}
+
       {aberta && <DetalheLoja loja={aberta} gatewayUrl={p.gatewayUrl} fechar={() => setAberta(null)} />}
     </div>
+  );
+}
+
+/** Há quanto tempo, em palavras curtas */
+function haQuanto(iso: string): string {
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 60) return `há ${Math.max(1, min)} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? "ontem" : `há ${d} dias`;
+}
+
+/** As lojas estão olhando o painel delas? Só conta o computador da loja (ou o usuário de loja) com a aba visível. */
+function PainelAberto({ acessos }: { acessos: NonNullable<Painel["acessos"]> }) {
+  return (
+    <section className="card pg-aberto">
+      <h2>As lojas estão olhando o painel?</h2>
+      <p className="muted pg-nota">
+        Conta só o computador da loja ou o usuário de loja, com a aba do painel na frente. Você e a sócia abrindo não entram aqui.
+      </p>
+      <div className="tbl-wrap">
+        <table className="prod-tbl fin-tbl">
+          <thead>
+            <tr>
+              <th>Loja</th>
+              <th>Visto por último</th>
+              <th>Hoje</th>
+              <th className="n">Últimos 7 dias</th>
+            </tr>
+          </thead>
+          <tbody>
+            {acessos.map((a) => {
+              const agora = a.ultimo && Date.now() - new Date(a.ultimo).getTime() < 3 * 60000;
+              const longe = !a.ultimo || Date.now() - new Date(a.ultimo).getTime() > 2 * 86400000;
+              return (
+                <tr key={a.loja}>
+                  <td className="fin-desc">{a.loja}</td>
+                  <td className={agora ? "pg-aberto-agora" : longe ? "vencida" : ""}>
+                    {agora ? "● aberto agora" : a.ultimo ? haQuanto(a.ultimo) : "nunca abriu"}
+                  </td>
+                  <td className="muted">{a.hoje ? `das ${a.hoje.primeiro} às ${a.hoje.ultimo} · ${minutos(a.hoje.minutos)} na tela` : "não abriu"}</td>
+                  <td className="n">{a.dias7} de 7 dias</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

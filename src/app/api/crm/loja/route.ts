@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { lojasPermitidas } from "@/lib/acesso/lojas";
+import { codigoDeAparelho, sessaoDe } from "@/lib/acesso/sessao";
+import { registrarAcesso } from "@/lib/crm/acessos";
 import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
 import { painel } from "@/lib/crm/painel";
 import { conferir } from "@/lib/crm/conferencia";
@@ -95,6 +97,9 @@ export async function GET(req: NextRequest) {
   if (painel) {
     if (!Object.values(LOJAS).includes(painel)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
     if (!permitidas.includes(painel)) return foraDaLoja(painel);
+    // Conta como "a loja abriu o painel" só o computador da loja ou o usuário de loja, com a aba visível
+    if (req.nextUrl.searchParams.get("visivel") === "1" && (codigoDeAparelho(req) || (await sessaoDe(req))?.papel === "loja"))
+      await registrarAcesso(painel).catch(() => {});
     return NextResponse.json(await painelDaLoja(base, painel));
   }
   if (!q) return NextResponse.json({ lojas: permitidas, clientes: [] });

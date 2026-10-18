@@ -143,7 +143,7 @@ export default function PainelDaLoja() {
   useEffect(() => {
     if (!pronto || !loja || !lojas.includes(loja)) return;
     const carregar = () =>
-      buscar<Painel>(`/api/crm/loja?painel=${encodeURIComponent(loja)}`)
+      buscar<Painel>(`/api/crm/loja?painel=${encodeURIComponent(loja)}${document.visibilityState === "visible" ? "&visivel=1" : ""}`)
         .then((x) => {
           setP(x);
           setErro("");
@@ -151,7 +151,13 @@ export default function PainelDaLoja() {
         .catch((e) => setErro(e.message));
     carregar();
     const t = setInterval(carregar, 60000);
-    return () => clearInterval(t);
+    // Voltou pra aba: atualiza na hora
+    const aoVoltar = () => document.visibilityState === "visible" && carregar();
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", aoVoltar);
+    };
   }, [pronto, loja, lojas, buscar]);
 
   const escolher = (l: string) => {
