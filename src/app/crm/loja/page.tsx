@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { MetasVendedoras } from "@/components/MetasVendedoras";
 
 interface Painel {
   loja: string;
@@ -326,6 +327,8 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
       <VendasWhats w={p.peloWhats} mes={p.vendas.mes} ativo={p.whatsapp.ativo} />
 
       <BlocoVendas v={p.vendas} celular={p.celular} />
+
+      <MetasVendedoras loja={p.loja} />
 
       <Vendedoras v={p.vendas} />
 

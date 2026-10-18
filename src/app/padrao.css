@@ -243,3 +243,25 @@
 .login-ajuda { font-size: var(--fs-2); color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: var(--e-3); }
 .login-ajuda summary { cursor: pointer; font-weight: 600; color: var(--brand); min-height: 32px; display: flex; align-items: center; justify-content: center; }
 .login-ajuda p { margin-top: var(--e-2); }
+
+/* ——— Tela da loja: meta de cada vendedora ——— */
+.metas-vend h2 { margin-bottom: var(--e-1); }
+.metas-vend-sub { font-size: var(--fs-2); color: var(--text-secondary); margin-bottom: var(--e-4); }
+.metas-vend-grade { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: var(--e-3); margin-bottom: var(--e-3); }
+.metas-vend-grade li { border: 1px solid var(--border); border-radius: var(--r-2); padding: var(--e-3) var(--e-4); background: var(--page); }
+.metas-vend-grade li.bateu { border-color: var(--good); box-shadow: inset 0 0 0 1px var(--good); }
+.metas-vend-topo { display: flex; justify-content: space-between; align-items: baseline; gap: var(--e-2); }
+.metas-vend-topo b { font-size: var(--fs-4); }
+.metas-vend-pct { font-size: var(--fs-6); font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+.bateu .metas-vend-pct { color: var(--good); }
+.metas-vend-barra { height: 8px; border-radius: var(--r-3); background: var(--grid); overflow: hidden; margin: var(--e-2) 0 var(--e-3); }
+.metas-vend-barra i { display: block; height: 100%; background: var(--marca); border-radius: var(--r-3); }
+.bateu .metas-vend-barra i { background: var(--good); }
+.metas-vend-grade dl { display: grid; gap: 2px; font-size: var(--fs-2); }
+.metas-vend-grade dl div { display: flex; justify-content: space-between; gap: var(--e-2); }
+.metas-vend-grade dt { color: var(--text-secondary); }
+.metas-vend-grade dd { font-weight: 600; font-variant-numeric: tabular-nums; }
+.metas-vend-grade .destaque { border-top: 1px solid var(--border); margin-top: var(--e-1); padding-top: var(--e-1); }
+.metas-vend-grade .destaque dd { color: var(--brand); }
+.bateu .destaque dd, .bateu .destaque dt { color: var(--good); }
+.metas-vend-hoje { margin-top: var(--e-2); font-size: var(--fs-2); color: var(--text-muted); }

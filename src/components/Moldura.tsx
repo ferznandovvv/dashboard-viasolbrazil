@@ -9,8 +9,8 @@ import { Icone, type NomeIcone } from "./Icone";
 import { ProvedorSessao } from "./sessao";
 
 /**
- * Login e TV ocupam a tela inteira. A tela da loja e o caixa também, quando o
- * aparelho abre pelo código da TV (sem sessão); para quem entrou, têm menu.
+ * Login e TV ocupam a tela inteira. A tela da loja também, quando o aparelho
+ * abre pelo código da TV (sem sessão); para quem entrou, tem menu.
  */
 const TELA_CHEIA = ["/login", "/tv"];
 
@@ -32,8 +32,7 @@ const MODULOS: Item[] = [
 ];
 
 const LOJAS: Item[] = [
-  { href: "/loja", nome: "Tela da loja", icone: "loja", area: "loja" },
-  { href: "/crm/loja", nome: "Painel da loja", icone: "cashback", area: "loja" },
+  { href: "/crm/loja", nome: "Tela da loja", icone: "loja", area: "loja" },
   { href: "/tv", nome: "TV", icone: "tv", area: "tv", fora: true },
 ];
 

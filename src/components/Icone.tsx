@@ -45,13 +45,6 @@ const DESENHOS = {
       <path d="M9.5 20v-6h5v6" />
     </>
   ),
-  cashback: (
-    <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <circle cx="12" cy="12" r="2.5" />
-      <path d="M6.5 9v.01M17.5 15v.01" />
-    </>
-  ),
   tv: (
     <>
       <rect x="3" y="5" width="18" height="12" rx="2" />
