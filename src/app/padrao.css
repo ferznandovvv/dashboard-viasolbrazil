@@ -239,3 +239,7 @@
 .pessoas-botoes { display: flex; gap: var(--e-2); flex-wrap: wrap; }
 .pessoas-criadas .btn { margin-top: var(--e-3); }
 .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+.pessoas-aviso { border-color: var(--brand); background: var(--brand-tint); }
+.login-ajuda { font-size: var(--fs-2); color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: var(--e-3); }
+.login-ajuda summary { cursor: pointer; font-weight: 600; color: var(--brand); min-height: 32px; display: flex; align-items: center; justify-content: center; }
+.login-ajuda p { margin-top: var(--e-2); }

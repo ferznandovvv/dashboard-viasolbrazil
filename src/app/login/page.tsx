@@ -96,6 +96,16 @@ export default function Entrar() {
         {!criando && sit?.senhaAntiga && (
           <p className="login-dica">Ainda não tem usuário? Deixe o usuário em branco e use a senha antiga do painel.</p>
         )}
+        {!criando && (
+          <details className="login-ajuda">
+            <summary>Esqueci meu usuário ou a senha</summary>
+            <p>Peça para o dono do painel trocar a sua senha em Configurações › Pessoas e acessos.</p>
+            <p>
+              Se você é o dono: no computador da empresa, abra a pasta do painel e dê dois cliques em{" "}
+              <b>esqueci-a-senha.cmd</b>. Ele mostra todos os usuários e deixa escolher uma senha nova.
+            </p>
+          </details>
+        )}
       </form>
     </main>
   );

@@ -39,8 +39,14 @@ export interface BaseAcesso {
   contas: Conta[];
   /** Assina o cookie de sessão */
   segredo: string;
-  /** A senha única antiga do painel ainda entra (como sócia), até o dono desligar */
+  /** A senha única antiga do painel ainda entra, até o dono desligar */
   senhaAntiga: boolean;
+  /**
+   * Um dono já entrou com o próprio usuário. Até isso acontecer, a senha
+   * antiga entra como Dono — assim ninguém fica trancado do lado de fora sem
+   * saber o usuário; depois, ela passa a entrar como Sócia.
+   */
+  donoJaEntrou?: boolean;
 }
 
 export type ContaPublica = Omit<Conta, "hash" | "salt">;

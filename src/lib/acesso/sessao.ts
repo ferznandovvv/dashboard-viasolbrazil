@@ -76,8 +76,8 @@ export async function lerSessao(valor: string | undefined): Promise<Sessao | nul
 
   if (id === ANTIGA) {
     if (!senhaAntigaVale(base)) return null;
-    // Enquanto não houver dono cadastrado, a senha antiga continua sendo a do dono
-    const papel: Papel = local() && temDono(base) ? "socia" : "dono";
+    // Até um dono entrar com o próprio usuário, a senha antiga continua sendo a do dono
+    const papel: Papel = local() && temDono(base) && base.donoJaEntrou ? "socia" : "dono";
     return { id: ANTIGA, nome: "Senha antiga do painel", login: "", papel, lojas: [], podeLancar: papel === "dono", veDre: true, antiga: true };
   }
   const c = base.contas.find((x) => x.id === id && x.ativo);

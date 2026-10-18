@@ -9,6 +9,9 @@ interface Dados {
   lojas: string[];
   senhaAntiga: boolean;
   temSenhaAntiga: boolean;
+  /** A senha antiga ainda entra como Dono (nenhum dono entrou com o usuário ainda) */
+  antigaComoDono: boolean;
+  entrouComSenhaAntiga: boolean;
   eu: string;
 }
 
@@ -146,6 +149,16 @@ export function Pessoas() {
         {erro && <div className="card err-msg">{erro}</div>}
         {aviso && <div className="parcial">{aviso}</div>}
       </div>
+
+      {d.entrouComSenhaAntiga && (
+        <section className="card pessoas-aviso">
+          <h2>Você entrou com a senha antiga</h2>
+          <p className="pessoas-ajuda">
+            Ache o seu nome na lista abaixo: o usuário aparece embaixo dele. Se não lembrar a senha, clique em{" "}
+            <b>Trocar senha</b>, escolha uma nova, clique em Sair e entre com o usuário e a senha nova.
+          </p>
+        </section>
+      )}
 
       {criadas.length > 0 && (
         <section className="card pessoas-criadas">
@@ -371,9 +384,11 @@ export function Pessoas() {
         <section className="card pessoas-grupo">
           <h2>Senha antiga do painel</h2>
           <p className="pessoas-ajuda">
-            {d.senhaAntiga
-              ? "Ainda funciona: quem entra com ela (deixando o usuário em branco) vê o sistema como Sócia. Desligue quando todo mundo tiver o próprio usuário."
-              : "Desligada: só entra quem tem usuário."}
+            {!d.senhaAntiga
+              ? "Desligada: só entra quem tem usuário."
+              : d.antigaComoDono
+                ? "Ainda funciona e, até você entrar uma vez com o seu usuário, entra como Dono. Depois disso, quem entrar com ela (deixando o usuário em branco) vê o sistema como Sócia."
+                : "Ainda funciona: quem entra com ela (deixando o usuário em branco) vê o sistema como Sócia. Desligue quando todo mundo tiver o próprio usuário."}
           </p>
           <button
             className={`btn btn-sm ${d.senhaAntiga ? "btn-perigo" : "btn-sec"}`}

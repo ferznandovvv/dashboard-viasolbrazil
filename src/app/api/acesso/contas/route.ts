@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
     contas: base.contas.map(contaPublica),
     lojas: Object.values(LOJAS),
     senhaAntiga: senhaAntigaVale(base),
+    antigaComoDono: !base.donoJaEntrou,
+    entrouComSenhaAntiga: s.antiga,
     temSenhaAntiga: Boolean(env("DASHBOARD_PASSWORD")),
     eu: s.id,
   });

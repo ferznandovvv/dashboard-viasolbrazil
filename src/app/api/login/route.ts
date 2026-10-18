@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
         criadoEm: new Date().toISOString(),
       };
       b.contas.push(c);
+      b.donoJaEntrou = true;
       return c;
     }).catch((e: Error) => e);
     if (conta instanceof Error) return erro(conta.message, 400);
@@ -93,6 +94,8 @@ export async function POST(req: NextRequest) {
       errou(req);
       return erro("Usuário ou senha não conferem.", 401);
     }
+    // Primeira vez que um dono entra com o usuário: a senha antiga deixa de ser de dono
+    if (c.papel === "dono" && !base?.donoJaEntrou) await alterarAcesso((b) => void (b.donoJaEntrou = true));
     const res = NextResponse.json({ ok: true, inicio: inicio(c.papel) });
     await abrirSessao(res, req, c);
     return res;
