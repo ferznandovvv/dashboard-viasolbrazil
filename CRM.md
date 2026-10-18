@@ -139,6 +139,18 @@ primeiro. "Obrigada", "ok", emoji e figurinha não abrem espera; mensagem
 automática do WhatsApp Business (o mesmo texto mandado pra 5+ conversas)
 não conta como resposta; vale a hora em que a mensagem foi mandada.
 
+## Atendimento (aba no topo) e webhook
+
+A aba **Atendimento**, no menu principal, mostra o WhatsApp de cada loja
+ligada: quem está esperando resposta, tempo de resposta, clientes do dia e
+vendas pelo WhatsApp no mês. A Visão geral do CRM fica com envio, celular no
+caixa por loja e conferência do cashback.
+
+Na WA-AKG o webhook é **por sessão**: sessão nova (ou pareada de novo) nasce
+sem webhook, e apagar uma sessão apaga o webhook dela. O painel confere e
+cria o webhook de cada número ligado sozinho (ao subir, a cada 10 minutos,
+ao salvar Números e no botão "situação", que mostra "webhook ok").
+
 ## Visão geral (painel gerencial)
 
 Um cartão por loja, ordenado do que precisa de atenção para o que está bem:

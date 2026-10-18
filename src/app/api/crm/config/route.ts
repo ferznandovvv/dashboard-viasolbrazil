@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lerFaixa } from "@/lib/crm/atendimento";
+import { configurarWebhooks, urlDoWebhook } from "@/lib/crm/webhookAuto";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
 import { CAMPANHAS, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
@@ -59,7 +60,10 @@ export async function POST(req: NextRequest) {
       if (!adaptador) return NextResponse.json({ erro: "Configure o provedor primeiro." }, { status: 400 });
       const n = base.config.numeros.find((x) => x.loja === p.loja);
       if (!n?.sessao) return NextResponse.json({ erro: "Essa loja não tem sessão configurada." }, { status: 400 });
-      return NextResponse.json(await adaptador.situacao(n.sessao));
+      const sit = await adaptador.situacao(n.sessao);
+      // Aproveita pra garantir que o painel recebe as conversas desse número
+      const wh = adaptador.garantirWebhook ? await adaptador.garantirWebhook(n.sessao, urlDoWebhook(base.config.webhookSegredo)) : null;
+      return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe].filter(Boolean).join(" · ") });
     }
     if (p.tipo === "limpar-atendimento") {
       // Apaga as conversas registradas de uma loja (ex.: o número de teste)
@@ -140,6 +144,8 @@ export async function POST(req: NextRequest) {
         } else b.modelos.push({ campanha: p.modelo.campanha, ativo: Boolean(p.modelo.ativo), variacoes });
       } else throw new Error("Pedido desconhecido.");
     });
+    // Número salvo: garante o webhook de cada um em segundo plano
+    if (p.tipo === "config" && p.config.numeros) void configurarWebhooks().catch(() => {});
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ erro: e instanceof Error ? e.message : "Erro" }, { status: 400 });

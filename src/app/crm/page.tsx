@@ -44,7 +44,7 @@ export default function Crm() {
     <main className="wrap">
       <Cabecalho titulo="CRM das lojas">
         <a className="btn btn-sec btn-sm" href="/crm/loja" target="_blank" rel="noreferrer">
-          Abrir o caixa e cashback <span className="so-leitor">(abre em outra aba)</span>
+          Abrir o painel da loja <span className="so-leitor">(abre em outra aba)</span>
         </a>
       </Cabecalho>
 
@@ -68,7 +68,7 @@ export default function Crm() {
             atual={aba}
             aoMudar={setAba}
           />
-          {aba === "geral" && <VisaoGeral />}
+          {aba === "geral" && <VisaoGeral r={r} />}
           {aba === "campanhas" && (
             <Campanhas lojas={r.lojas} filtroInicial={filtroCampanha} limparFiltroInicial={() => setFiltroCampanha(undefined)} irPara={setAba} recarregar={carregar} />
           )}

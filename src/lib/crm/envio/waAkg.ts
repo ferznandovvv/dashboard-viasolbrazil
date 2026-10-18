@@ -107,6 +107,31 @@ export class WaAkg implements Adaptador {
     return mapa;
   }
 
+  /**
+   * Na WA-AKG o webhook pertence a uma sessão: sessão nova (ou recriada)
+   * nasce sem webhook e o CRM não fica sabendo das conversas. Aqui olhamos
+   * se a sessão já tem o nosso e, se não tiver, criamos.
+   */
+  async garantirWebhook(sessao: string, url: string): Promise<{ ok: boolean; detalhe: string }> {
+    const EVENTOS = ["message.received", "message.sent", "message.status"];
+    try {
+      const { id } = await this.resolver(sessao);
+      const r = await this.chamar(`/api/webhooks/${encodeURIComponent(id)}`);
+      if (r.status !== 200) return { ok: false, detalhe: `não consegui ver os webhooks (HTTP ${r.status})` };
+      const lista = (r.json?.data ?? []) as { url?: string; isActive?: boolean; events?: unknown }[];
+      const nosso = (Array.isArray(lista) ? lista : []).find((w) => w.isActive !== false && String(w.url ?? "").includes("/api/crm/webhook"));
+      if (nosso) {
+        const ev = Array.isArray(nosso.events) ? (nosso.events as string[]) : [];
+        const faltam = EVENTOS.filter((e) => !ev.includes(e) && !ev.includes("*"));
+        return faltam.length ? { ok: false, detalhe: `webhook sem os eventos ${faltam.join(", ")}` } : { ok: true, detalhe: "webhook ok" };
+      }
+      const c = await this.chamar(`/api/webhooks/${encodeURIComponent(id)}`, { name: "CRM Via Sol", url, events: EVENTOS });
+      return c.status === 200 && c.json?.status ? { ok: true, detalhe: "webhook criado agora" } : { ok: false, detalhe: `não consegui criar o webhook (HTTP ${c.status})` };
+    } catch (e) {
+      return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
   async enviarTexto(sessao: string, telefone: string, texto: string): Promise<ResultadoEnvio> {
     const jid = `${telefone.replace(/\D/g, "")}@s.whatsapp.net`;
     try {

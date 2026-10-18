@@ -29,6 +29,8 @@ export interface Adaptador {
   nomeDaSessao?(codigo: string): Promise<string | undefined>;
   /** Contatos do número (dígitos do telefone ou do id → nome salvo / nome do WhatsApp) */
   contatos?(sessao: string): Promise<Map<string, string>>;
+  /** Garante que o provedor avisa o CRM das mensagens desse número (cria o webhook se faltar) */
+  garantirWebhook?(sessao: string, url: string): Promise<{ ok: boolean; detalhe: string }>;
 }
 
 export function adaptadorDe(cfg: ConfigCrm): Adaptador | null {

@@ -64,7 +64,7 @@ export function areaDaRota(caminho: string, metodo: string, busca: URLSearchPara
   if (em("/crm/loja") || em("/api/crm/loja") || em("/loja") || em("/api/loja")) return "loja";
   if (em("/tv") || em("/api/tv")) return "tv";
   if (em("/financeiro") || em("/api/financeiro")) return "financeiro";
-  if (em("/crm") || em("/api/crm")) return "crm";
+  if (em("/crm") || em("/api/crm") || em("/atendimento")) return "crm";
   if (em("/api/produtos")) return busca.get("modo") === "vendidos" ? "produtos" : "estoque";
   if (em("/produtos")) return "estoque";
   if (caminho === "/" || em("/api/dashboard")) return "vendas";

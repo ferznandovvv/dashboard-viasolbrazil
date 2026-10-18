@@ -27,12 +27,13 @@ const MODULOS: Item[] = [
   { href: "/", nome: "Vendas", icone: "vendas", area: "vendas" },
   { href: "/produtos", nome: "Produtos", icone: "produtos", area: "estoque" },
   { href: "/financeiro", nome: "Financeiro", icone: "financeiro", area: "financeiro" },
+  { href: "/atendimento", nome: "Atendimento", icone: "atendimento", area: "crm" },
   { href: "/crm", nome: "CRM", icone: "crm", area: "crm" },
 ];
 
 const LOJAS: Item[] = [
   { href: "/loja", nome: "Tela da loja", icone: "loja", area: "loja" },
-  { href: "/crm/loja", nome: "Caixa e cashback", icone: "cashback", area: "loja" },
+  { href: "/crm/loja", nome: "Painel da loja", icone: "cashback", area: "loja" },
   { href: "/tv", nome: "TV", icone: "tv", area: "tv", fora: true },
 ];
 

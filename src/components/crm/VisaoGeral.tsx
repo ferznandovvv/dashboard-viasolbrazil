@@ -6,7 +6,7 @@ import { Janela } from "./Clientes";
 import { formatarTelefone } from "@/lib/crm/telefone";
 import type { CardLoja, Nivel } from "@/lib/crm/painel";
 
-type Loja = CardLoja & { conectado: boolean | null; detalheNumero?: string };
+type Loja = CardLoja & { conectado: boolean | null; detalheNumero?: string; peloWhats: { vendas: number; valor: number; pctVendas: number | null } };
 
 interface Pendente {
   loja: string;
@@ -52,11 +52,12 @@ const DIA = ["D", "S", "T", "Q", "Q", "S", "S"];
 const diaSemana = (d: string) => DIA[new Date(`${d}T12:00:00`).getDay()];
 
 /** Visão gerencial: um cartão por loja com atendimento, WhatsApp e captura de celular. */
-export function VisaoGeral() {
+const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const ehAlertaCelular = (t: string) => /vendas com celular/.test(t);
+
+function usePainel() {
   const [p, setP] = useState<Painel | null>(null);
   const [erro, setErro] = useState("");
-  const [aberta, setAberta] = useState<string | null>(null);
-
   const carregar = useCallback(async () => {
     try {
       setP(await api<Painel>("/api/crm/painel"));
@@ -70,7 +71,90 @@ export function VisaoGeral() {
     const t = setInterval(carregar, 60000);
     return () => clearInterval(t);
   }, [carregar]);
+  return { p, erro };
+}
 
+/** Aba Atendimento: WhatsApp de cada loja, quem está esperando e o que virou venda. */
+export function PainelAtendimento() {
+  const { p, erro } = usePainel();
+  const [aberta, setAberta] = useState<string | null>(null);
+  if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
+  const g = p.geral;
+  const ordem: Nivel[] = ["critico", "atencao", "ok", "inativo"];
+  // No atendimento, o semáforo é só do WhatsApp (celular no caixa fica no CRM)
+  const lojas = p.lojas.map((l) => {
+    const alertas = l.alertas.filter((x) => !ehAlertaCelular(x));
+    let nivel = l.nivel;
+    if (l.numero.ativo && nivel === "atencao" && !alertas.length) nivel = "ok";
+    return { ...l, alertas, nivel };
+  });
+  const ligadas = lojas.filter((l) => l.numero.ativo).sort((a, b) => ordem.indexOf(a.nivel) - ordem.indexOf(b.nivel));
+  const semNumero = lojas.filter((l) => !l.numero.ativo);
+  const vendasW = ligadas.reduce((s, l) => s + l.peloWhats.vendas, 0);
+  const valorW = ligadas.reduce((s, l) => s + l.peloWhats.valor, 0);
+
+  return (
+    <div>
+      <div className="tiles pg-kpis">
+        <div className={`tile ${g.maiorEsperaMin > 60 ? "alerta" : ""}`}>
+          <div className="label">Esperando resposta</div>
+          <div className="value">{g.esperando}</div>
+          <div className="muted">{g.esperando ? `a mais antiga há ${minutos(g.maiorEsperaMin)}` : "ninguém há mais de 15 min"}</div>
+        </div>
+        <div className="tile">
+          <div className="label">Tempo de resposta</div>
+          <div className="value">{minutos(g.mediana7d)}</div>
+          <div className="muted">{g.rapidas7d !== null ? `${g.rapidas7d}% em até 15 min · 7 dias` : "mediana dos últimos 7 dias"}</div>
+        </div>
+        <div className="tile">
+          <div className="label">Clientes hoje</div>
+          <div className="value">{g.conversasHoje}</div>
+          <div className="muted">chamaram as lojas no WhatsApp</div>
+        </div>
+        <div className="tile">
+          <div className="label">Vendas pelo WhatsApp</div>
+          <div className="value">{vendasW}</div>
+          <div className="muted">{vendasW ? `${reais(valorW)} no mês` : "no mês"}</div>
+        </div>
+        <div className={`tile ${g.numeros && g.conectados < g.numeros ? "alerta" : ""}`}>
+          <div className="label">WhatsApp</div>
+          <div className="value">
+            {g.conectados}/{g.numeros}
+          </div>
+          <div className="muted">{g.numeros ? "números conectados" : "nenhum número ligado ainda"}</div>
+        </div>
+      </div>
+
+      {p.pendentes.length > 0 && (
+        <div className="card pg-esperando">
+          <h2>Esperando resposta agora</h2>
+          <ListaPendentes pendentes={p.pendentes} comLoja />
+        </div>
+      )}
+
+      {!g.eventos && ligadas.length > 0 && (
+        <div className="card muted pg-dica">
+          Nenhuma conversa chegou ainda. O painel confere o webhook de cada número sozinho a cada 10 minutos; se continuar vazio, use &quot;situação&quot; em CRM → Configurar → Números, que mostra se o webhook está ok.
+        </div>
+      )}
+
+      <div className="pg-lojas">
+        {ligadas.map((l) => (
+          <CartaoLoja key={l.loja} l={l} abrir={() => setAberta(l.loja)} />
+        ))}
+      </div>
+      {semNumero.length > 0 && (
+        <p className="muted pg-semnumero">Sem WhatsApp ligado ao painel: {semNumero.map((l) => l.loja).join(", ")}.</p>
+      )}
+
+      {aberta && <DetalheLoja loja={aberta} gatewayUrl={p.gatewayUrl} fechar={() => setAberta(null)} />}
+    </div>
+  );
+}
+
+/** Visão geral do CRM: envio, celular no caixa por loja e conferência do cashback. */
+export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: number; saldoTotal: number } } }) {
+  const { p, erro } = usePainel();
   if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
   const g = p.geral;
   const pctCel = g.vendas30 ? Math.round((g.comCelular30 / g.vendas30) * 100) : null;
@@ -84,9 +168,8 @@ export function VisaoGeral() {
         : e.dentroDaJanela
           ? { txt: `Mandando · ${e.naFila} na fila`, cls: "ok" }
           : { txt: `Fora do horário de envio (${e.inicio}h às ${e.fim}h) · ${e.naFila} na fila`, cls: "" };
-
-  const ordem: Nivel[] = ["critico", "atencao", "ok", "inativo"];
-  const lojas = [...p.lojas].sort((a, b) => ordem.indexOf(a.nivel) - ordem.indexOf(b.nivel));
+  const lojas = [...p.lojas].filter((l) => l.cadastro.vendas30 > 0).sort((a, b) => (b.cadastro.pct30 ?? 0) - (a.cadastro.pct30 ?? 0));
+  const pctBase = r.base.clientes ? Math.round((r.base.comTelefone / r.base.clientes) * 100) : 0;
 
   return (
     <div>
@@ -94,19 +177,9 @@ export function VisaoGeral() {
 
       <div className="tiles pg-kpis">
         <div className="tile">
-          <div className="label">Conversas hoje</div>
-          <div className="value">{g.conversasHoje}</div>
-          <div className="muted">clientes que chamaram as lojas</div>
-        </div>
-        <div className={`tile ${g.maiorEsperaMin > 60 ? "alerta" : ""}`}>
-          <div className="label">Esperando resposta</div>
-          <div className="value">{g.esperando}</div>
-          <div className="muted">{g.esperando ? `a mais antiga há ${minutos(g.maiorEsperaMin)}` : "ninguém há mais de 15 min"}</div>
-        </div>
-        <div className="tile">
-          <div className="label">Tempo de resposta</div>
-          <div className="value">{minutos(g.mediana7d)}</div>
-          <div className="muted">{g.rapidas7d !== null ? `${g.rapidas7d}% em até 15 min · 7 dias` : "mediana dos últimos 7 dias"}</div>
+          <div className="label">Clientes na base</div>
+          <div className="value">{r.base.clientes.toLocaleString("pt-BR")}</div>
+          <div className="muted">{pctBase}% com celular</div>
         </div>
         <div className="tile">
           <div className="label">Vendas com celular</div>
@@ -115,45 +188,60 @@ export function VisaoGeral() {
             {g.comCelular30} de {g.vendas30} vendas · 30 dias
           </div>
         </div>
-        <div className={`tile ${g.numeros && g.conectados < g.numeros ? "alerta" : ""}`}>
-          <div className="label">WhatsApp</div>
-          <div className="value">
-            {g.conectados}/{g.numeros}
-          </div>
-          <div className="muted">{g.numeros ? "números conectados" : "nenhum número ligado ainda"}</div>
+        <div className="tile">
+          <div className="label">Cashback em aberto</div>
+          <div className="value">{reais(r.base.saldoTotal)}</div>
+          <div className="muted">no nome das clientes</div>
         </div>
       </div>
 
-      {!g.eventos && (
-        <div className="card muted pg-dica">
-          O atendimento aparece aqui assim que os números das lojas estiverem pareados na WA-AKG com o webhook cadastrado. A captura de celular já vale: vem das vendas do TOTVS.
+      <section className="card">
+        <h2>Celular no caixa por loja</h2>
+        <p className="muted pg-nota">Das vendas dos últimos 30 dias, quantas saíram com o celular da cliente (no campo de celular ou no endereço do cadastro).</p>
+        <div className="tbl-wrap">
+          <table className="prod-tbl fin-tbl">
+            <thead>
+              <tr>
+                <th>Loja</th>
+                <th style={{ width: "34%" }}>Vendas com celular</th>
+                <th className="n">Vendas</th>
+                <th className="n">vs 30 dias antes</th>
+                <th className="n">Clientes novas na semana</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lojas.map((l) => {
+                const c = l.cadastro;
+                const delta = c.pct30 !== null && c.pctAnterior !== null ? c.pct30 - c.pctAnterior : null;
+                return (
+                  <tr key={l.loja}>
+                    <td className="fin-desc">{l.loja}</td>
+                    <td>
+                      <span className="an-linha">
+                        <span className={`an-bar ${(c.pct30 ?? 0) < 50 ? "baixo" : "bom"}`} style={{ width: `${c.pct30 ?? 0}%` }} />
+                        <em>{c.pct30 ?? 0}%</em>
+                      </span>
+                    </td>
+                    <td className="n">{c.vendas30}</td>
+                    <td className={`n ${delta !== null && delta < 0 ? "vencida" : ""}`}>{delta === null || delta === 0 ? "" : `${delta > 0 ? "+" : ""}${delta} pts`}</td>
+                    <td className="n">
+                      {c.novas7d} com celular{c.novas7dSemCelular ? `, ${c.novas7dSemCelular} sem` : ""}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
-
-      <div className="pg-lojas">
-        {lojas.map((l) => (
-          <CartaoLoja key={l.loja} l={l} abrir={() => setAberta(l.loja)} />
-        ))}
-      </div>
-
-      {p.pendentes.length > 0 && (
-        <div className="card">
-          <h2>Esperando resposta agora</h2>
-          <ListaPendentes pendentes={p.pendentes} comLoja />
-        </div>
-      )}
+      </section>
 
       <ConferenciaCashback />
-
-      {aberta && <DetalheLoja loja={aberta} gatewayUrl={p.gatewayUrl} fechar={() => setAberta(null)} />}
     </div>
   );
 }
 
 function CartaoLoja({ l, abrir }: { l: Loja; abrir: () => void }) {
   const a = l.atend;
-  const c = l.cadastro;
-  const delta = c.pct30 !== null && c.pctAnterior !== null ? c.pct30 - c.pctAnterior : null;
   const maxDia = Math.max(1, ...a.dias.map((d) => d.conversas));
   const n = NIVEL[l.nivel];
   return (
@@ -210,31 +298,12 @@ function CartaoLoja({ l, abrir }: { l: Loja; abrir: () => void }) {
         <div className="muted pg-vazio">{l.numero.configurado ? "Número desligado no CRM." : "Ainda sem número de WhatsApp no CRM."}</div>
       )}
 
-      <div className="pg-sec">Celular no caixa · 30 dias</div>
+      <div className="pg-sec">Vendas pelo WhatsApp no mês</div>
       <div className="pg-cel">
-        <span className="pg-cel-pct">{c.pct30 === null ? "–" : `${c.pct30}%`}</span>
+        <span className="pg-cel-pct">{l.peloWhats.vendas}</span>
         <span className="pg-cel-info">
-          {c.comCelular30} de {c.vendas30} vendas
-          {delta !== null && delta !== 0 && (
-            <small className={delta > 0 ? "bom" : "ruim"}>
-              {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} pts vs mês anterior
-            </small>
-          )}
-        </span>
-      </div>
-      <div className="pg-progresso" role="progressbar" aria-label="Vendas com celular nos últimos 30 dias" aria-valuenow={c.pct30 ?? 0} aria-valuemin={0} aria-valuemax={100}>
-        <i style={{ width: `${c.pct30 ?? 0}%` }} />
-      </div>
-      <div className="pg-semanas" aria-label="Vendas com celular por semana, 8 semanas">
-        {c.semanas.map((s) => (
-          <span key={s.inicio} title={`Semana de ${s.inicio.slice(8, 10)}/${s.inicio.slice(5, 7)}: ${s.pct === null ? "sem vendas" : `${s.pct}% de ${s.vendas} vendas`}`}>
-            <i style={{ height: `${Math.max(s.pct ? 6 : 2, s.pct ?? 0)}%` }} />
-          </span>
-        ))}
-      </div>
-      <div className="pg-rodape">
-        <span>
-          {c.novas7d === 1 ? "1 cliente nova" : `${c.novas7d} clientes novas`} com celular na semana{c.novas7dSemCelular ? ` · ${c.novas7dSemCelular} sem` : ""}
+          {l.peloWhats.vendas ? `${reais(l.peloWhats.valor)}${l.peloWhats.pctVendas !== null ? `, ${l.peloWhats.pctVendas}% das vendas` : ""}` : "nenhuma ainda"}
+          <small className="muted">frete de motoboy ou conversa nos 7 dias antes</small>
         </span>
       </div>
     </button>

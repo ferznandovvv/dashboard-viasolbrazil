@@ -22,6 +22,13 @@ const DESENHOS = {
       <path d="M15.5 14.5h2.5" />
     </>
   ),
+  atendimento: (
+    <>
+      <path d="M4 5h16v11H9l-5 4z" />
+      <path d="M8 9.5h8" />
+      <path d="M8 12.5h5" />
+    </>
+  ),
   crm: (
     <>
       <circle cx="9" cy="8" r="3.5" />

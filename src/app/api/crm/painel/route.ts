@@ -6,6 +6,7 @@ import { dentroDaJanela } from "@/lib/crm/fila";
 import { detalheLoja, painel } from "@/lib/crm/painel";
 import { nomearPendentes } from "@/lib/crm/contatos";
 import { aprenderVendedoras } from "@/lib/crm/vendasLoja";
+import { vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
 
 export const dynamic = "force-dynamic";
 
@@ -31,13 +32,15 @@ export async function GET(req: NextRequest) {
       return adaptador.situacao(n.sessao);
     })
   );
+  const inicioMes = `${new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 7)}-01`;
   const lojas = p.lojas.map((l, i) => {
     const s = situacoes[i];
     if (s && !s.conectado) {
       l.alertas.unshift("WhatsApp desconectado");
       l.nivel = "critico";
     }
-    return { ...l, conectado: s ? s.conectado : null, detalheNumero: s?.detalhe };
+    const w = vendasPeloWhatsApp(base, l.loja, inicioMes);
+    return { ...l, conectado: s ? s.conectado : null, detalheNumero: s?.detalhe, peloWhats: { vendas: w.vendas, valor: w.valor, pctVendas: w.pctVendas } };
   });
 
   const cfg = base.config;

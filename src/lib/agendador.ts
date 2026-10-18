@@ -8,6 +8,7 @@
 import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
 import { completarTelefones, sincronizarDiaria } from "./crm/totvs";
+import { configurarWebhooks } from "./crm/webhookAuto";
 import { sincronizarShopifyDiaria } from "./crm/shopify";
 import { rodarAutomacoes } from "./crm/automacoes";
 import { processarFila } from "./crm/fila";
@@ -80,6 +81,17 @@ export function iniciarAgendador(): void {
       })
       .catch(() => {});
   setTimeout(celularNoEndereco, 90_000);
+
+  // Webhook de cada número ligado: confere e cria se faltar (loja pareada de novo nasce sem)
+  const webhooks = () =>
+    configurarWebhooks()
+      .then((r) => {
+        const criados = Object.entries(r).filter(([, d]) => d !== "webhook ok");
+        if (criados.length) console.log("[crm] webhooks:", JSON.stringify(Object.fromEntries(criados)));
+      })
+      .catch(() => {});
+  setTimeout(webhooks, 30_000);
+  setInterval(webhooks, 10 * 60_000);
   setInterval(celularNoEndereco, 60 * 60_000);
   setInterval(() => {
     const { dia, hora } = horaSp();
