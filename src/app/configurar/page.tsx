@@ -5,6 +5,7 @@ import { Abas } from "@/components/Abas";
 import { Pessoas } from "@/components/configurar/Pessoas";
 import { Metas } from "@/components/configurar/Metas";
 import { Aparelhos } from "@/components/configurar/Aparelhos";
+import { ConfigCrm } from "@/components/configurar/ConfigCrm";
 import { useEffect, useState } from "react";
 import type { Integracao } from "@/lib/integracoes";
 
@@ -210,21 +211,15 @@ const ABAS_CONFIG = [
   { id: "metas", nome: "Metas das lojas" },
   { id: "pessoas", nome: "Pessoas e acessos" },
   { id: "aparelhos", nome: "TV e telas da loja" },
-  { id: "outras", nome: "CRM e financeiro" },
+  { id: "crm", nome: "CRM" },
+  { id: "outras", nome: "Financeiro" },
 ] as const;
 type AbaConfig = (typeof ABAS_CONFIG)[number]["id"];
 
-/** Onde ficam as configurações que têm tela própria no módulo */
+/** O financeiro vai ser refeito; por enquanto as configurações dele seguem lá */
 function Outras() {
   return (
     <div className="pessoas">
-      <section className="card">
-        <h2>CRM</h2>
-        <p className="pessoas-ajuda">Cashback, automações, envio das mensagens, números de WhatsApp de cada loja e os textos.</p>
-        <a className="btn btn-sec btn-sm" href="/crm?aba=configurar">
-          Abrir as configurações do CRM
-        </a>
-      </section>
       <section className="card">
         <h2>Financeiro</h2>
         <p className="pessoas-ajuda">Empresas, categorias e a pasta do backup ficam no Financeiro, na aba Cadastros.</p>
@@ -255,6 +250,7 @@ export default function Configuracoes() {
       {aba === "metas" && <Metas />}
       {aba === "pessoas" && <Pessoas />}
       {aba === "aparelhos" && <Aparelhos />}
+      {aba === "crm" && <ConfigCrm />}
       {aba === "outras" && <Outras />}
     </main>
   );

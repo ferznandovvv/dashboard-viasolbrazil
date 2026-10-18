@@ -617,8 +617,8 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
   const podeUsar = sel ? Math.floor(Math.min(sel.saldo, valorCompra ? teto : sel.saldo) * 100) / 100 : 0;
 
   return (
-    <div className="crm-fundo" onClick={fechar}>
-      <div className="crm-janela" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Usar cashback">
+    <div className="crm-fundo" onClick={fechar} onKeyDown={(e) => e.key === "Escape" && fechar()}>
+      <div className="crm-janela" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Usar cashback">
         <div className="fin-cab">
           <h2>Usar cashback na {loja}</h2>
           <button className="link" onClick={fechar}>

@@ -284,7 +284,7 @@ export function Clientes({ r, recarregar, novaCampanha }: { r: Resumo; recarrega
 
 export function Janela({ titulo, fechar, children, larga }: { titulo: string; fechar: () => void; children: React.ReactNode; larga?: boolean }) {
   return (
-    <div className="crm-fundo" onClick={fechar}>
+    <div className="crm-fundo" onClick={fechar} onKeyDown={(e) => e.key === "Escape" && fechar()}>
       <div className={`crm-janela ${larga ? "larga" : ""}`} onClick={(e) => e.stopPropagation()}>
         <div className="fin-cab">
           <h2>{titulo}</h2>

@@ -93,14 +93,16 @@ function Menu({ atual, sessao }: { atual: string; sessao: Sessao }) {
       )}
       <div className="menu-grupo menu-fim">
         {pode(CONFIG) && <ItemMenu item={CONFIG} atual={atual} />}
-        <p className="menu-quem">
-          <b>{sessao.nome}</b>
-          <span>{PAPEIS[sessao.papel].nome}</span>
-        </p>
-        <button type="button" className="menu-item" onClick={sair}>
-          <Icone nome="sair" />
-          <span>Sair</span>
-        </button>
+        <div className="menu-conta">
+          <p className="menu-quem">
+            <b>{sessao.nome}</b>
+            <span>{PAPEIS[sessao.papel].nome}</span>
+          </p>
+          <button type="button" className="menu-sair" onClick={sair}>
+            <Icone nome="sair" tamanho={18} />
+            <span>Sair</span>
+          </button>
+        </div>
       </div>
     </>
   );

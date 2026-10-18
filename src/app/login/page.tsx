@@ -90,7 +90,8 @@ export default function Entrar() {
             {erro}
           </p>
         )}
-        <button type="submit" className="btn btn-pri" disabled={enviando || !sit}>
+        {/* Não trava enquanto a tela carrega: quem digita rápido e dá Enter já entra */}
+        <button type="submit" className="btn btn-pri" disabled={enviando}>
           {enviando ? "Entrando…" : criando ? "Criar conta e entrar" : "Entrar"}
         </button>
         {!criando && sit?.senhaAntiga && (

@@ -561,7 +561,8 @@ th.num { text-align: right; }
 /* ——— Tela de produtos: abas, posição e destaques de reposição ——— */
 .prod-tbl .pos { display: inline-block; min-width: 30px; color: var(--text-muted); font-size: 12px; }
 .prod-tbl td.tem { color: var(--text-primary); font-weight: 600; }
-.prod-tbl td.vazio { color: color-mix(in srgb, var(--text-muted) 35%, transparent); }
+/* Zero: discreto (cor de apoio, sem negrito) mas legível; quem TEM peça fica forte */
+.prod-tbl td.vazio { color: var(--text-muted); font-weight: 400; }
 .prod-tbl td.negativo { color: var(--text-muted); }
 .prod-tbl .loja-sel { background: color-mix(in srgb, var(--brand) 9%, transparent); }
 .wday .wdia { display: block; font-size: 12px; opacity: 0.7; }
@@ -1076,7 +1077,7 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .ux-chips button:hover { border-color: var(--baseline); color: var(--text-primary); }
 .ux-chips button.on { background: var(--brand); border-color: var(--brand); color: var(--on-brand); font-weight: 600; }
 .ux-chips button.on small { color: #fbf4e8; opacity: .8; }
-.ux-chips button.vazio { opacity: .5; }
+.ux-chips button.vazio { border-style: dashed; color: var(--text-muted); }
 
 /* CRM: clientes */
 .cl-topo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -1142,7 +1143,9 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .cp-auto { display: flex; flex-direction: column; }
 .cp-auto-linha { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 1.4fr); gap: 20px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
 .cp-auto-linha:first-child { border-top: none; }
-.cp-auto-linha.off { opacity: .55; }
+/* Automação desligada: perde o destaque, mas o texto continua legível */
+.cp-auto-linha.off { background: color-mix(in srgb, var(--page) 60%, transparent); }
+.cp-auto-linha.off .fin-desc, .cp-auto-linha.off .fin-desc * { color: var(--text-secondary); }
 .cp-nota { font-size: 12px; margin-top: 10px; }
 
 .cp-nova { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }

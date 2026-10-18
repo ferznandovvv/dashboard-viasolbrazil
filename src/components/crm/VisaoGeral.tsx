@@ -198,7 +198,8 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
       <section className="card">
         <h2>Celular no caixa por loja</h2>
         <p className="muted pg-nota">Das vendas dos últimos 30 dias, quantas saíram com o celular da cliente (no campo de celular ou no endereço do cadastro).</p>
-        <div className="tbl-wrap">
+        {/* Rola de lado no celular: o teclado também precisa chegar nela */}
+        <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Celular no caixa por loja">
           <table className="prod-tbl fin-tbl">
             <thead>
               <tr>
@@ -502,7 +503,7 @@ function ConferenciaCashback() {
           {!c.itens.length ? (
             <p className="muted" style={{ marginTop: 10 }}>Tudo batendo no período.</p>
           ) : (
-            <div className="tbl-wrap" style={{ marginTop: 12 }}>
+            <div className="tbl-wrap" style={{ marginTop: 12 }} tabIndex={0} role="region" aria-label="Conferência do cashback">
               <table className="prod-tbl fin-tbl">
                 <thead>
                   <tr>
