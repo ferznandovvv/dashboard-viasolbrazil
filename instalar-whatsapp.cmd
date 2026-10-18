@@ -103,9 +103,9 @@ if exist ".env" (
   >> .env echo NEXT_PUBLIC_APP_URL="http://localhost:%PORTA%"
   >> .env echo NEXT_PUBLIC_API_URL="http://localhost:%PORTA%/api"
   >> .env echo APP_NAME="WhatsApp Via Sol"
-  >> .env echo NEXT_PUBLIC_SWAGGER_ENABLED="true"
+  >> .env echo NEXT_PUBLIC_SWAGGER_ENABLED="false"
   >> .env echo NEXT_PUBLIC_SWAGGER_USERNAME="admin"
-  >> .env echo NEXT_PUBLIC_SWAGGER_PASSWORD="%SENHA_BANCO%"
+  >> .env echo NEXT_PUBLIC_SWAGGER_PASSWORD="sw%RANDOM%%RANDOM%%RANDOM%"
   >> .env echo BAILEYS_LOG_LEVEL="error"
   >> .env echo ENABLE_NOTIFICATIONS="true"
   >> .env echo ENABLE_AUTO_UPDATE_CHECK="false"
@@ -150,8 +150,7 @@ echo  ============================================================
 echo   Pronto. Agora de dois cliques em iniciar-whatsapp.cmd
 echo   e abra http://localhost:%PORTA% com o e-mail e a senha acima.
 echo.
-echo   Para ligar junto com o Windows: Win+R, shell:startup,
-echo   e arraste um atalho de iniciar-whatsapp.cmd para a pasta.
+echo   Para ligar junto com o Windows: rode ligar-com-o-windows.cmd.
 echo  ============================================================
 pause
 exit /b 0

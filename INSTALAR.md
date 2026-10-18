@@ -62,11 +62,15 @@ Não feche a janela.
 
 ## 4. Ligar junto com o Windows
 
-1. `Win + R` → digite `shell:startup` → Enter (abre a pasta Inicializar)
-2. Clique com o botão direito em `iniciar-painel.cmd` → **Mostrar mais opções →
-   Criar atalho**, e arraste o atalho para essa pasta
+Dê dois cliques em **`ligar-com-o-windows.cmd`** (uma vez). Ele põe um atalho
+do `iniciar-painel.cmd` na pasta Inicializar, sem duplicar, e confere se o
+MariaDB e o túnel do Cloudflare estão para ligar sozinhos (se pedir, rode de
+novo como administrador).
 
-Toda vez que o computador ligar, o painel sobe sozinho — já atualizado.
+O painel liga a WA-AKG (WhatsApp) junto, na mesma janela, se ela estiver
+instalada na pasta `WA-AKG` ao lado. Toda vez que o computador ligar e alguém
+entrar no Windows, sobe tudo, já atualizado. Se o computador pede senha ao
+ligar, nada sobe até alguém entrar.
 
 ## 5. Atualizar os dados todo dia
 
@@ -80,6 +84,10 @@ Um túnel do Cloudflare (gratuito) publica o painel em
 `https://painel.viasolbrazil.com.br`. O conector `cloudflared` fica instalado
 como serviço do Windows, então volta sozinho. No Zero Trust → Networks →
 Tunnels → painel, a rota deve apontar para `127.0.0.1:3100`.
+
+A WA-AKG pode ganhar o seu link no mesmo túnel
+(`whats.viasolbrazil.com.br` → `127.0.0.1:3200`), sempre protegida pelo
+Cloudflare Access. O passo a passo está em [CRM.md](CRM.md).
 
 ## Atualizar o sistema depois
 

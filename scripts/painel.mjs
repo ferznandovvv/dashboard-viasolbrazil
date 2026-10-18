@@ -6,11 +6,16 @@
  * só então troca — o painel fica fora por poucos segundos. Se a montagem
  * falhar, a versão anterior continua rodando. Se o painel cair, sobe de novo.
  *
+ * Também liga e vigia a WA-AKG (WhatsApp das lojas), se ela estiver instalada
+ * na pasta WA-AKG ao lado do painel: tudo numa janela só. O que a WA-AKG
+ * escreve vai para dados/whatsapp.log, para não poluir esta janela.
+ *
  * Uso: node scripts/painel.mjs   (o iniciar-painel.cmd já chama)
  */
 
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -163,9 +168,111 @@ async function atualizarPara(commit) {
   }
 }
 
+// ——— WhatsApp (WA-AKG) ———
+const WA_PASTA = process.env.WAAKG_DIR ?? join(RAIZ, "..", "WA-AKG");
+const WA_PORTA = Number(process.env.WAAKG_PORTA) || 3200;
+const WA_TSX = join(WA_PASTA, "node_modules", "tsx", "dist", "cli.mjs");
+const WA_LOG = join(DADOS, "whatsapp.log");
+let wa = null;
+let waParando = false;
+let waFalhasSeguidas = 0;
+let waAvisado = "";
+
+/** Tem alguém ouvindo nessa porta? */
+function portaOcupada(porta) {
+  return new Promise((resolve) => {
+    const s = connect({ port: porta, host: "127.0.0.1" });
+    const fim = (r) => {
+      s.destroy();
+      resolve(r);
+    };
+    s.once("connect", () => fim(true));
+    s.once("error", () => fim(false));
+    s.setTimeout(2000, () => fim(false));
+  });
+}
+
+function avisarUmaVez(chave, msg) {
+  if (waAvisado === chave) return;
+  waAvisado = chave;
+  log(msg);
+}
+
+function logWhatsapp(d) {
+  try {
+    // Guarda no máximo uns 5 MB (mais o arquivo anterior)
+    if (existsSync(WA_LOG) && statSync(WA_LOG).size > 5 * 1024 * 1024) renameSync(WA_LOG, WA_LOG + ".1");
+    appendFileSync(WA_LOG, d);
+  } catch {
+    /* log é só ajuda */
+  }
+}
+
+/**
+ * A WA-AKG já está rodando fora daqui? Olha a porta e, no Windows, também os
+ * processos: ela conecta os WhatsApps antes de abrir a porta, então nos
+ * primeiros segundos só o processo denuncia.
+ */
+async function whatsappPorFora() {
+  if (await portaOcupada(WA_PORTA)) return true;
+  if (process.platform !== "win32") return false;
+  const r = await rodar("powershell", [
+    "-NoProfile",
+    "-Command",
+    "@(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -match 'server.index\\.ts' }).Count",
+  ]);
+  return r.ok && Number(r.saida) > 0;
+}
+
+/** Liga a WA-AKG se ela estiver instalada e ninguém mais estiver rodando ela. */
+async function cuidarDoWhatsapp() {
+  if (wa || waParando) return;
+  if (!existsSync(WA_TSX)) return avisarUmaVez("sem", `WhatsApp: a WA-AKG não está instalada em ${WA_PASTA} (rode instalar-whatsapp.cmd). O painel segue sem ela.`);
+  // Já está no ar por fora (alguém abriu o iniciar-whatsapp.cmd): não abre outra,
+  // porque duas cópias conectariam os mesmos WhatsApps e uma derrubaria a outra
+  if (await whatsappPorFora()) return avisarUmaVez("fora", "WhatsApp: a WA-AKG já está rodando por fora (iniciar-whatsapp.cmd); deixo ela como está.");
+  if (wa || waParando) return;
+  waAvisado = "";
+  if (process.platform === "win32") await rodar("net", ["start", "MariaDB"]);
+  log(`WhatsApp: subindo a WA-AKG em http://localhost:${WA_PORTA} (o que ela escreve vai para dados\\whatsapp.log)`);
+  const env = { ...process.env, NODE_ENV: "production" };
+  // Variáveis do painel não podem vazar para ela (a WA-AKG lê as dela do .env)
+  for (const k of ["PORT", "NEXT_DIST_DIR", "DADOS_DIR", "HOSTNAME"]) delete env[k];
+  const inicio = Date.now();
+  const p = spawn(process.execPath, [WA_TSX, "src/server/index.ts"], { cwd: WA_PASTA, env, stdio: ["ignore", "pipe", "pipe"] });
+  wa = p;
+  p.stdout.on("data", logWhatsapp);
+  p.stderr.on("data", logWhatsapp);
+  p.on("error", (e) => log(`WhatsApp: não consegui abrir a WA-AKG (${e.message})`));
+  p.on("exit", (codigo) => {
+    if (wa !== p) return;
+    wa = null;
+    if (waParando) return;
+    // Caindo logo depois de subir, várias vezes: espera mais antes de tentar de novo
+    waFalhasSeguidas = Date.now() - inicio < 120000 ? waFalhasSeguidas + 1 : 0;
+    const espera = Math.min(10000 * 2 ** waFalhasSeguidas, 5 * 60000);
+    log(`WhatsApp: a WA-AKG parou (código ${codigo}). Volto em ${Math.round(espera / 1000)} segundos. Detalhes em dados\\whatsapp.log`);
+    setTimeout(() => cuidarDoWhatsapp().catch(() => {}), espera);
+  });
+}
+
+function pararWhatsapp() {
+  waParando = true;
+  return new Promise((resolve) => {
+    const p = wa;
+    if (!p) return resolve();
+    p.once("exit", () => resolve());
+    p.kill();
+    setTimeout(resolve, 8000);
+  });
+}
+
 // ——— Início ———
 async function iniciar() {
   log("Iniciando o painel…");
+  // O WhatsApp sobe primeiro: não precisa esperar a montagem do painel
+  await cuidarDoWhatsapp().catch((e) => log(`WhatsApp: erro ao subir (${e})`));
+  setInterval(() => cuidarDoWhatsapp().catch(() => {}), 60000);
   await verificar().catch((e) => log(`Erro ao verificar: ${e}`));
   const commit = await commitAtual();
   const pasta = estado.pasta;
@@ -180,7 +287,7 @@ async function iniciar() {
 for (const sinal of ["SIGINT", "SIGTERM"]) {
   process.on(sinal, async () => {
     trocando = true;
-    await derrubar();
+    await Promise.all([derrubar(), pararWhatsapp()]);
     process.exit(0);
   });
 }

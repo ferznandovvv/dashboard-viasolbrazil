@@ -62,16 +62,19 @@ dispositivo pareado do número da loja; o celular continua funcionando normal.
 Ela também tem uma tela de conversas de todas as sessões, que é onde você
 acompanha o atendimento das lojas.
 
-Na pasta do painel há dois arquivos:
+Na pasta do painel:
 
 1. **`instalar-whatsapp.cmd`** (uma vez, botão direito → Executar como
    administrador). Instala o MariaDB em silêncio, baixa a WA-AKG para a
    pasta `WA-AKG` ao lado do painel, cria o `.env` (porta 3200, fuso de
    São Paulo), monta o banco, compila e pede um e-mail e senha para o seu
    usuário. Leva uns 10 minutos.
-2. **`iniciar-whatsapp.cmd`**: sobe a WA-AKG em <http://localhost:3200> e a
-   mantém no ar (se cair, volta sozinha). Ponha um atalho dele em
-   `shell:startup`, igual ao do painel.
+2. **Ligar**: não precisa de nada. O `iniciar-painel.cmd` liga a WA-AKG junto
+   em <http://localhost:3200> e a mantém no ar (se cair, volta sozinha), tudo
+   numa janela só. O que ela escreve vai para `dados\whatsapp.log`. O
+   `iniciar-whatsapp.cmd` continua existindo para subir só ela; se ela já
+   estiver rodando, ele não abre outra, e o painel também não (duas cópias
+   conectariam os mesmos números e uma derrubaria a outra).
 
 Depois, em <http://localhost:3200>:
 
@@ -79,18 +82,31 @@ Depois, em <http://localhost:3200>:
    `fiusa`) e escanear o QR no celular da loja em *Dispositivos conectados*.
    Comece com uma loja só.
 2. **API Key**: no seu usuário, copie a chave.
-3. **Webhooks**: cadastre `http://localhost:3100/api/crm/webhook?t=...` (a URL
-   exata aparece em CRM → Configurar → Envio) com os eventos
-   `message.received`, `message.sent` e `message.status`. É isso que alimenta
-   o atendimento na Visão geral e marca as respostas das clientes.
+3. **Webhooks**: não precisa cadastrar. O painel cria e confere sozinho o
+   webhook de cada número (veja "Webhook de cada número" abaixo).
 
 No painel, CRM → Configurar → Envio: provedor WA-AKG, endereço
 `http://localhost:3200`, API Key. Em Números, cole o nome da sessão de cada
 loja, ligue e teste ("situação" e "mandar teste" para o seu celular).
 
-Para acessar a tela de conversas de fora de casa, crie no túnel do Cloudflare
-uma segunda rota (ex.: `whats.viasolbrazil.com.br` → `127.0.0.1:3200`) e
-troque `BASE_URL`/`NEXTAUTH_URL` no `WA-AKG\.env` para esse endereço.
+### Acessar a WA-AKG de fora (whats.viasolbrazil.com.br)
+
+1. Cloudflare Zero Trust → Networks → Tunnels → o túnel do painel →
+   **Public Hostname** → Add: subdomínio `whats`, domínio
+   `viasolbrazil.com.br`, serviço `HTTP` e `127.0.0.1:3200`.
+2. **Proteja antes de usar**: Zero Trust → Access → Applications → Add →
+   Self-hosted, domínio `whats.viasolbrazil.com.br`, política *Allow* com o
+   seu e-mail. Só entra quem recebe o código no e-mail. Isso importa porque a
+   WA-AKG vem com o cadastro de usuários aberto e a senha da tela /swagger
+   fica visível no código da página; quem chegasse nela controlaria o
+   WhatsApp de todas as lojas.
+3. Na WA-AKG → Settings, desligue **Enable User Registration**.
+
+Não troque o `BASE_URL` do `WA-AKG\.env`: a WA-AKG manda esse endereço a cada
+30 segundos para o servidor de monitoramento do autor dela. Deixando
+`localhost`, o link público não vaza. O login funciona pelo link mesmo assim
+(ela aceita o endereço de quem acessa). O painel continua falando com ela por
+`http://localhost:3200`, então nada muda no CRM.
 
 Comece com uma ou duas lojas e teto baixo. Se der problema de conexão
 repetido, o adaptador da Cloud API (oficial) está pronto em
