@@ -1,6 +1,7 @@
 import { fetchEstoque } from "./connectors/estoque";
 import { fetchPrecos } from "./connectors/precos";
 import { fetchTotvsSales, fetchVendasPorProduto } from "./connectors/totvs";
+import { historicoMensal } from "./historico";
 import { todaySpKey } from "./types";
 
 /**
@@ -25,12 +26,15 @@ export async function aquecer() {
   const ini = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
   const fim = new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10);
   await fetchVendasPorProduto(ini, fim, 10 * 60000);
+  // Histórico mês a mês: a primeira montagem busca anos da TOTVS
+  const historico = await historicoMensal().catch((e: Error) => ({ erros: [e.message], meses: [] as string[] }));
 
   return {
     periodo: { de: inicioMes, ate: hoje },
     vendas: { notas: vendasMes.orders.length, erro: vendasMes.error },
     produtos: { linhas: produtos.itens.length, incompleto: produtos.incompleto, erro: produtos.erro },
     estoque: { itens: estoque.itens.length, incompleto: estoque.incompleto, erro: estoque.erro },
+    historico: { meses: historico.meses.length, erros: historico.erros },
   };
 }
 

@@ -8,6 +8,7 @@ import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
 import { fetchShopeeOrders } from "@/lib/connectors/shopee";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
 import { fetchMetaSpend } from "@/lib/connectors/meta";
+import { testarPlanilha } from "@/lib/historico";
 import { addDays, todaySpKey } from "@/lib/types";
 import type { ChannelResult } from "@/lib/types";
 
@@ -130,7 +131,7 @@ function canal(r: ChannelResult): { ok: boolean; mensagem: string } {
 
 /**
  * Testa uma integração agora, com as chaves que estão valendo, e devolve o
- * erro exato quando falha. ?id=totvs|shopify|tiktok|meli|shopee|tiktok-ads|meta
+ * erro exato quando falha. ?id=totvs|shopify|tiktok|meli|shopee|tiktok-ads|meta|historico
  */
 export async function POST(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") ?? "";
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
     if (id === "tiktok") return NextResponse.json(canal(await fetchTikTokOrders(semana)));
     if (id === "meli") return NextResponse.json(canal(await fetchMeliOrders(semana)));
     if (id === "shopee") return NextResponse.json(canal(await fetchShopeeOrders(semana)));
+    if (id === "historico") return NextResponse.json(await testarPlanilha());
     if (id === "tiktok-ads" || id === "meta") {
       const r = id === "meta" ? await fetchMetaSpend(addDays(hoje, -6), hoje) : await fetchTikTokAdsSpend(addDays(hoje, -6), hoje);
       if (!r.connected) return NextResponse.json({ ok: false, mensagem: "Faltam chaves (ou falta autorizar)." });

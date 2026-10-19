@@ -19,6 +19,8 @@ export function Metas() {
   const [valores, setValores] = useState<Record<string, string>>({});
   const [salvos, setSalvos] = useState<Record<string, number>>({});
   const [estado, setEstado] = useState<"" | "salvando" | "salvo" | string>("");
+  /** Mesmo mês do ano passado, de cada loja (vem do histórico, que pode demorar) */
+  const [anoPassado, setAnoPassado] = useState<Record<string, number>>({});
 
   useEffect(() => {
     Promise.all([
@@ -32,6 +34,13 @@ export function Metas() {
         setValores(Object.fromEntries(Object.entries(metas).map(([u, v]) => [u, mostrar(v)])));
       })
       .catch(() => setEstado("Não consegui carregar as metas. Recarregue a página."));
+    fetch("/api/historico", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((h: { meses: string[]; valores: Record<string, Record<string, number>> } | null) => {
+        const atual = h?.meses[h.meses.length - 1];
+        if (atual) setAnoPassado(h.valores[`${Number(atual.slice(0, 4)) - 1}${atual.slice(4)}`] ?? {});
+      })
+      .catch(() => {});
   }, []);
 
   const mudadas = unidades.filter((u) => lerReais(valores[u] ?? "") !== (salvos[u] ?? 0));
@@ -59,12 +68,14 @@ export function Metas() {
   if (!unidades.length) return <div className="empty">{estado || "Carregando…"}</div>;
 
   const mes = new Date().toLocaleDateString("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" });
+  const anoAnterior = Number(new Date().toLocaleDateString("pt-BR", { year: "numeric", timeZone: "America/Sao_Paulo" })) - 1;
   return (
     <form className="card metas-cfg" onSubmit={salvar}>
       <h2>Meta do mês de cada loja</h2>
       <p className="pessoas-ajuda">
         Vale para {mes} e continua nos próximos meses até você mudar. Aparece em Vendas e na tela da loja, que divide a
-        meta da loja entre as vendedoras. Deixe em branco para ficar sem meta.
+        meta da loja entre as vendedoras. Deixe em branco para ficar sem meta. Embaixo de cada loja, quanto ela vendeu
+        no mesmo mês do ano passado, para servir de base.
       </p>
       <div className="metas-cfg-grade">
         {unidades.map((u) => (
@@ -74,6 +85,7 @@ export function Metas() {
               <span aria-hidden="true">R$</span>
               <input
                 id={`meta-${u}`}
+                aria-describedby={anoPassado[u] ? `meta-${u}-antes` : undefined}
                 inputMode="decimal"
                 value={valores[u] ?? ""}
                 onChange={(e) => {
@@ -83,6 +95,12 @@ export function Metas() {
                 placeholder="sem meta"
               />
             </div>
+            {anoPassado[u] > 0 && (
+              <span className="dica" id={`meta-${u}-antes`}>
+                {u === "Site" ? "Só o site" : "Vendeu"} em {mes} de {anoAnterior}:{" "}
+                {anoPassado[u].toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+              </span>
+            )}
           </div>
         ))}
       </div>

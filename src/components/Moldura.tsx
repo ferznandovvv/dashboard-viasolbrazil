@@ -21,10 +21,13 @@ interface Item {
   area: Area;
   /** Abre em outra aba (a TV fica numa tela à parte) */
   fora?: boolean;
+  /** Fica fora da barra de atalhos do celular (consulta de vez em quando) */
+  semAtalho?: boolean;
 }
 
 const MODULOS: Item[] = [
   { href: "/", nome: "Vendas", icone: "vendas", area: "vendas" },
+  { href: "/historico", nome: "Histórico", icone: "historico", area: "vendas", semAtalho: true },
   { href: "/produtos", nome: "Produtos", icone: "produtos", area: "estoque" },
   { href: "/financeiro", nome: "Financeiro", icone: "financeiro", area: "financeiro" },
   { href: "/atendimento", nome: "Atendimento", icone: "atendimento", area: "crm" },
@@ -127,7 +130,7 @@ export function Moldura({ sessao, children }: { sessao: Sessao | null; children:
     return <ProvedorSessao value={sessao}>{children}</ProvedorSessao>;
 
   // Barra do celular: os primeiros itens que o papel usa, mais o botão Menu
-  const barra = [...MODULOS, ...LOJAS].filter((i) => !i.fora && temArea(sessao.papel, i.area)).slice(0, 4);
+  const barra = [...MODULOS, ...LOJAS].filter((i) => !i.fora && !i.semAtalho && temArea(sessao.papel, i.area)).slice(0, 4);
 
   return (
     <ProvedorSessao value={sessao}>
@@ -142,11 +145,11 @@ export function Moldura({ sessao, children }: { sessao: Sessao | null; children:
           <Menu atual={atual} sessao={sessao} />
         </aside>
 
-        <div className="topo-cel">
+        <header className="topo-cel">
           <Link href={inicio(sessao.papel)} aria-label="Via Sol — início">
             <span className="brand-word" aria-hidden="true" />
           </Link>
-        </div>
+        </header>
 
         <div className="conteudo" id="conteudo" tabIndex={-1}>
           {children}

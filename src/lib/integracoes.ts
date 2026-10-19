@@ -109,6 +109,18 @@ export const INTEGRACOES: Integracao[] = [
       },
     ],
   },
+  {
+    id: "historico",
+    nome: "Vendas antigas (planilha)",
+    para: "Histórico das lojas e do site antes da TOTVS, mês a mês desde 2023",
+    campos: [
+      {
+        nome: "HISTORICO_CHAVE",
+        rotulo: "Chave das vendas antigas",
+        dica: "A chave que veio junto com a planilha. Os números ficam trancados no código e só abrem com ela",
+      },
+    ],
+  },
 ];
 
 export const NOMES_PERMITIDOS = new Set(

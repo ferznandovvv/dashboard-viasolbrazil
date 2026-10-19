@@ -8,6 +8,13 @@ const DESENHOS = {
       <path d="M16 16v-6" />
     </>
   ),
+  historico: (
+    <>
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" />
+      <path d="M3.5 4.5v4h4" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
   produtos: (
     <>
       <path d="M21 8 12 3 3 8v8l9 5 9-5z" />

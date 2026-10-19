@@ -31,6 +31,8 @@
   --c-online: #5b4632;
   --l1: #2a78d6; --l2: #008300; --l3: #e87ba4; --l4: #eda100;
   --l5: #1baf7a; --l6: #eb6834; --l7: #4a3aa7; --l8: #e34948;
+  /* Anos no histórico: um tom só, do mais antigo (claro) ao atual (escuro) */
+  --ano-1: #d9a074; --ano-2: #c27840; --ano-3: #a6571f; --ano-4: #7e3708;
   --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: "Playfair Display", Georgia, serif;
 }
@@ -60,6 +62,7 @@
     --c-online: #cbb89d;
     --l1: #3987e5; --l2: #008300; --l3: #d55181; --l4: #c98500;
     --l5: #199e70; --l6: #d95926; --l7: #9085e9; --l8: #e66767;
+    --ano-1: #7d4a2c; --ano-2: #a8653a; --ano-3: #d08c58; --ano-4: #f2bb90;
   }
 }
 
@@ -1648,3 +1651,32 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .cap-lista-cab { margin-top: 18px; }
 /* Texto só para leitor de tela (position: absolute) dentro de tabela que rola não pode alargar a página */
 .tbl-wrap { position: relative; }
+
+/* ——— Histórico ——— */
+.hist-ver { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+.hist-ver select {
+  font: inherit; font-weight: 400; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-height: 40px; max-width: 70vw;
+}
+.hist-aviso { border-color: var(--aviso); color: var(--text-primary); }
+.hist-vs { font-size: 12px; color: var(--text-muted); margin-left: 6px; }
+.hist-rodape { font-size: 12.5px; color: var(--text-muted); margin: 10px 0 0; max-width: 90ch; }
+.hist-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.hist-cab h2 { margin: 0; }
+.grafico-anos .legenda-anos { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 8px; padding: 0; font-size: 13px; color: var(--text-secondary); }
+.legenda-anos li { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-anos .traco { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+.hist-tbl .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; width: calc(76% / var(--anos, 4)); }
+.hist-tbl tbody th { border-bottom: none; text-align: left; font-weight: 600; color: var(--text-primary); text-transform: none; letter-spacing: 0; font-size: 12.5px; padding: 7px 8px; border-top: 1px solid var(--border); }
+.hist-tbl tbody th:first-letter { text-transform: uppercase; }
+.hist-tbl td .delta { display: block; margin: 1px 0 0; font-size: 12px; }
+.hist-tbl .vazio { color: var(--text-muted); }
+.hist-tbl tr.subtotal th, .hist-tbl tr.subtotal td { border-top: 1px solid var(--baseline); }
+.hist-tbl tr.total th, .hist-tbl tr.total td { border-top: 2px solid var(--baseline); font-weight: 700; }
+.hist-nota { color: var(--brand); font-weight: 700; margin-left: 2px; cursor: help; }
+.hist-parcial { display: block; font-size: 12px; color: var(--text-muted); }
+.hist-notas { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12.5px; color: var(--text-secondary); }
+@media (max-width: 640px) {
+  .hist-tbl th:first-child { min-width: 0; width: 112px; max-width: 112px; white-space: normal; }
+  .hist-tbl .n { width: auto; min-width: 92px; }
+}
