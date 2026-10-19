@@ -237,7 +237,7 @@
 .pessoas-papel input { margin-top: 3px; accent-color: var(--brand); width: 18px; height: 18px; flex: none; }
 .pessoas-papel b { display: block; font-size: var(--fs-3); }
 .pessoas-papel small { display: block; font-size: var(--fs-2); color: var(--text-secondary); line-height: 1.4; margin-top: 2px; }
-.pessoas-lojas { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.pessoas-lojas { grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); }
 .pessoas-check { display: flex; align-items: center; gap: var(--e-2); min-height: 36px; font-size: var(--fs-3); cursor: pointer; }
 .pessoas-check input { width: 18px; height: 18px; accent-color: var(--brand); flex: none; }
 .pessoas-grupo ul { list-style: none; display: flex; flex-direction: column; }

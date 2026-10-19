@@ -240,7 +240,7 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
                     <b>{x.nome ? nomeCurto(x.nome) : x.telefone || "Contato sem número visível"}</b>
                     <small>
                       {x.nome && x.telefone ? `${x.telefone} · ` : ""}
-                      {x.texto ? `"${x.texto.slice(0, 70)}"` : ""}
+                      {x.texto ? `"${x.texto.length > 70 ? `${x.texto.slice(0, 70)}…` : x.texto}"` : ""}
                     </small>
                   </span>
                   <span className="lp-espera-tempo">há {minutos(x.esperando)}</span>

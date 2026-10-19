@@ -366,27 +366,25 @@ function CartaoLoja({ l, abrir }: { l: Loja; abrir: () => void }) {
 
 export function ListaPendentes({ pendentes, comLoja }: { pendentes: Pendente[]; comLoja?: boolean }) {
   return (
-    <table className="prod-tbl fin-tbl">
-      <tbody>
-        {pendentes.map((p) => (
-          <tr key={`${p.loja}|${p.telefone}`}>
-            {comLoja && <td className="fin-desc">{p.loja}</td>}
-            <td>
-              <div className="fin-desc">{p.nomeMostrar ?? <span className="muted">sem nome</span>}</div>
-              <div className="fin-sub">
-                {/^55\d{10,11}$/.test(p.telefone) ? formatarTelefone(p.telefone) : "número escondido pelo WhatsApp"}
-                {!p.cliente && " · não está na base"}
-              </div>
-            </td>
-            <td className="crm-texto-msg">{p.texto}</td>
-            <td style={{ whiteSpace: "nowrap" }}>
-              <span className={`fin-status ${p.esperando > 60 ? "vencida" : "hoje"}`}>há {minutos(p.esperando)}</span>
-              <div className="fin-sub">desde {dataHora(p.desde)}</div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <ul className="pend-lista">
+      {pendentes.map((p) => (
+        <li key={`${p.loja}|${p.telefone}`} className="pend">
+          <div className="pend-quem">
+            {comLoja && <span className="pend-loja">{p.loja}</span>}
+            <b>{p.nomeMostrar ?? <span className="muted">sem nome</span>}</b>
+            <small>
+              {/^55\d{10,11}$/.test(p.telefone) ? formatarTelefone(p.telefone) : "número escondido pelo WhatsApp"}
+              {!p.cliente && " · não está na base"}
+            </small>
+          </div>
+          {p.texto && <p className="pend-texto">{p.texto}</p>}
+          <div className="pend-tempo">
+            <span className={`fin-status ${p.esperando > 60 ? "vencida" : "hoje"}`}>há {minutos(p.esperando)}</span>
+            <small>desde {dataHora(p.desde)}</small>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
