@@ -289,6 +289,8 @@ export interface ConfigCrm {
   /** Provedor de envio */
   provedor: "waakg" | "cloudapi" | "nenhum";
   waakgUrl?: string;
+  /** Link da WA-AKG para abrir no navegador (de fora de casa, pelo túnel). Vazio = usa o waakgUrl. */
+  waakgLink?: string;
   waakgApiKey?: string;
   cloudApiToken?: string;
   /** Segredo que o webhook precisa trazer na URL (?t=) */
@@ -458,6 +460,16 @@ export const MODELOS_PADRAO: Modelo[] = [
 
 /** Endereço público do painel pelo túnel do Cloudflare */
 export const ENDERECO_PUBLICO_PADRAO = "https://painel.viasolbrazil.com.br";
+
+/** Link público da WA-AKG pelo mesmo túnel (protegido pelo Cloudflare Access) */
+export const WAAKG_LINK_PADRAO = "https://whats.viasolbrazil.com.br";
+
+/** Endereço da WA-AKG para a pessoa abrir no navegador (botões "abrir conversas"). */
+export function linkDaWaakg(config: Pick<ConfigCrm, "provedor" | "waakgUrl" | "waakgLink">): string | undefined {
+  if (config.provedor !== "waakg") return undefined;
+  const link = (config.waakgLink ?? WAAKG_LINK_PADRAO).trim().replace(/\/+$/, "");
+  return link || config.waakgUrl || undefined;
+}
 
 export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   cashbackPct: 15,

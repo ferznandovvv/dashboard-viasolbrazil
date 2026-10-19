@@ -5,6 +5,7 @@ import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { dentroDaJanela } from "@/lib/crm/fila";
 import { detalheLoja, painel } from "@/lib/crm/painel";
 import { nomearPendentes } from "@/lib/crm/contatos";
+import { linkDaWaakg } from "@/lib/crm/tipos";
 import { aprenderVendedoras } from "@/lib/crm/vendasLoja";
 import { vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
 import { acessosDasLojas } from "@/lib/crm/acessos";
@@ -71,6 +72,6 @@ export async function GET(req: NextRequest) {
       inicio: cfg.envioInicio,
       fim: cfg.envioFim,
     },
-    gatewayUrl: cfg.provedor === "waakg" ? cfg.waakgUrl : undefined,
+    gatewayUrl: linkDaWaakg(cfg),
   });
 }

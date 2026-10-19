@@ -226,7 +226,15 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
                 </label>
                 {cfg.provedor === "waakg" && (
                   <>
-                    <Campo rotulo="Endereço da WA-AKG" valor={cfg.waakgUrl ?? ""} onChange={t("waakgUrl")} texto placeholder="http://localhost:3200" />
+                    <Campo rotulo="Endereço da WA-AKG (o painel conversa com ela por aqui)" valor={cfg.waakgUrl ?? ""} onChange={t("waakgUrl")} texto placeholder="http://localhost:3200" />
+                    <Campo
+                      rotulo="Link da WA-AKG para abrir de fora"
+                      valor={cfg.waakgLink ?? d.waakgLinkPadrao ?? ""}
+                      onChange={t("waakgLink")}
+                      texto
+                      placeholder="https://whats.viasolbrazil.com.br"
+                      dica="É o que os botões de abrir conversas usam. Vazio = abre pelo endereço de cima (só funciona neste computador)."
+                    />
                     <Campo rotulo={`API Key${d.temWaakgApiKey ? " (salva)" : ""}`} valor={cfg.waakgApiKey ?? ""} onChange={t("waakgApiKey")} texto placeholder="cole pra trocar" />
                   </>
                 )}

@@ -1502,3 +1502,5 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 
 /* Rede de segurança: textos sem espaço (links, códigos) nunca alargam a página */
 .card, .tile, .pg-loja { min-width: 0; overflow-wrap: break-word; }
+.pg-esperando-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; }
+.pg-esperando-cab a { text-decoration: none; }

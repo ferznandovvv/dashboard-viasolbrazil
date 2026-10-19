@@ -10,6 +10,7 @@ import { type ResumoAtendimento, resumoAtendimento } from "./atendimento";
 import { enviadasHoje } from "./fila";
 import { perfis } from "./perfil";
 import type { BaseCrm } from "./tipos";
+import { linkDaWaakg } from "./tipos";
 
 export type Nivel = "ok" | "atencao" | "critico" | "inativo";
 
@@ -214,6 +215,6 @@ export function detalheLoja(base: BaseCrm, loja: string, dias: number) {
     vendedoras: Array.from(porVend, ([nome, a]) => ({ nome, ...a, pct: pct(a.comCelular, a.vendas) }))
       .filter((x) => x.vendas >= 3)
       .sort((x, y) => (y.pct ?? 0) - (x.pct ?? 0)),
-    gatewayUrl: base.config.provedor === "waakg" ? base.config.waakgUrl : undefined,
+    gatewayUrl: linkDaWaakg(base.config),
   };
 }

@@ -56,6 +56,7 @@ export interface DadosConfig {
   /** O endereço que o painel cadastra sozinho em cada número */
   webhookUsado?: string;
   enderecoPublicoPadrao?: string;
+  waakgLinkPadrao?: string;
 }
 
 export type MensagemComCliente = Mensagem & { cliente: string };

@@ -128,7 +128,14 @@ export function PainelAtendimento() {
 
       {p.pendentes.length > 0 && (
         <div className="card pg-esperando">
-          <h2>Esperando resposta agora</h2>
+          <div className="pg-esperando-cab">
+            <h2>Esperando resposta agora</h2>
+            {p.gatewayUrl && (
+              <a className="mini ghost" href={`${p.gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer">
+                Abrir conversas <span className="so-leitor">(abre em outra aba)</span>
+              </a>
+            )}
+          </div>
           <ListaPendentes pendentes={p.pendentes} comLoja />
         </div>
       )}
@@ -414,8 +421,8 @@ function DetalheLoja({ loja, gatewayUrl, fechar }: { loja: string; gatewayUrl?: 
         </div>
         <span style={{ flex: 1 }} />
         {gatewayUrl && (
-          <a className="mini ghost" href={gatewayUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-            Abrir conversas (WA-AKG)
+          <a className="mini ghost" href={`${gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+            Abrir conversas (WA-AKG) <span className="so-leitor">(abre em outra aba)</span>
           </a>
         )}
       </div>

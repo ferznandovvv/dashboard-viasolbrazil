@@ -3,7 +3,7 @@ import { lerFaixa } from "@/lib/crm/atendimento";
 import { configurarWebhooks, urlDoWebhook, webhookQueVale } from "@/lib/crm/webhookAuto";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
-import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
+import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     webhookUrl: `${origem}/api/crm/webhook?t=${base.config.webhookSegredo}`,
     webhookUsado: urlDoWebhook(base.config),
     enderecoPublicoPadrao: ENDERECO_PUBLICO_PADRAO,
+    waakgLinkPadrao: WAAKG_LINK_PADRAO,
   });
 }
 
@@ -117,6 +118,12 @@ export async function POST(req: NextRequest) {
                 ? c.enderecoPublico.trim().replace(/\/+$/, "")
                 : atual.enderecoPublico
               : atual.enderecoPublico,
+          waakgLink:
+            c.waakgLink !== undefined
+              ? /^https?:\/\/[^\s/]+/.test(c.waakgLink.trim()) || !c.waakgLink.trim()
+                ? c.waakgLink.trim().replace(/\/+$/, "")
+                : atual.waakgLink
+              : atual.waakgLink,
           waakgUrl: c.waakgUrl !== undefined ? c.waakgUrl.trim().replace(/\/+$/, "") || undefined : atual.waakgUrl,
           // Chave só muda se vier uma nova (a tela mostra mascarada)
           waakgApiKey: c.waakgApiKey && !c.waakgApiKey.includes("…") ? c.waakgApiKey.trim() : atual.waakgApiKey,
