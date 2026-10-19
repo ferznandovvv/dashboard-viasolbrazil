@@ -27,6 +27,8 @@
   --c-meli: #de9a10;
   --c-shopee: #e8472b;
   --c-lojas: #7a4b8f;
+  /* Online somado (modo TV): neutro, para não confundir com as cores das lojas */
+  --c-online: #5b4632;
   --l1: #2a78d6; --l2: #008300; --l3: #e87ba4; --l4: #eda100;
   --l5: #1baf7a; --l6: #eb6834; --l7: #4a3aa7; --l8: #e34948;
   --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -55,6 +57,7 @@
     --c-meli: #c08a0e;
     --c-shopee: #f0613f;
     --c-lojas: #9b74b8;
+    --c-online: #cbb89d;
     --l1: #3987e5; --l2: #008300; --l3: #d55181; --l4: #c98500;
     --l5: #199e70; --l6: #d95926; --l7: #9085e9; --l8: #e66767;
   }
@@ -182,20 +185,63 @@ button.mini.ghost {
   font-variant-numeric: tabular-nums;
 }
 
-.tv { min-height: 100vh; display: flex; flex-direction: column; padding: 40px 48px; gap: 24px; }
-.tv .tv-head { display: flex; align-items: center; justify-content: space-between; }
-/* A TV é vista de longe: tudo cresce com a largura da tela */
-.tv .hero { font-family: var(--font-serif); font-size: clamp(64px, 6.6vw, 132px); font-weight: 600; line-height: 1.05; }
-.tv .hero-label {
-  font-size: clamp(15px, 1.25vw, 26px); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--text-secondary); margin-bottom: 6px;
+/*
+ * Modo TV: tudo numa tela só, sem rolagem. Vista de longe, então os tamanhos
+ * crescem com a tela — pelo menor entre largura e altura, para caber também
+ * em TV mais baixa. O gráfico fica com o espaço que sobra.
+ */
+.tv {
+  height: 100vh; height: 100dvh; overflow: hidden;
+  display: flex; flex-direction: column;
+  padding: clamp(14px, 3vh, 40px) clamp(20px, 2.6vw, 52px);
+  gap: clamp(10px, 2vh, 26px);
 }
-.tv .tv-row { display: flex; gap: clamp(24px, 2.6vw, 56px); flex-wrap: wrap; align-items: flex-end; }
-.tv .tv-ch { font-size: clamp(16px, 1.2vw, 24px); }
-.tv .tv-ch .n { font-family: var(--font-serif); font-size: clamp(28px, 2.5vw, 50px); font-weight: 600; display: block; }
-.tv .updated { font-size: clamp(13px, 1vw, 20px); }
-.tv .tv-chart h2 { font-size: clamp(16px, 1.2vw, 24px); }
-.tv .tv-chart { flex: 1; }
+.tv .tv-head { display: flex; align-items: center; justify-content: space-between; flex: none; }
+.tv .brand-word.lg { width: clamp(170px, min(15vw, 26vh), 300px); height: clamp(24px, min(2.1vw, 3.6vh), 42px); }
+.tv .updated { font-size: clamp(13px, min(1vw, 1.8vh), 20px); color: var(--text-secondary); }
+.tv .hero-label {
+  display: block; font-size: clamp(13px, min(1.2vw, 2.1vh), 25px); font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-secondary); margin: 0 0 4px;
+}
+.tv .hero {
+  font-family: var(--font-serif); font-size: clamp(40px, min(6vw, 10.5vh), 132px); font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.tv .tv-row { display: flex; gap: clamp(24px, 4vw, 88px); align-items: flex-end; flex: none; }
+.tv .tv-total { margin-right: auto; }
+.tv .ch-dot { width: 0.7em; height: 0.7em; border-radius: 0.2em; margin-right: 0.4em; vertical-align: 0.05em; }
+.tv .tv-ch .n, .tv .tv-loja .n {
+  display: block; font-family: var(--font-serif); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.tv .tv-ch .n { font-size: clamp(24px, min(2.8vw, 5vh), 58px); }
+.tv .sub { display: block; font-size: clamp(12px, min(0.95vw, 1.7vh), 19px); color: var(--text-secondary); }
+.tv .tv-aviso { font-size: clamp(13px, min(1vw, 1.8vh), 20px); color: var(--aviso); font-weight: 600; margin: 0 0 6px; }
+.tv .tv-lojas {
+  list-style: none; margin: 0; padding: 0; flex: none;
+  display: grid; grid-template-columns: repeat(var(--colunas, 4), minmax(0, 1fr)); gap: clamp(8px, 1.4vh, 18px);
+}
+.tv .tv-loja {
+  background: var(--surface-1); border: 1px solid var(--border); border-left: 6px solid; border-radius: var(--r-2);
+  padding: clamp(8px, 1.5vh, 18px) clamp(12px, 1.2vw, 22px); min-width: 0;
+}
+.tv .tv-loja .nome {
+  display: block; font-size: clamp(14px, min(1.15vw, 2vh), 24px); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tv .tv-loja .n { font-size: clamp(20px, min(2.1vw, 3.8vh), 44px); }
+.tv .tv-loja .n.zero { color: var(--text-muted); }
+.tv .tv-chart { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; margin: 0; padding: clamp(10px, 1.8vh, 22px) clamp(14px, 1.4vw, 26px); }
+.tv .tv-chart h2 { font-size: clamp(15px, min(1.2vw, 2.1vh), 24px); flex: none; }
+.tv .tv-grafico { flex: 1 1 0; min-height: 0; overflow: hidden; }
+/* Celular ou janela pequena: aí pode rolar */
+@media (max-width: 899px), (max-height: 479px) {
+  .tv { height: auto; min-height: 100dvh; overflow: visible; }
+  .tv .tv-row { flex-wrap: wrap; }
+  .tv .tv-total { flex-basis: 100%; }
+  .tv .tv-lojas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tv .tv-chart, .tv .tv-grafico { flex: none; }
+  .tv .tv-grafico { height: 260px; }
+}
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 14px; margin-bottom: 14px; }
 .tiles-2 { grid-template-columns: 1fr 1fr; margin-bottom: 0; }
