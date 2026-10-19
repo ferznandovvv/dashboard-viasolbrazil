@@ -43,9 +43,6 @@ export const minutos = (m: number | null | undefined) =>
   m === null || m === undefined ? "–" : m < 1 ? "< 1 min" : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`;
 
 
-const DIA = ["D", "S", "T", "Q", "Q", "S", "S"];
-const diaSemana = (d: string) => DIA[new Date(`${d}T12:00:00`).getDay()];
-
 /** Visão gerencial: um cartão por loja com atendimento, WhatsApp e captura de celular. */
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
@@ -68,7 +65,11 @@ function usePainel() {
   return { p, erro, carregar };
 }
 
-/** Aba Atendimento: uma faixa por loja, com quem está esperando dentro dela. */
+/**
+ * Aba Atendimento: todas as lojas numa tabela só, para ver de uma vez como
+ * cada uma está, e embaixo quem está esperando resposta em qualquer loja.
+ * O nome da loja abre os detalhes dela.
+ */
 export function PainelAtendimento() {
   const { p, erro, carregar } = usePainel();
   const [aberta, setAberta] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function PainelAtendimento() {
     }
   };
 
-  const pendentes = p.pendentes.filter((x) => !ignorando.has(`${x.loja}|${x.telefone}`));
+  const pendentes = p.pendentes.filter((x) => !ignorando.has(`${x.loja}|${x.telefone}`)).sort((a, b) => b.esperando - a.esperando);
   const daLoja = (loja: string) => pendentes.filter((x) => x.loja === loja);
   const ligadas = p.lojas
     .filter((l) => l.numero.ativo)
@@ -103,111 +104,131 @@ export function PainelAtendimento() {
         b.l.atend.conversasHoje - a.l.atend.conversasHoje
     );
   const semNumero = p.lojas.filter((l) => !l.numero.ativo);
+  const desligadas = ligadas.filter(({ l }) => l.conectado === false).map(({ l }) => l.loja);
+  const lenta = (m: number | null) => (m === null ? "" : m > 30 ? "ruim" : m > 15 ? "medio" : "bom");
 
   return (
     <div>
-      {ligadas.length > 1 && (
-        <nav className="at-atalhos" aria-label="Ir para a loja">
-          {ligadas.map(({ l, esp }) => (
-            <a key={l.loja} href={`#loja-${idLoja(l.loja)}`} className={l.conectado === false ? "ruim" : esp.length ? "espera" : ""}>
-              {l.loja}
-              <b>{l.conectado === false ? "desconectado" : esp.length ? `${esp.length} esperando` : "em dia"}</b>
-            </a>
-          ))}
-        </nav>
-      )}
-
       {!p.geral.eventos && ligadas.length > 0 && (
         <div className="card muted pg-dica">
-          Nenhuma conversa chegou ainda. O painel confere o webhook de cada número sozinho a cada 10 minutos; se continuar vazio, use &quot;situação&quot; em CRM → Configurar → Números, que mostra se o webhook está ok.
+          Nenhuma conversa chegou ainda. O painel confere o webhook de cada número sozinho a cada 10 minutos; se continuar vazio, use &quot;situação&quot; em Configurações › CRM › Números, que mostra se o webhook está ok.
         </div>
       )}
 
-      {ligadas.map(({ l, esp }) => (
-        <BlocoLoja key={l.loja} l={l} esperando={esp} gatewayUrl={p.gatewayUrl} ignorar={ignorar} detalhes={() => setAberta(l.loja)} />
-      ))}
+      <section className="card" aria-labelledby="at-geral-titulo">
+        <header className="at-cab">
+          <h2 id="at-geral-titulo">Lojas agora</h2>
+          {p.gatewayUrl && (
+            <span className="at-cab-acoes">
+              <a className="mini ghost" href={`${p.gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer">
+                Abrir conversas <span className="so-leitor">(abre em outra aba)</span>
+              </a>
+            </span>
+          )}
+        </header>
+        {ligadas.length === 0 ? (
+          <p className="at-emdia">Nenhuma loja com WhatsApp ligado ao painel ainda.</p>
+        ) : (
+          <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Atendimento de cada loja">
+            <table className="prod-tbl at-geral">
+              <thead>
+                <tr>
+                  <th scope="col">Loja</th>
+                  <th scope="col">WhatsApp</th>
+                  <th scope="col" className="n">Esperando</th>
+                  <th scope="col" className="n">Responde em</th>
+                  <th scope="col" className="n">Em até 15 min</th>
+                  <th scope="col" className="n">Clientes hoje</th>
+                  <th scope="col">Clientes por dia</th>
+                  <th scope="col" className="n">Vendas pelo WhatsApp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ligadas.map(({ l, esp }) => {
+                  const a = l.atend;
+                  const desligada = l.conectado === false;
+                  const resposta = a.medianaHoje ?? a.mediana7d;
+                  return (
+                    <tr key={l.loja} className={`clicavel${desligada ? " desligada" : ""}`} onClick={() => setAberta(l.loja)}>
+                      <th scope="row">
+                        <button type="button" className="link at-nome" onClick={(e) => {
+                            e.stopPropagation();
+                            setAberta(l.loja);
+                          }}>
+                          {l.loja}
+                        </button>
+                      </th>
+                      <td className={`at-zap ${desligada ? "ruim" : l.conectado ? "bom" : ""}`}>
+                        {desligada ? "■ desconectado" : l.conectado ? "● conectado" : "sem provedor"}
+                      </td>
+                      <td className={`n ${esp.length ? (esp[0].esperando > 60 ? "ruim" : "medio") : "bom"}`}>
+                        <b>{esp.length}</b>
+                        {esp.length > 0 && <small>a mais antiga há {minutos(esp[0].esperando)}</small>}
+                      </td>
+                      <td className={`n ${lenta(resposta)}`}>
+                        <b>{minutos(resposta)}</b>
+                        <small>{a.medianaHoje !== null ? `hoje · 7 dias: ${minutos(a.mediana7d)}` : "nos 7 dias"}</small>
+                      </td>
+                      <td className="n">
+                        <b>{a.rapidas7d === null ? "–" : `${a.rapidas7d}%`}</b>
+                        <small>7 dias</small>
+                      </td>
+                      <td className="n">
+                        <b>{a.conversasHoje}</b>
+                      </td>
+                      <td>
+                        <MiniBarras dias={a.dias} />
+                      </td>
+                      <td className="n">
+                        <b>{l.peloWhats.vendas}</b>
+                        {l.peloWhats.vendas > 0 && <small>{reais(l.peloWhats.valor)} no mês</small>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {semNumero.length > 0 && <p className="muted pg-semnumero">Sem WhatsApp ligado ao painel: {semNumero.map((l) => l.loja).join(", ")}.</p>}
+        <p className="at-rodape">
+          Toque numa loja para ver os detalhes dela. &quot;Responde em&quot; é o tempo do meio das respostas de hoje (ou dos 7 dias, se ainda não teve
+          conversa hoje).
+        </p>
+      </section>
 
-      {semNumero.length > 0 && <p className="muted pg-semnumero">Sem WhatsApp ligado ao painel: {semNumero.map((l) => l.loja).join(", ")}.</p>}
+      <section className="card" aria-labelledby="at-espera-titulo">
+        <h2 id="at-espera-titulo">Esperando resposta{pendentes.length ? ` · ${pendentes.length}` : ""}</h2>
+        {pendentes.length ? (
+          <ListaPendentes pendentes={pendentes} comLoja ignorar={ignorar} />
+        ) : (
+          <p className="at-emdia">Ninguém esperando em nenhuma loja. Tudo respondido.</p>
+        )}
+        {desligadas.length > 0 && (
+          <p className="at-emdia">
+            Com o WhatsApp desconectado em {desligadas.join(", ")}, as conversas novas de lá não chegam aqui.
+          </p>
+        )}
+      </section>
 
       {aberta && <DetalheLoja loja={aberta} gatewayUrl={p.gatewayUrl} fechar={() => setAberta(null)} />}
     </div>
   );
 }
 
-const idLoja = (loja: string) =>
-  loja
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-");
-
-/** Uma loja: os números dela e, do lado, quem está esperando resposta. */
-function BlocoLoja({ l, esperando, gatewayUrl, ignorar, detalhes }: { l: Loja; esperando: Pendente[]; gatewayUrl?: string; ignorar: (p: Pendente) => void; detalhes: () => void }) {
-  const a = l.atend;
-  const maxDia = Math.max(1, ...a.dias.map((d) => d.conversas));
-  const desligada = l.conectado === false;
-  const lenta = (m: number | null) => (m === null ? "" : m > 30 ? "ruim" : m > 15 ? "medio" : "bom");
+/** Clientes por dia nos últimos 7 dias, pequeno, para caber na linha da loja. */
+function MiniBarras({ dias }: { dias: { dia: string; conversas: number }[] }) {
+  const max = Math.max(1, ...dias.map((d) => d.conversas));
   return (
-    <section className={`card at-loja ${desligada ? "desligada" : esperando.length ? "com-espera" : ""}`} id={`loja-${idLoja(l.loja)}`} aria-labelledby={`t-${idLoja(l.loja)}`}>
-      <header className="at-cab">
-        <h2 id={`t-${idLoja(l.loja)}`}>{l.loja}</h2>
-        <span className={`at-zap ${desligada ? "ruim" : l.conectado ? "bom" : ""}`}>{desligada ? "■ WhatsApp desconectado" : l.conectado ? "● conectado" : "sem provedor"}</span>
-        <span className="at-cab-acoes">
-          {gatewayUrl && (
-            <a className="mini ghost" href={`${gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer">
-              Abrir conversas <span className="so-leitor">(abre em outra aba)</span>
-            </a>
-          )}
-          <button className="mini ghost" onClick={detalhes}>
-            Detalhes
-          </button>
-        </span>
-      </header>
-
-      <div className="at-corpo">
-        <div className="at-lado">
-          <div className="at-nums">
-            <div className={esperando.length ? (esperando[0].esperando > 60 ? "ruim" : "medio") : "bom"}>
-              <b>{esperando.length}</b>
-              <small>{esperando.length ? `esperando · a mais antiga há ${minutos(esperando[0].esperando)}` : "esperando agora"}</small>
-            </div>
-            <div className={lenta(a.medianaHoje ?? a.mediana7d)}>
-              <b>{minutos(a.medianaHoje ?? a.mediana7d)}</b>
-              <small>{a.medianaHoje !== null ? `para responder hoje · 7 dias: ${minutos(a.mediana7d)}` : "para responder · 7 dias"}</small>
-            </div>
-            <div>
-              <b>{a.rapidas7d === null ? "–" : `${a.rapidas7d}%`}</b>
-              <small>respondidas em até 15 min · 7 dias</small>
-            </div>
-            <div>
-              <b>{a.conversasHoje}</b>
-              <small>clientes chamaram hoje</small>
-            </div>
-            <div>
-              <b>{l.peloWhats.vendas}</b>
-              <small>{l.peloWhats.vendas ? `vendas pelo WhatsApp no mês · ${reais(l.peloWhats.valor)}` : "vendas pelo WhatsApp no mês"}</small>
-            </div>
-          </div>
-          <div className="pg-barras at-barras" role="img" aria-label={`Clientes por dia, últimos 7 dias: ${a.dias.map((d) => d.conversas).join(", ")}`}>
-            {a.dias.map((d) => (
-              <span key={d.dia} title={`${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}: ${d.conversas} clientes`}>
-                <i style={{ height: `${Math.max(d.conversas ? 8 : 2, (d.conversas / maxDia) * 100)}%` }} />
-                <em>{diaSemana(d.dia)}</em>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="at-espera">
-          <h3>Esperando resposta</h3>
-          {esperando.length ? (
-            <ListaPendentes pendentes={esperando} ignorar={ignorar} />
-          ) : (
-            <p className="at-emdia">{desligada ? "Com o WhatsApp desconectado, as conversas novas não chegam aqui." : "Ninguém esperando. Tudo respondido."}</p>
-          )}
-        </div>
-      </div>
-    </section>
+    <span className="at-mini" role="img" aria-label={`Clientes por dia, últimos 7 dias: ${dias.map((d) => d.conversas).join(", ")}`}>
+      {dias.map((d) => (
+        <i
+          key={d.dia}
+          title={`${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}: ${d.conversas} clientes`}
+          style={{ height: `${Math.max(d.conversas ? 15 : 4, (d.conversas / max) * 100)}%` }}
+        />
+      ))}
+    </span>
   );
 }
 
