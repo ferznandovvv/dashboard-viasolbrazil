@@ -24,7 +24,8 @@ export interface Resumo {
   local: boolean;
   hoje: string;
   lojas: string[];
-  totvs: { configurado: boolean; ultima?: string; resultado?: string; desde?: string; progresso: Progresso };
+  /** `automatica`: quando a sincronização automática terminou bem pela última vez */
+  totvs: { configurado: boolean; ultima?: string; resultado?: string; desde?: string; automatica?: string; progresso: Progresso };
   shopify: { configurado: boolean; ultima?: string; resultado?: string; desde?: string; progresso: Progresso };
   base: { clientes: number; comTelefone: number; vendas: number; saldoTotal: number };
   fila: { emEspera: number; enviadasMes: number; respondidasMes: number; errosSemana: number; pausado: boolean; modoSombra: boolean; dentroDaJanela: boolean; provedor: string | null };

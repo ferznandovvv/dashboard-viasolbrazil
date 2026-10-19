@@ -47,7 +47,7 @@ export async function GET() {
     hoje,
     lojas: [...Object.values(LOJAS), LOJA_SITE],
     shopify: { configurado: shopifyConfigured(), ultima: base.config.ultimaSincShopify, resultado: base.config.ultimaSincShopifyResultado, desde: base.config.sincShopifyDesde, progresso: progressoShopify },
-    totvs: { configurado: totvsConfigured(), ultima: base.config.ultimaSincTotvs, resultado: base.config.ultimaSincTotvsResultado, desde: base.config.sincVendasDesde, progresso },
+    totvs: { configurado: totvsConfigured(), ultima: base.config.ultimaSincTotvs, resultado: base.config.ultimaSincTotvsResultado, desde: base.config.sincVendasDesde, automatica: base.config.diariaTotvsEm, progresso },
     base: { clientes: base.clientes.length, comTelefone, vendas: base.vendas.length, saldoTotal },
     fila: { emEspera: fila, enviadasMes, respondidasMes, errosSemana, pausado: base.config.pausado, modoSombra: base.config.modoSombra, dentroDaJanela: dentroDaJanela(base), provedor: adaptador?.nome ?? null },
     numeros,

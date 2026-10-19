@@ -10,19 +10,59 @@ import { aquecer, continuarEstoque } from "./aquecer";
 import { completarTelefones, sincronizarDiaria } from "./crm/totvs";
 import { configurarWebhooks } from "./crm/webhookAuto";
 import { recuperarConversas } from "./crm/recuperar";
-import { sincronizarShopifyDiaria } from "./crm/shopify";
+import { shopifyConfigured, sincronizarShopifyDiaria } from "./crm/shopify";
+import { totvsConfigured } from "./connectors/totvs";
 import { rodarAutomacoes } from "./crm/automacoes";
 import { processarFila } from "./crm/fila";
-import { lerBase as lerBaseCrm } from "./crm/base";
+import { hojeSp, lerBase as lerBaseCrm } from "./crm/base";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
 const HORARIOS = [
   { hora: "06:40", tarefa: aquecer, nome: "aquecimento" },
   { hora: "06:58", tarefa: continuarEstoque, nome: "estoque" },
-  // CRM: puxa as vendas de ontem do TOTVS e, em seguida, gera as mensagens do dia
-  { hora: "08:30", tarefa: sincronizarDiaria, nome: "crm sincronização" },
-  { hora: "08:45", tarefa: sincronizarShopifyDiaria, nome: "crm shopify" },
 ];
+
+/**
+ * Vendas para o CRM. Antes rodavam uma vez só, no minuto exato (08:30 e
+ * 08:45), e se perdiam com o computador desligado, a TOTVS fora, o sistema
+ * reiniciando ou o aquecimento ainda rodando. Agora:
+ *  - TOTVS: a partir das 08:30, a cada 2 horas até as 22h;
+ *  - Shopify: uma vez por dia a partir das 08:45 (ela já relê 45 dias);
+ *  - não rodou ou falhou: tenta de novo em 30 minutos.
+ * O "quando foi a última" fica na base do CRM, então reiniciar não repete.
+ */
+const tentarDeNovo = new Map<string, number>();
+const sincronizando = new Set<string>();
+
+async function sincronizarCrm(nome: string, tarefa: () => Promise<{ erro?: string } | null>) {
+  if (sincronizando.has(nome) || Date.now() < (tentarDeNovo.get(nome) ?? 0)) return;
+  sincronizando.add(nome);
+  const inicio = Date.now();
+  try {
+    const r = await tarefa();
+    if (!r || r.erro) {
+      tentarDeNovo.set(nome, Date.now() + 30 * 60_000);
+      console.error(`[agenda] ${nome} ${r ? `falhou: ${r.erro}` : "não rodou (outra sincronização em andamento)"}; tento de novo em 30 min`);
+    } else console.log(`[agenda] ${nome} ok em ${Math.round((Date.now() - inicio) / 1000)}s`);
+  } catch (e) {
+    tentarDeNovo.set(nome, Date.now() + 30 * 60_000);
+    console.error(`[agenda] ${nome} falhou:`, e instanceof Error ? e.message : e);
+  } finally {
+    sincronizando.delete(nome);
+  }
+}
+
+function conferirSincronizacoesCrm(hora: string) {
+  if (hora < "08:30" || hora >= "22:00") return;
+  lerBaseCrm()
+    .then((b) => {
+      const ultimaTotvs = b.config.diariaTotvsEm ? Date.parse(b.config.diariaTotvsEm) : 0;
+      if (totvsConfigured() && Date.now() - ultimaTotvs >= 2 * 3600_000) void sincronizarCrm("crm sincronização", sincronizarDiaria);
+      const shopifyHoje = b.config.ultimaSincShopify && new Date(b.config.ultimaSincShopify).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) === hojeSp();
+      if (shopifyConfigured() && hora >= "08:45" && !shopifyHoje) void sincronizarCrm("crm shopify", sincronizarShopifyDiaria);
+    })
+    .catch(() => {});
+}
 
 function horaSp(): { dia: string; hora: string } {
   const partes = new Intl.DateTimeFormat("en-CA", {
@@ -136,6 +176,10 @@ export function iniciarAgendador(): void {
       })
       .catch((e) => console.error("[crm] fila falhou:", e instanceof Error ? e.message : e));
   }, 20_000);
+
+  // Vendas para o CRM: confere a cada 5 minutos se está na hora (ler a base a cada 30 s pesaria)
+  setTimeout(() => conferirSincronizacoesCrm(horaSp().hora), 2 * 60_000);
+  setInterval(() => conferirSincronizacoesCrm(horaSp().hora), 5 * 60_000);
 
   // Depois de ligar o computador, deixa tudo pronto sem esperar a madrugada
   setTimeout(() => void executar("aquecimento ao ligar", aquecer), 60_000);

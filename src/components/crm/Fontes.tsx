@@ -84,6 +84,12 @@ function CardFonte({ titulo, fonte, rota, dicaVazia, ocupado, acao }: { titulo: 
               dicaVazia
             )}
           </div>
+          <div className="muted" style={{ marginBottom: 8, fontSize: 12.5 }}>
+            {rota === "/api/crm/totvs"
+              ? "Sincroniza sozinho a cada 2 horas, das 8h30 às 22h, com cashback; se falhar, tenta de novo em 30 minutos"
+              : "Sincroniza sozinho uma vez por dia, a partir das 8h45, relendo os últimos 45 dias; se falhar, tenta de novo em 30 minutos"}
+            {fonte.automatica && <> · última automática {dataHora(fonte.automatica)}</>}.
+          </div>
           <div className="config-acoes">
             <button className="mini" disabled={p.rodando || ocupado} onClick={() => acao("sinc", () => api(rota, { method: "POST", body: JSON.stringify({ acao: "sincronizar", creditar: true }) }))}>
               Sincronizar últimos 3 dias

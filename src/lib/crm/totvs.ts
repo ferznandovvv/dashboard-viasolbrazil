@@ -419,11 +419,25 @@ export async function sincronizar(de: string, ate: string, opcoes: { creditar?: 
   return progresso;
 }
 
-/** Sincronização diária: os últimos 3 dias, com cashback. Chamada pelo agendador. */
+/**
+ * Sincronização automática, com cashback: no mínimo os últimos 3 dias e,
+ * se ficou dia sem sincronizar (computador desligado, TOTVS fora), desde o
+ * último dia coberto — até 45 dias; buraco maior é carga histórica, pela
+ * tela. Chamada pelo agendador várias vezes ao dia.
+ */
 export async function sincronizarDiaria(): Promise<typeof progresso | null> {
   if (!totvsConfigured() || progresso.rodando) return null;
   const hoje = hojeSp();
-  return sincronizar(somarDias(hoje, -3), hoje, { creditar: true, pessoasAlteradas: true });
+  const ultimo = (await lerBase()).config.diariaTotvsAte;
+  const candidatos = [somarDias(hoje, -3), ...(ultimo ? [somarDias(ultimo, -1)] : [])].sort();
+  const de = candidatos[0] < somarDias(hoje, -45) ? somarDias(hoje, -45) : candidatos[0];
+  const r = await sincronizar(de, hoje, { creditar: true, pessoasAlteradas: true });
+  if (!r.erro)
+    await alterarBase((b) => {
+      b.config.diariaTotvsAte = hoje;
+      b.config.diariaTotvsEm = new Date().toISOString();
+    });
+  return r;
 }
 
 /**

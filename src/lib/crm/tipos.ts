@@ -334,6 +334,9 @@ export interface ConfigCrm {
   ultimaSincTotvsResultado?: string;
   /** Até onde as vendas já foram importadas do TOTVS (YYYY-MM-DD) */
   sincVendasDesde?: string;
+  /** Último dia coberto pela sincronização automática do TOTVS, e quando ela terminou bem */
+  diariaTotvsAte?: string;
+  diariaTotvsEm?: string;
   ultimaSincShopify?: string;
   ultimaSincShopifyResultado?: string;
   sincShopifyDesde?: string;
