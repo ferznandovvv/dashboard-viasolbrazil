@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detalheCredenciais, rodandoLocal, salvarCredenciais, situacaoCredenciais } from "@/lib/credenciais";
+import { detalheCredenciais, pareceChaveHistorico, rodandoLocal, salvarCredenciais, situacaoCredenciais } from "@/lib/credenciais";
 import { INTEGRACOES, NOMES_PERMITIDOS } from "@/lib/integracoes";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
   const aceitas: Record<string, string> = {};
   for (const [nome, valor] of Object.entries(corpo)) {
     if (NOMES_PERMITIDOS.has(nome) && typeof valor === "string" && valor.trim()) aceitas[nome] = valor;
+  }
+  // A chave das vendas antigas no cartão errado apagaria a chave daquela integração
+  if (Object.entries(aceitas).some(([nome, valor]) => nome !== "HISTORICO_CHAVE" && pareceChaveHistorico(valor))) {
+    return NextResponse.json(
+      { erro: "Isso é a chave das vendas antigas. Cole no cartão “Vendas antigas (planilha)”, mais abaixo. Nada foi salvo." },
+      { status: 400 }
+    );
   }
   salvarCredenciais(aceitas);
   return NextResponse.json({

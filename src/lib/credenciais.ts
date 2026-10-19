@@ -35,6 +35,30 @@ function ler(): Record<string, string> {
   }
 }
 
+function gravar(dados: Record<string, string>): void {
+  mkdirSync(dirname(ARQUIVO), { recursive: true });
+  writeFileSync(ARQUIVO, JSON.stringify(dados, null, 2), "utf8");
+}
+
+/** Formato da chave das vendas antigas (5 grupos de 5): nenhuma outra integração usa. */
+export const pareceChaveHistorico = (v: string) => /^[a-hj-km-np-z2-9]{5}(-[a-hj-km-np-z2-9]{5}){4}$/i.test(v.trim());
+
+/**
+ * A chave das vendas antigas colada no cartão errado (aconteceu no da Meta):
+ * vai para o lugar dela, e o campo onde caiu volta a usar o .env.local, se
+ * havia valor lá.
+ */
+function corrigirChaveTrocada(salvas: Record<string, string>): boolean {
+  let mudou = false;
+  for (const [nome, valor] of Object.entries(salvas)) {
+    if (nome === "HISTORICO_CHAVE" || !pareceChaveHistorico(valor ?? "")) continue;
+    if (vazio(salvas.HISTORICO_CHAVE)) salvas.HISTORICO_CHAVE = valor.trim();
+    delete salvas[nome];
+    mudou = true;
+  }
+  return mudou;
+}
+
 let carregado = false;
 
 /**
@@ -47,7 +71,9 @@ export function carregarCredenciais(): void {
   if (carregado) return;
   carregado = true;
   const local = rodandoLocal();
-  for (const [nome, valor] of Object.entries(ler())) {
+  const salvas = ler();
+  if (local && corrigirChaveTrocada(salvas)) gravar(salvas);
+  for (const [nome, valor] of Object.entries(salvas)) {
     if (vazio(valor)) continue;
     if (local || vazio(process.env[nome])) process.env[nome] = valor;
   }
@@ -80,8 +106,7 @@ export function salvarCredenciais(novas: Record<string, string>): void {
     atuais[nome] = limpo;
     process.env[nome] = limpo;
   }
-  mkdirSync(dirname(ARQUIVO), { recursive: true });
-  writeFileSync(ARQUIVO, JSON.stringify(atuais, null, 2), "utf8");
+  gravar(atuais);
   // Resultado guardado com a chave antiga ("não conectado") não pode
   // continuar sendo servido depois da chave nova
   limparCache();
