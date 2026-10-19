@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { ChannelResult, NormalizedOrder } from "../types";
-import { comCache } from "../cache";
+import { comCache, validadeDaBusca } from "../cache";
 import { env } from "../env";
 import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
@@ -69,11 +69,12 @@ interface TikTokOrder {
   line_items?: { product_name?: string; sale_price?: string }[];
 }
 
-export async function fetchTikTokOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`tiktok|${since.toISOString().slice(0,10)}`, () => buscar(since), 10 * 60000, true);
+/** Pedidos desde `since` (e, com `ate`, até esse instante — para o ano passado). */
+export async function fetchTikTokOrders(since: Date, ate?: Date): Promise<ChannelResult> {
+  return comCache(`tiktok|${since.toISOString().slice(0, 10)}|${ate?.toISOString() ?? ""}`, () => buscar(since, ate), validadeDaBusca(ate), true);
 }
 
-async function buscar(since: Date): Promise<ChannelResult> {
+async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
   const appKey = (env("TIKTOK_APP_KEY") || undefined);
   const appSecret = (env("TIKTOK_APP_SECRET") || undefined);
   // Cipher é opcional: lojas locais de app próprio podem dispensá-lo
@@ -92,6 +93,7 @@ async function buscar(since: Date): Promise<ChannelResult> {
     for (let page = 0; page < 20; page++) {
       const body = JSON.stringify({
         create_time_ge: Math.floor(since.getTime() / 1000),
+        ...(ate ? { create_time_lt: Math.floor(ate.getTime() / 1000) } : {}),
       });
       const params: Record<string, string> = {
         app_key: appKey,

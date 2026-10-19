@@ -20,11 +20,19 @@ import { fetchMetaSpend } from "@/lib/connectors/meta";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { fetchClima } from "@/lib/connectors/weather";
+import { lojaNaData, vendasDaPlanilha } from "@/lib/historico";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_RANGE_DAYS = 370;
+
+/** Mesma data um ano antes (29/02 vira 28/02). */
+function umAnoAntes(dia: string): string {
+  const [a, m, d] = dia.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(a - 1, m, 0)).getUTCDate();
+  return `${a - 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, ultimo)).padStart(2, "0")}`;
+}
 
 function totalsOf(orders: NormalizedOrder[]): Totals {
   const revenue = orders.reduce((s, o) => s + o.total, 0);
@@ -60,17 +68,18 @@ export async function GET(req: NextRequest) {
   );
   from = addDays(to, -(windowDays - 1));
 
-  // Janela anterior de mesmo tamanho, para o comparativo. Acima de 3 meses ela
-  // dobraria o volume buscado por um ganho pequeno, então é dispensada.
-  const comparar = windowDays <= 92;
-  const prevTo = addDays(from, -1);
-  const prevFrom = addDays(from, -windowDays);
+  // O comparativo é sempre com o mesmo período do ano passado (outubro até
+  // hoje contra outubro até o mesmo dia do ano passado), buscado à parte
+  const prevFrom = umAnoAntes(from);
+  const prevTo = umAnoAntes(to);
+  const prevInicio = spMidnight(prevFrom);
+  const prevFim = spMidnight(addDays(prevTo, 1));
 
   // Mês corrente (para a meta)
   const monthStart = `${today.slice(0, 7)}-01`;
 
   // Uma busca só, cobrindo tudo que precisamos
-  const fetchStartKey = [comparar ? prevFrom : from, monthStart, from].sort()[0];
+  const fetchStartKey = [monthStart, from].sort()[0];
   const fetchStart = spMidnight(fetchStartKey);
 
   // ?sem=lojas devolve só os canais online, que respondem rápido, para a tela
@@ -84,21 +93,40 @@ export async function GET(req: NextRequest) {
     .filter(([, nome]) => unitsPre.includes(nome))
     .map(([codigo]) => Number(codigo));
 
-  const [shopifyRes, tiktokRes, meliRes, lojasRes, lojasItens, adsRes, ttAdsRes, shopeeRes] = await Promise.all([
+  const semLojasRes = Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] });
+  const [shopifyRes, tiktokRes, meliRes, lojasRes, lojasItens, adsRes, ttAdsRes, shopeeRes, ...anoPassado] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
     fetchMeliOrders(fetchStart),
     semLojas
-      ? Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] })
+      ? semLojasRes
       : fetchTotvsSales(fetchStartKey, to),
     // Itens só das lojas em foco, e só quando alguma está selecionada
     !semLojas && filiaisSel.length > 0
       ? fetchTotvsSales(fetchStartKey, to, { itens: true, filiais: filiaisSel })
-      : Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] }),
-    fetchMetaSpend(prevFrom, to),
-    fetchTikTokAdsSpend(prevFrom, to),
+      : semLojasRes,
+    fetchMetaSpend(from, to),
+    fetchTikTokAdsSpend(from, to),
     fetchShopeeOrders(fetchStart),
+    // Ano passado, só o período do comparativo
+    fetchShopifyOrders(prevInicio, prevFim),
+    fetchTikTokOrders(prevInicio, prevFim),
+    fetchMeliOrders(prevInicio, prevFim),
+    fetchShopeeOrders(prevInicio, prevFim),
+    semLojas ? semLojasRes : fetchTotvsSales(prevFrom, prevTo),
+    fetchMetaSpend(prevFrom, prevTo),
+    fetchTikTokAdsSpend(prevFrom, prevTo),
   ]);
+  const [shopifyAnt, tiktokAnt, meliAnt, shopeeAnt, lojasAntBruto, adsAnt, ttAdsAnt] = anoPassado as [
+    ChannelResult, ChannelResult, ChannelResult, ChannelResult, ChannelResult,
+    typeof adsRes, typeof ttAdsRes,
+  ];
+  // A filial 2 era o Franca Shopping antes da Fiusa: não compara loja nova com a que fechou
+  const lojasAnt: ChannelResult = {
+    ...lojasAntBruto,
+    orders: lojasAntBruto.orders.map((o) => (o.store ? { ...o, store: lojaNaData(o.store, spDateKey(o.createdAt)) } : o)),
+  };
+  const resultadosAnt: ChannelResult[] = [shopifyAnt, tiktokAnt, meliAnt, shopeeAnt, lojasAnt];
   // Onde houver a versão com itens, ela substitui a leve da mesma nota
   const comItens = new Map(lojasItens.orders.map((o) => [o.id, o]));
   const lojasFinal: ChannelResult = comItens.size
@@ -144,7 +172,11 @@ export async function GET(req: NextRequest) {
   const current = all
     .filter((o) => inWindow(o, from, to))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const previous = comparar ? all.filter((o) => inWindow(o, prevFrom, prevTo)) : [];
+  const previous = resultadosAnt
+    .flatMap((r) => r.orders)
+    .filter((o) => !ehEnvioAfiliada(o))
+    .filter(naSelecao)
+    .filter((o) => inWindow(o, prevFrom, prevTo));
 
   // Série diária
   const dayMap = new Map<string, DailyPoint>();
@@ -159,10 +191,12 @@ export async function GET(req: NextRequest) {
     if (o.store) p[`loja:${o.store}`] = ((p[`loja:${o.store}`] as number) ?? 0) + o.total;
   }
 
-  const channels = results.map((r) => {
+  const channels = results.map((r, i) => {
     const escopo = r.orders.filter((o) => o.channel !== "lojas" || naSelecao(o));
     const cur = escopo.filter((o) => inWindow(o, from, to));
-    const prev = comparar ? escopo.filter((o) => inWindow(o, prevFrom, prevTo)) : [];
+    const prev = resultadosAnt[i].orders
+      .filter((o) => o.channel !== "lojas" || naSelecao(o))
+      .filter((o) => !ehEnvioAfiliada(o) && inWindow(o, prevFrom, prevTo));
     return {
       channel: r.channel,
       connected: r.connected,
@@ -271,7 +305,7 @@ export async function GET(req: NextRequest) {
 
   // Faturamento por loja física (sempre todas as lojas, ignorando o filtro)
   const lojasTodas = lojasRes.orders;
-  const lojaMap = new Map<string, { name: string; revenue: number; orders: number; prevRevenue: number }>();
+  const lojaMap = new Map<string, DashboardData["stores"][number]>();
   for (const o of lojasTodas) {
     if (!o.store) continue;
     const e =
@@ -279,12 +313,68 @@ export async function GET(req: NextRequest) {
     if (inWindow(o, from, to)) {
       e.revenue += o.total;
       e.orders += 1;
-    } else if (comparar && inWindow(o, prevFrom, prevTo)) {
-      e.prevRevenue += o.total;
     }
     lojaMap.set(o.store, e);
   }
   const stores = Array.from(lojaMap.values()).sort((a, b) => b.revenue - a.revenue);
+
+  // ——— Ano passado: sistema quando ele tem o período; senão, a planilha ———
+  const somaAnt = (filtro: (o: NormalizedOrder) => boolean) =>
+    resultadosAnt.flatMap((r) => r.orders).filter((o) => inWindow(o, prevFrom, prevTo) && filtro(o)).reduce((s, o) => s + o.total, 0);
+  const onlineNoRecorte = (id: ChannelId) => (units.length === 0 || querSite) && (!channelFilter || id === channelFilter);
+  const lojasNoRecorte = units.length === 0 || lojasSel.length > 0;
+  let daPlanilha = false;
+  let estimado = false;
+  /** A planilha entrou em alguma unidade do recorte da tela (aí o total do ano passado não tem pedidos) */
+  let planilhaNoTotal = false;
+  /**
+   * Vale a planilha quando o sistema não tem o período, ou tem bem menos
+   * que ela (começou a ser usado no meio do caminho).
+   */
+  const anoPassadoDe = async (unidade: string, sistema: number, noRecorte: boolean) => {
+    const pla = await vendasDaPlanilha(unidade, prevFrom, prevTo).catch(() => null);
+    if (!pla || (sistema > 0 && sistema >= pla.valor * 0.5)) return { valor: sistema, estimado: false };
+    daPlanilha = true;
+    if (noRecorte) {
+      planilhaNoTotal = true;
+      estimado ||= pla.estimado;
+    }
+    return pla;
+  };
+  // Todas as lojas (os cards delas aparecem sempre) e o Franca Shopping, que fechou
+  const antPorLoja = new Map(
+    semLojas || !lojasRes.connected
+      ? []
+      : await Promise.all(
+          [...Object.values(LOJAS), "Franca Shopping"].map(
+            async (l) =>
+              [l, await anoPassadoDe(l, somaAnt((o) => o.channel === "lojas" && o.store === l), units.length === 0 || lojasSel.includes(l))] as const
+          )
+        )
+  );
+  for (const s of stores) {
+    const ant = antPorLoja.get(s.name);
+    s.prevRevenue = ant?.valor ?? somaAnt((o) => o.channel === "lojas" && o.store === s.name);
+    s.prevEstimado = ant?.estimado;
+  }
+  const lojasCanal: DashboardData["channels"][number] | undefined = channels.find((c) => c.channel === "lojas");
+  if (lojasCanal && !semLojas && lojasRes.connected) {
+    const doRecorte = Array.from(antPorLoja).filter(([l]) => units.length === 0 || lojasSel.includes(l));
+    lojasCanal.prevRevenue = doRecorte.reduce((t, [, v]) => t + v.valor, 0);
+    lojasCanal.prevEstimado = doRecorte.some(([, v]) => v.estimado);
+  }
+  const siteCanal: DashboardData["channels"][number] | undefined = channels.find((c) => c.channel === "shopify");
+  // Site desconectado hoje não compara com nada (daria "-100%")
+  if (siteCanal?.connected) {
+    const ant = await anoPassadoDe("Site", siteCanal.prevRevenue, onlineNoRecorte("shopify"));
+    siteCanal.prevRevenue = ant.valor;
+    siteCanal.prevEstimado = ant.estimado;
+  }
+
+  // Total do ano passado no mesmo recorte da tela
+  const receitaAnt = channels
+    .filter((c) => (c.channel === "lojas" ? lojasNoRecorte : onlineNoRecorte(c.channel)))
+    .reduce((t, c) => t + c.prevRevenue, 0);
 
   // Meta mensal: configurável pelo sistema (Blob) com fallback na env.
   // A meta é sempre da empresa toda — ignora o filtro de canal.
@@ -323,7 +413,7 @@ export async function GET(req: NextRequest) {
   // Meta Ads × Shopify
   const shopifyCh = channels.find((c) => c.channel === "shopify");
   const adsCurrent = adsRes.daily.filter((d) => d.date >= from && d.date <= to);
-  const adsPrev = adsRes.daily.filter((d) => d.date >= prevFrom && d.date <= prevTo);
+  const adsPrev = adsAnt.daily.filter((d) => d.date >= prevFrom && d.date <= prevTo);
   const spend = adsCurrent.reduce((s, d) => s + d.spend, 0);
   const ads: DashboardData["ads"] = {
     connected: adsRes.connected,
@@ -338,7 +428,7 @@ export async function GET(req: NextRequest) {
   // TikTok Ads × TikTok Shop
   const tiktokCh = channels.find((c) => c.channel === "tiktok");
   const ttCurrent = ttAdsRes.daily.filter((d) => d.date >= from && d.date <= to);
-  const ttPrev = ttAdsRes.daily.filter((d) => d.date >= prevFrom && d.date <= prevTo);
+  const ttPrev = ttAdsAnt.daily.filter((d) => d.date >= prevFrom && d.date <= prevTo);
   const ttSpend = ttCurrent.reduce((s, d) => s + d.spend, 0);
   const tiktokAds: DashboardData["tiktokAds"] = {
     connected: ttAdsRes.connected,
@@ -450,12 +540,10 @@ export async function GET(req: NextRequest) {
       (s, o) => s + (o.qty ?? (o.items ?? []).reduce((t, it) => t + it.qty, 0)),
       0
     ),
-    prevShipments: comparar
-      ? results
-          .flatMap((r) => r.orders)
-          .filter(ehEnvioAfiliada)
-          .filter((o) => inWindow(o, prevFrom, prevTo)).length
-      : 0,
+    prevShipments: resultadosAnt
+      .flatMap((r) => r.orders)
+      .filter(ehEnvioAfiliada)
+      .filter((o) => inWindow(o, prevFrom, prevTo)).length,
     products: Array.from(enviosProdutos.values())
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 8),
@@ -468,7 +556,11 @@ export async function GET(req: NextRequest) {
     to,
     channels,
     totals: totalsOf(current),
-    prevTotals: totalsOf(previous),
+    // Com planilha só existe o faturamento do ano passado; o resto fica zerado
+    prevTotals: planilhaNoTotal
+      ? { revenue: receitaAnt, orders: 0, avgTicket: 0, pieces: 0, avgPieces: 0, discount: 0 }
+      : totalsOf(previous),
+    comparacao: { de: prevFrom, ate: prevTo, daPlanilha, estimado },
     daily: Array.from(dayMap.values()),
     recentOrders: current.slice(0, 25),
     topProducts,

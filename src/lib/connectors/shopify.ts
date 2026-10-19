@@ -1,5 +1,5 @@
 import { ChannelResult, NormalizedOrder, todaySpKey } from "../types";
-import { comCache } from "../cache";
+import { comCache, validadeDaBusca } from "../cache";
 import { gravarBlob, lerBlobs } from "../blobCache";
 import { env } from "../env";
 import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
@@ -25,8 +25,12 @@ interface ShopifyOrderNode {
   };
 }
 
-export async function fetchShopifyOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`shopify|${since.toISOString().slice(0,10)}`, () => buscar(since), 10 * 60000, true);
+/**
+ * Pedidos pagos desde `since`. Com `ate` (o ano passado, no comparativo), só
+ * até esse instante, e a busca vai mais longe: o período inteiro precisa vir.
+ */
+export async function fetchShopifyOrders(since: Date, ate?: Date): Promise<ChannelResult> {
+  return comCache(`shopify|${since.toISOString().slice(0, 10)}|${ate?.toISOString() ?? ""}`, () => buscar(since, ate), validadeDaBusca(ate), true);
 }
 
 function acesso() {
@@ -36,7 +40,7 @@ function acesso() {
   };
 }
 
-async function buscar(since: Date): Promise<ChannelResult> {
+async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
   const { domain, token } = acesso();
   if (!domain || !token) {
     return { channel: "shopify", connected: false, orders: [] };
@@ -46,7 +50,7 @@ async function buscar(since: Date): Promise<ChannelResult> {
   let cursor: string | null = null;
 
   try {
-    for (let page = 0; page < 10; page++) {
+    for (let page = 0; page < (ate ? 40 : 10); page++) {
       const query = `
         query Orders($query: String!, $cursor: String) {
           orders(first: 250, query: $query, after: $cursor, sortKey: CREATED_AT, reverse: true) {
@@ -79,7 +83,7 @@ async function buscar(since: Date): Promise<ChannelResult> {
             query,
             variables: {
               // Só pedidos efetivamente pagos — pagamento pendente não é venda
-              query: `created_at:>='${since.toISOString()}' AND financial_status:paid`,
+              query: `created_at:>='${since.toISOString()}'${ate ? ` AND created_at:<'${ate.toISOString()}'` : ""} AND financial_status:paid`,
               cursor,
             },
           }),

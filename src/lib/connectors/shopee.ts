@@ -9,7 +9,7 @@
 
 import { createHmac } from "node:crypto";
 import { ChannelResult, NormalizedOrder } from "../types";
-import { comCache } from "../cache";
+import { comCache, validadeDaBusca } from "../cache";
 import { env } from "../env";
 import { rodandoLocal, salvarCredenciais } from "../credenciais";
 
@@ -124,17 +124,18 @@ interface PedidoShopee {
 /** Pedido ainda não pago ou cancelado não é venda */
 const FORA = new Set(["UNPAID", "CANCELLED", "IN_CANCEL"]);
 
-export async function fetchShopeeOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`shopee|${since.toISOString().slice(0, 10)}`, () => buscar(since), 10 * 60000, true);
+/** Pedidos desde `since` (e, com `ate`, até esse instante — para o ano passado). */
+export async function fetchShopeeOrders(since: Date, ate?: Date): Promise<ChannelResult> {
+  return comCache(`shopee|${since.toISOString().slice(0, 10)}|${ate?.toISOString() ?? ""}`, () => buscar(since, ate), validadeDaBusca(ate), true);
 }
 
-async function buscar(since: Date): Promise<ChannelResult> {
+async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
   if (!shopeeConfigurada()) return { channel: "shopee", connected: false, orders: [] };
 
   try {
     // 1) Números dos pedidos, em janelas de até 15 dias
     const numeros: string[] = [];
-    const fim = agora();
+    const fim = ate ? Math.min(Math.floor(ate.getTime() / 1000), agora()) : agora();
     for (let de = Math.floor(since.getTime() / 1000); de < fim; de += JANELA_DIAS * 86400) {
       const ate = Math.min(de + JANELA_DIAS * 86400, fim);
       let cursor = "";

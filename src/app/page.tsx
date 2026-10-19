@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ChannelId, DailyPoint, DashboardData } from "@/lib/types";
 import { type Period, buildPresets, spToday } from "@/lib/periodos";
 import { CHANNEL_META, DailyChart, brl, corDaLoja, fmtDay } from "@/components/viz";
@@ -14,13 +14,43 @@ type Canal = "shopify" | "tiktok" | "meli" | "shopee";
 
 const ONLINE: Canal[] = ["shopify", "tiktok", "meli", "shopee"];
 
-function Delta({ now, before }: { now: number; before: number }) {
+/** Com que período as setas comparam: o mesmo do ano passado. */
+const Comparacao = createContext({ ano: "", rotulo: "vs mesmo período do ano passado" });
+
+const MESES = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+const MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/** "1 a 19 de outubro de 2025", "19 de outubro de 2025", "1 de jan. a 19 de out. de 2025" */
+function descreverPeriodo(de: string, ate: string): string {
+  const [ad, md, dd] = de.split("-").map(Number);
+  const [aa, ma, da] = ate.split("-").map(Number);
+  if (de === ate) return `${da} de ${MESES_LONGOS[ma - 1]} de ${aa}`;
+  if (ad === aa && md === ma) return `${dd} a ${da} de ${MESES_LONGOS[ma - 1]} de ${aa}`;
+  return `${dd} de ${MESES[md - 1]}${ad !== aa ? ` de ${ad}` : ""} a ${da} de ${MESES[ma - 1]} de ${aa}`;
+}
+
+/** `estimado`: o ano passado veio da planilha, proporcional aos dias (≈). */
+function Delta({ now, before, estimado }: { now: number; before: number; estimado?: boolean }) {
+  const { rotulo } = useContext(Comparacao);
   if (before <= 0) return null;
   const pct = ((now - before) / before) * 100;
   const up = pct >= 0;
   return (
-    <span className={`delta ${up ? "up" : "down"}`} title="vs período anterior">
+    <span className={`delta ${up ? "up" : "down"}`} title={rotulo}>
+      {estimado ? "≈ " : ""}
       {up ? "↑" : "↓"} {Math.abs(pct).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+    </span>
+  );
+}
+
+/** Quanto foi no mesmo período do ano passado, em reais. */
+function NoAnoPassado({ valor, estimado }: { valor: number; estimado?: boolean }) {
+  const { ano, rotulo } = useContext(Comparacao);
+  if (!ano || valor <= 0) return null;
+  return (
+    <span className="ano-passado" title={rotulo}>
+      {ano}: {estimado ? "≈ " : ""}
+      {brl.format(valor)}
     </span>
   );
 }
@@ -382,7 +412,15 @@ export default function Dashboard() {
     );
   };
 
-  return (
+  const comp = data?.comparacao;
+  const anoAnt = comp ? comp.de.slice(0, 4) : "";
+  const contexto = {
+    ano: anoAnt,
+    rotulo: comp ? `vs ${descreverPeriodo(comp.de, comp.ate)}` : "vs mesmo período do ano passado",
+  };
+  const siteEstimado = Boolean(data?.channels.find((c) => c.channel === "shopify")?.prevEstimado);
+
+  const pagina = (
     <main className="wrap">
       <Cabecalho titulo="Vendas">
         {data && (
@@ -398,6 +436,34 @@ export default function Dashboard() {
       </Cabecalho>
 
       <SeletorPeriodo opcoes={presets} atual={period} aoMudar={setPeriod} />
+
+      {data && comp && (
+        <div className="comparativo" role="status">
+          <span>
+            <b>{brl.format(data.totals.revenue)}</b> de {descreverPeriodo(data.from, data.to)}
+          </span>
+          <span>
+            {data.prevTotals.revenue > 0 ? (
+              <>
+                mesmo período de {anoAnt}:{" "}
+                <b>
+                  {comp.estimado ? "≈ " : ""}
+                  {brl.format(data.prevTotals.revenue)}
+                </b>{" "}
+                <Delta now={data.totals.revenue} before={data.prevTotals.revenue} estimado={comp.estimado} />
+              </>
+            ) : (
+              <>sem vendas registradas no mesmo período de {anoAnt}</>
+            )}
+          </span>
+          {comp.daPlanilha && (
+            <small>
+              Onde o sistema não tinha o ano passado, o número vem da planilha antiga. Ela só tem o total de cada mês:
+              com ≈, o mês pela metade é proporcional aos dias.
+            </small>
+          )}
+        </div>
+      )}
 
       {sel.length === 0 && data && <p className="dica-toque">Toque numa loja ou num canal para ver o detalhe dele.</p>}
 
@@ -429,7 +495,8 @@ export default function Dashboard() {
             <div className="tile">
               <div className="label">Faturamento</div>
               <div className="value">{brl.format(data.totals.revenue)}</div>
-              <Delta now={data.totals.revenue} before={data.prevTotals.revenue} />
+              <Delta now={data.totals.revenue} before={data.prevTotals.revenue} estimado={comp?.estimado} />
+              <NoAnoPassado valor={data.prevTotals.revenue} estimado={comp?.estimado} />
             </div>
             <div className="tile">
               <div className="label">{soSite ? "Pedidos" : "Vendas"}</div>
@@ -498,8 +565,9 @@ export default function Dashboard() {
             >
               <span className="online-titulo">Online</span>
               <span className="online-total">
-                {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} />
+                {brl.format(siteRevenue)} <Delta now={siteRevenue} before={sitePrev} estimado={siteEstimado} />
               </span>
+              <NoAnoPassado valor={sitePrev} estimado={siteEstimado} />
               <span className="muted">
                 {siteOrders.toLocaleString("pt-BR")} pedidos
                 {totalAds > 0 && <> · anúncios {brl.format(totalAds)}</>}
@@ -541,8 +609,9 @@ export default function Dashboard() {
                     {c.connected ? (
                       <>
                         <div className="rev">
-                          {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} />
+                          {brl.format(c.revenue)} <Delta now={c.revenue} before={c.prevRevenue} estimado={c.prevEstimado} />
                         </div>
+                        <NoAnoPassado valor={c.prevRevenue} estimado={c.prevEstimado} />
                         <div className="meta">
                           {c.orders.toLocaleString("pt-BR")} pedidos
                           {c.orders > 0 && <> · ticket {brl.format(c.revenue / c.orders)}</>}
@@ -577,6 +646,7 @@ export default function Dashboard() {
                 cor: corDaLoja(l.name),
                 receita: l.revenue,
                 anterior: l.prevRevenue,
+                estimado: l.prevEstimado,
                 pedidos: l.orders,
                 rotulo: "vendas",
               }))
@@ -600,8 +670,9 @@ export default function Dashboard() {
                     {ativo && <span className="badge sel-badge" aria-hidden="true">✕</span>}
                   </div>
                   <div className="rev">
-                    {brl.format(u.receita)} <Delta now={u.receita} before={u.anterior} />
+                    {brl.format(u.receita)} <Delta now={u.receita} before={u.anterior} estimado={u.estimado} />
                   </div>
+                  <NoAnoPassado valor={u.anterior} estimado={u.estimado} />
                   <div className="meta">
                     {u.pedidos.toLocaleString("pt-BR")} {u.rotulo}
                     {u.pedidos > 0 && <> · ticket {brl.format(u.receita / u.pedidos)}</>}
@@ -1152,4 +1223,5 @@ export default function Dashboard() {
       )}
     </main>
   );
+  return <Comparacao.Provider value={contexto}>{pagina}</Comparacao.Provider>;
 }

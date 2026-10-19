@@ -1,5 +1,5 @@
 import { ChannelResult, NormalizedOrder } from "../types";
-import { comCache } from "../cache";
+import { comCache, validadeDaBusca } from "../cache";
 import { env } from "../env";
 import { rodandoLocal, salvarCredenciais } from "../credenciais";
 
@@ -62,11 +62,12 @@ interface MeliOrder {
   }[];
 }
 
-export async function fetchMeliOrders(since: Date): Promise<ChannelResult> {
-  return comCache(`meli|${since.toISOString().slice(0,10)}`, () => buscar(since), 10 * 60000, true);
+/** Pedidos desde `since` (e, com `ate`, até esse instante — para o ano passado). */
+export async function fetchMeliOrders(since: Date, ate?: Date): Promise<ChannelResult> {
+  return comCache(`meli|${since.toISOString().slice(0, 10)}|${ate?.toISOString() ?? ""}`, () => buscar(since, ate), validadeDaBusca(ate), true);
 }
 
-async function buscar(since: Date): Promise<ChannelResult> {
+async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
   const hasCreds =
     (env("ML_ACCESS_TOKEN") || undefined) ||
     ((env("ML_REFRESH_TOKEN") || undefined) && (env("ML_CLIENT_ID") || undefined) && (env("ML_CLIENT_SECRET") || undefined));
@@ -91,6 +92,7 @@ async function buscar(since: Date): Promise<ChannelResult> {
       const url = new URL(`${API}/orders/search`);
       url.searchParams.set("seller", String(me.id));
       url.searchParams.set("order.date_created.from", since.toISOString());
+      if (ate) url.searchParams.set("order.date_created.to", ate.toISOString());
       url.searchParams.set("sort", "date_desc");
       url.searchParams.set("limit", "50");
       url.searchParams.set("offset", String(offset));

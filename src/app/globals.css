@@ -31,8 +31,9 @@
   --c-online: #5b4632;
   --l1: #2a78d6; --l2: #008300; --l3: #e87ba4; --l4: #eda100;
   --l5: #1baf7a; --l6: #eb6834; --l7: #4a3aa7; --l8: #e34948;
-  /* Anos no histórico: um tom só, do mais antigo (claro) ao atual (escuro) */
-  --ano-1: #d9a074; --ano-2: #c27840; --ano-3: #a6571f; --ano-4: #7e3708;
+  /* Anos no histórico: o atual em laranja, os dois anteriores em azul e verde
+     (validados para daltonismo), o mais antigo em cinza, de fundo */
+  --ano-1: #a39a90; --ano-2: #1baf7a; --ano-3: #2a78d6; --ano-4: #eb6834;
   --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: "Playfair Display", Georgia, serif;
 }
@@ -62,7 +63,7 @@
     --c-online: #cbb89d;
     --l1: #3987e5; --l2: #008300; --l3: #d55181; --l4: #c98500;
     --l5: #199e70; --l6: #d95926; --l7: #9085e9; --l8: #e66767;
-    --ano-1: #7d4a2c; --ano-2: #a8653a; --ano-3: #d08c58; --ano-4: #f2bb90;
+    --ano-1: #7d756d; --ano-2: #199e70; --ano-3: #3987e5; --ano-4: #d95926;
   }
 }
 
@@ -1675,8 +1676,24 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .hist-tbl tr.total th, .hist-tbl tr.total td { border-top: 2px solid var(--baseline); font-weight: 700; }
 .hist-nota { color: var(--brand); font-weight: 700; margin-left: 2px; cursor: help; }
 .hist-parcial { display: block; font-size: 12px; color: var(--text-muted); }
+/* Quadro do ano como na planilha: lojas nas linhas, meses nas colunas */
+.hist-matriz { font-size: 12px; }
+.hist-matriz .n { width: auto; padding-left: 4px; padding-right: 4px; }
+.hist-matriz th:first-child { min-width: 0; width: 136px; max-width: 136px; white-space: normal; font-size: 12px; }
+.hist-matriz thead th.n abbr { text-decoration: none; }
+.hist-matriz td.total-linha { font-weight: 600; border-left: 1px solid var(--border); }
 .hist-notas { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12.5px; color: var(--text-secondary); }
 @media (max-width: 640px) {
   .hist-tbl th:first-child { min-width: 0; width: 112px; max-width: 112px; white-space: normal; }
   .hist-tbl .n { width: auto; min-width: 92px; }
 }
+
+/* Vendas: comparativo com o mesmo período do ano passado */
+.comparativo {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin: 12px 0;
+  padding: 12px 16px; border-radius: 12px; background: var(--surface-1); border: 1px solid var(--border);
+  font-size: 14px; color: var(--text-secondary);
+}
+.comparativo b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.comparativo small { flex-basis: 100%; font-size: 12px; color: var(--text-muted); }
+.ano-passado { display: block; margin-top: 2px; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }

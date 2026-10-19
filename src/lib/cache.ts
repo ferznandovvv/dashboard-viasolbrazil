@@ -21,6 +21,13 @@ function nomeArquivo(chave: string): string {
  * para respostas pequenas: payload grande gasta mais tempo gravando do que
  * economiza, e foi o que derrubou a busca das lojas físicas.
  */
+/**
+ * Validade de uma busca de pedidos: período que acabou há mais de 3 dias não
+ * muda mais (o ano passado, no comparativo), então vale por 6 horas.
+ */
+export const validadeDaBusca = (ate?: Date) =>
+  ate && Date.now() - ate.getTime() > 3 * 86400000 ? 6 * 3600000 : 10 * 60000;
+
 export async function comCache<T>(
   chave: string,
   fn: () => Promise<T>,

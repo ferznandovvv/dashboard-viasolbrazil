@@ -20,8 +20,8 @@ export interface Ano {
 }
 
 /**
- * Linhas mês a mês, uma por ano, na mesma escala: o ano atual fica mais
- * escuro. O mês em andamento (`parcial`) sai tracejado e com o ponto vazado.
+ * Linhas mês a mês, uma por ano, na mesma escala: cada ano numa cor e o
+ * atual com a linha mais grossa. O mês em andamento (`parcial`) sai tracejado e com o ponto vazado.
  * Passando o mouse, mostra todos os anos daquele mês.
  */
 export function GraficoAnos({ anos, parcial }: { anos: Ano[]; parcial?: { ano: number; mes: number } }) {
@@ -65,6 +65,8 @@ export function GraficoAnos({ anos, parcial }: { anos: Ano[]; parcial?: { ano: n
   };
 
   const atual = anos[anos.length - 1];
+  /** O ano atual um pouco mais grosso: é ele que se compara com os outros */
+  const largura = (a: Ano) => (a === atual ? 3 : 2);
   const ultimoAtual = atual ? atual.valores.reduce<number>((u, v, i) => (v !== null ? i : u), -1) : -1;
 
   const mover = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -113,9 +115,9 @@ export function GraficoAnos({ anos, parcial }: { anos: Ano[]; parcial?: { ano: n
             return (
               <g key={a.ano}>
                 {cheios.map((pts) => (
-                  <polyline key={pts} points={pts} fill="none" stroke={a.cor} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+                  <polyline key={pts} points={pts} fill="none" stroke={a.cor} strokeWidth={largura(a)} strokeLinejoin="round" strokeLinecap="round" />
                 ))}
-                {tracejado && <polyline points={tracejado} fill="none" stroke={a.cor} strokeWidth={2} strokeDasharray="4 4" strokeLinecap="round" />}
+                {tracejado && <polyline points={tracejado} fill="none" stroke={a.cor} strokeWidth={largura(a)} strokeDasharray="4 4" strokeLinecap="round" />}
               </g>
             );
           })}

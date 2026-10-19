@@ -102,6 +102,44 @@ function mesesEntre(de: string, ate: string): string[] {
   return out;
 }
 
+const diasNoMes = (mes: string) => {
+  const [a, m] = mes.split("-").map(Number);
+  return new Date(Date.UTC(a, m, 0)).getUTCDate();
+};
+
+/** Nome da loja naquela data: a filial 2 era o Franca Shopping antes da Fiusa abrir. */
+export const lojaNaData = (loja: string, data: string) =>
+  loja === "Fiusa" && data.slice(0, 7) < ABERTURA_FIUSA ? "Franca Shopping" : loja;
+
+const planilhaAberta = () => comCache("planilha-aberta", lerPlanilha, 10 * 60000);
+
+/**
+ * Quanto a planilha diz que uma loja (ou o "Site") vendeu entre duas datas,
+ * para o comparativo com o ano passado quando o sistema não tem aquele
+ * período. Mês inteiro é o número da planilha; mês pela metade é
+ * proporcional aos dias, e aí `estimado`. A fábrica leva junto o bazar, como
+ * na TOTVS. null = a planilha não tem essa loja no período.
+ */
+export async function vendasDaPlanilha(loja: string, de: string, ate: string): Promise<{ valor: number; estimado: boolean } | null> {
+  const { dados } = await planilhaAberta();
+  if (!dados) return null;
+  let valor = 0;
+  let estimado = false;
+  let achou = false;
+  for (let mes = de.slice(0, 7); mes <= ate.slice(0, 7); mes = proximoMes(mes)) {
+    const m = dados.meses[mes];
+    const v = (m?.[loja] ?? 0) + (loja === "Loja de Fábrica" ? (m?.Bazar ?? 0) : 0);
+    if (!v) continue;
+    const dias = diasNoMes(mes);
+    const ini = mes === de.slice(0, 7) ? Number(de.slice(8)) : 1;
+    const fim = mes === ate.slice(0, 7) ? Number(ate.slice(8)) : dias;
+    if (fim - ini + 1 < dias) estimado = true;
+    valor += (v * (fim - ini + 1)) / dias;
+    achou = true;
+  }
+  return achou ? { valor: Math.round(valor * 100) / 100, estimado } : null;
+}
+
 /** Notas fiscais da TOTVS somadas por mês e loja, ano a ano (um ano por vez, para não afogar a API). */
 async function totvsPorMes(hoje: string, erros: string[]): Promise<PorMes> {
   const out: PorMes = {};
@@ -111,8 +149,7 @@ async function totvsPorMes(hoje: string, erros: string[]): Promise<PorMes> {
     if (r.error) erros.push(`TOTVS ${ano}: ${r.error}`);
     for (const o of r.orders) {
       const mes = o.createdAt.slice(0, 7);
-      let loja = o.store || "Outras";
-      if (loja === "Fiusa" && mes < ABERTURA_FIUSA) loja = "Franca Shopping";
+      const loja = lojaNaData(o.store || "Outras", mes);
       (out[mes] ??= {})[loja] = (out[mes][loja] ?? 0) + o.total;
     }
   }

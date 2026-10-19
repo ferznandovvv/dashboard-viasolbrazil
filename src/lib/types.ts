@@ -77,11 +77,22 @@ export interface DashboardData {
     error?: string;
     revenue: number;
     orders: number;
+    /** Mesmo período do ano passado */
     prevRevenue: number;
+    /** O ano passado veio da planilha, proporcional aos dias */
+    prevEstimado?: boolean;
   }[];
   totals: Totals;
-  /** Mesmo tamanho de janela, imediatamente anterior */
+  /** Mesmo período do ano passado, no mesmo recorte */
   prevTotals: Totals;
+  /**
+   * O "anterior" é o mesmo período do ano passado. Sem o sistema naquela
+   * época, vale a planilha antiga (só tem o total do mês: mês pela metade é
+   * proporcional aos dias, e aí `estimado`, que vale para o total do
+   * recorte). Com planilha no recorte, pedidos e ticket do ano passado não
+   * existem e ficam zerados.
+   */
+  comparacao: { de: string; ate: string; daPlanilha: boolean; estimado: boolean };
   daily: DailyPoint[];
   recentOrders: NormalizedOrder[];
   topProducts: { title: string; channel: ChannelId; qty: number; revenue: number }[];
@@ -92,7 +103,7 @@ export interface DashboardData {
   >;
   states: { uf: string; revenue: number; orders: number }[];
   /** Faturamento por loja física no período */
-  stores: { name: string; revenue: number; orders: number; prevRevenue: number }[];
+  stores: { name: string; revenue: number; orders: number; prevRevenue: number; prevEstimado?: boolean }[];
   /** TikTok Ads × vendas TikTok Shop */
   tiktokAds: {
     connected: boolean;
