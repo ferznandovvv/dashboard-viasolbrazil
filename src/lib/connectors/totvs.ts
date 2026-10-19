@@ -123,13 +123,34 @@ function lerToken(texto: string): Token | null {
   }
 }
 
-const resumoErro = (status: number, texto: string) => `${status}: ${texto.replace(/\s+/g, " ").slice(0, 200)}`;
+/** Resposta da TOTVS para mostrar na tela: nunca com o token de acesso dentro */
+export const semTokens = (texto: string) =>
+  texto
+    .replace(/("(access_token|refresh_token|accessToken|refreshToken)"\s*:\s*")[^"]*/g, "$1•••")
+    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, "•••");
+
+const resumoErro = (status: number, texto: string) => `${status}: ${semTokens(texto).replace(/\s+/g, " ").slice(0, 200)}`;
+
+/**
+ * Erro passageiro do servidor da TOTVS (502/503/504 do Cloudflare deles, ou
+ * conexão caída): espera um pouco e tenta mais uma vez antes de desistir.
+ */
+async function comRetentativa(pedir: () => Promise<Response>): Promise<Response> {
+  try {
+    const r = await pedir();
+    if (![502, 503, 504].includes(r.status)) return r;
+  } catch {
+    /* tenta de novo abaixo */
+  }
+  await new Promise((ok) => setTimeout(ok, 1500));
+  return pedir();
+}
 
 /** Login de sempre: client id/secret + usuário e senha (usuário com privilégio "Padrão" na ADMFM026). */
 async function loginSenha(): Promise<Token | string> {
   if (!credTotvs("TOTVS_CLIENT_ID") || !credTotvs("TOTVS_CLIENT_SECRET")) return "login com client id: falta o Client ID ou o secret";
   const pedir = (comCabecalho: boolean) =>
-    fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
+    comRetentativa(() => fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
       method: "POST",
       // Os mesmos cabeçalhos do exemplo de login que a TOTVS mandou
       headers: {
@@ -146,7 +167,7 @@ async function loginSenha(): Promise<Token | string> {
         password: credTotvs("TOTVS_PASSWORD"),
       }),
       cache: "no-store",
-    });
+    }));
   let res = await pedir(false);
   let text = await res.text();
   // O exemplo da TOTVS também manda um cabeçalho Authorization: se recusar o
@@ -253,16 +274,26 @@ export async function totvsFetch(
   path: string,
   body?: unknown
 ): Promise<{ status: number; json: Record<string, unknown> | null; text: string }> {
-  const token = await getTotvsToken();
-  const res = await fetch(`${totvsBaseUrl()}${path}`, {
-    method: body ? "POST" : "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    cache: "no-store",
-  });
+  return totvsFetchCom(await getTotvsToken(), path, body);
+}
+
+/** Chamada à APIv2 com um token já obtido (o teste de conexão usa o dele). */
+export async function totvsFetchCom(
+  token: string,
+  path: string,
+  body?: unknown
+): Promise<{ status: number; json: Record<string, unknown> | null; text: string }> {
+  const res = await comRetentativa(() =>
+    fetch(`${totvsBaseUrl()}${path}`, {
+      method: body ? "POST" : "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      cache: "no-store",
+    })
+  );
   const text = await res.text();
   let json: Record<string, unknown> | null = null;
   try {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { limparCache } from "@/lib/cache";
-import { autorizacaoBasica, credTotvs, loginIntegracao, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { autorizacaoBasica, credTotvs, loginIntegracao, semTokens, totvsBaseUrl, totvsConfigured, totvsFetchCom } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
@@ -26,15 +26,22 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
   det.push(`Endereço: ${base}`);
   const fim = (v: string) => (v ? `…${v.slice(-4)} (${v.length} caracteres)` : "vazio");
   det.push(`Em uso: Client ID ${credTotvs("TOTVS_CLIENT_ID") || "vazio"} · secret ${fim(credTotvs("TOTVS_CLIENT_SECRET"))} · usuário ${credTotvs("TOTVS_USERNAME") || "vazio"} · senha com ${credTotvs("TOTVS_PASSWORD").length} caracteres`);
-  const resumo = (status: number, texto: string) => `HTTP ${status} — ${texto.replace(/\s+/g, " ").slice(0, 280)}`;
+  const resumo = (status: number, texto: string) => `HTTP ${status} — ${semTokens(texto).replace(/\s+/g, " ").slice(0, 280)}`;
   const tentar = async (rotulo: string, url: string, corpo: Record<string, string>, extra: Record<string, string> = {}) => {
     try {
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR", ...extra },
-        body: new URLSearchParams(corpo),
-        cache: "no-store",
-      });
+      const pedir = () =>
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR", ...extra },
+          body: new URLSearchParams(corpo),
+          cache: "no-store",
+        });
+      let r = await pedir();
+      // Erro passageiro do servidor da TOTVS: tenta mais uma vez
+      if ([502, 503, 504].includes(r.status)) {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        r = await pedir();
+      }
       const t = await r.text();
       det.push(`${rotulo}: ${resumo(r.status, t)}`);
       let token = "";
@@ -99,7 +106,8 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
   // Login ok: testa a busca de notas com o token recém-obtido
   const hoje = todaySpKey();
   try {
-    const r = await totvsFetch("/api/totvsmoda/fiscal/v2/invoices/search", {
+    // Com o token que acabou de entrar: não faz um segundo login
+    const r = await totvsFetchCom(token, "/api/totvsmoda/fiscal/v2/invoices/search", {
       filter: { branchCodeList: [1], operationType: "Output", change: { startDate: `${hoje}T00:00:00`, endDate: `${hoje}T23:59:59` } },
       page: 1,
       pageSize: 1,
