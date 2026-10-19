@@ -15,7 +15,7 @@
 
 import { spawn } from "node:child_process";
 import { connect } from "node:net";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,6 +74,16 @@ const git = (...args) => rodar("git", args);
 const commitAtual = async () => (await git("rev-parse", "HEAD")).saida;
 
 async function montar(pasta) {
+  // Tipos gerados por montagens antigas entram na checagem (tsconfig inclui
+  // .next-a/types e .next-b/types) e, se uma tela foi apagada, travam toda
+  // montagem nova. Não são usados com o painel no ar, então saem antes.
+  for (const p of [".next", ".next-a", ".next-b"]) {
+    try {
+      rmSync(join(RAIZ, p, "types"), { recursive: true, force: true });
+    } catch {
+      /* segue: na pior das hipóteses a montagem avisa */
+    }
+  }
   log(`Montando a versão nova em ${pasta} (1 ou 2 minutos)…`);
   const r = await rodar(process.execPath, [NEXT, "build"], { env: { NEXT_DIST_DIR: pasta }, mostrar: true });
   if (!r.ok) log(`A montagem falhou — a versão anterior continua no ar.\n${r.saida.slice(-1500)}`);

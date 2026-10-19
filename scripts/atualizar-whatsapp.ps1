@@ -78,6 +78,25 @@ $build = $LASTEXITCODE
 Pop-Location
 if ($build -ne 0) { Falha 'A montagem falhou. Veja a mensagem acima.' }
 
+# O Next 16 liga as bibliotecas de fora (Prisma, Baileys, sharp...) por atalhos
+# em .next\node_modules. Sem permissao de administrador o Windows cria esses
+# atalhos quebrados e a tela e a API da WA-AKG dao "Failed to load external
+# module". Troca cada atalho por uma copia de verdade da biblioteca.
+$nmNext = Join-Path $novo '.next\node_modules'
+if (Test-Path $nmNext) {
+  $links = @(Get-ChildItem $nmNext -Force | ForEach-Object { if ($_.Name.StartsWith('@')) { Get-ChildItem $_.FullName -Force } else { $_ } } |
+    Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+  foreach ($l in $links) {
+    $rel = $l.FullName.Substring($nmNext.Length + 1)
+    $nome = $rel -replace '-[0-9a-f]{16}$', ''
+    $origem = Join-Path $novo "node_modules\$nome"
+    if (-not (Test-Path $origem)) { Write-Host "  aviso: nao achei node_modules\$nome para $rel"; continue }
+    if ($l.PSIsContainer) { cmd /c rmdir "$($l.FullName)" } else { cmd /c del /f /q "$($l.FullName)" }
+    Copy-Item -LiteralPath $origem -Destination $l.FullName -Recurse -Force
+    Write-Host "  biblioteca $nome copiada para .next"
+  }
+}
+
 # ---------------------------------------------------------------------------
 Passo '5/6  Copia de seguranca do banco'
 $m = [regex]::Match($envAtual, 'DATABASE_URL\s*=\s*"?mysql://([^:]+):([^@]*)@([^:/]+)(?::(\d+))?/([^"?\s]+)')
