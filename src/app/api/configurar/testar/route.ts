@@ -29,7 +29,7 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
     try {
       const r = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR" },
         body: new URLSearchParams(corpo),
         cache: "no-store",
       });

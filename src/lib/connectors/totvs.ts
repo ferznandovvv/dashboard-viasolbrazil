@@ -109,7 +109,8 @@ async function loginSenha(): Promise<Token | string> {
   if (!env("TOTVS_CLIENT_ID") || !env("TOTVS_CLIENT_SECRET")) return "login com client id: falta o Client ID ou o secret";
   const res = await fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    // Os mesmos cabeçalhos do exemplo de login que a TOTVS mandou
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR" },
     body: new URLSearchParams({
       grant_type: "password",
       client_id: env("TOTVS_CLIENT_ID"),
