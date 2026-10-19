@@ -89,21 +89,41 @@ No painel, CRM → Configurar → Envio: provedor WA-AKG, endereço
 `http://localhost:3200`, API Key. Em Números, cole o nome da sessão de cada
 loja, ligue e teste ("situação" e "mandar teste" para o seu celular).
 
+### Atualizar a WA-AKG
+
+Dois cliques em **`atualizar-whatsapp.cmd`** (ou `atualizar-whatsapp.cmd v1.7.1`
+para outra versão). Ele monta a versão nova em `WA-AKG-novo` enquanto a atual
+continua no ar, guarda o banco em `WA-AKG-banco-<data>.sql`, e só então troca;
+a anterior fica em `WA-AKG-anterior-<data>`. O WhatsApp fica fora por segundos.
+
+Desde a 1.7 a WA-AKG só manda webhook para endereço **https público** (recusa
+localhost). Por isso o painel cadastra o webhook com o endereço público
+(CRM → Configurar → Envio → "Endereço público do painel", padrão
+`https://painel.viasolbrazil.com.br`): a mensagem sai para o Cloudflare e volta
+pelo túnel. Antes de trocar, o painel testa se esse endereço chega mesmo nele;
+se não chegar (ex.: um Cloudflare Access na frente do painel), continua no
+localhost e avisa no "situação". Não ponha Access no `painel.`; ele já tem login.
+
+Voltar para a anterior: pare o painel, renomeie as pastas de volta e restaure o
+banco com o `.sql`. Sem restaurar o banco a versão antiga não lê as sessões
+(a 1.7 grava as chaves criptografadas), e as lojas podem precisar parear de novo.
+
 ### Acessar a WA-AKG de fora (whats.viasolbrazil.com.br)
 
-1. Cloudflare Zero Trust → Networks → Tunnels → o túnel do painel →
-   **Public Hostname** → Add: subdomínio `whats`, domínio
-   `viasolbrazil.com.br`, serviço `HTTP` e `127.0.0.1:3200`.
+1. Cloudflare → Networking → Tunnels → `painel` (o mesmo túnel, não precisa
+   de outro) → **Add route** → *Published application*: subdomínio `whats`,
+   domínio `viasolbrazil.com.br`, serviço `http://localhost:3200`.
 2. **Proteja antes de usar**: Zero Trust → Access → Applications → Add →
    Self-hosted, domínio `whats.viasolbrazil.com.br`, política *Allow* com o
    seu e-mail. Só entra quem recebe o código no e-mail. Isso importa porque a
-   WA-AKG vem com o cadastro de usuários aberto e a senha da tela /swagger
-   fica visível no código da página; quem chegasse nela controlaria o
-   WhatsApp de todas as lojas.
+   WA-AKG até a 1.6 vem com o cadastro de usuários aberto e a senha da tela
+   /swagger visível no código da página (a 1.7 corrigiu as duas); quem
+   chegasse nela controlaria o WhatsApp de todas as lojas.
 3. Na WA-AKG → Settings, desligue **Enable User Registration**.
 
-Não troque o `BASE_URL` do `WA-AKG\.env`: a WA-AKG manda esse endereço a cada
-30 segundos para o servidor de monitoramento do autor dela. Deixando
+Não troque o `BASE_URL` do `WA-AKG\.env`: até a 1.6 a WA-AKG manda esse
+endereço a cada 30 segundos para o servidor de monitoramento do autor dela (o
+atualizador põe `ENABLE_TELEMETRY="false"`, que desliga isso na 1.7). Deixando
 `localhost`, o link público não vaza. O login funciona pelo link mesmo assim
 (ela aceita o endereço de quem acessa). O painel continua falando com ela por
 `http://localhost:3200`, então nada muda no CRM.

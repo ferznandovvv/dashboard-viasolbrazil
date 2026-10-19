@@ -232,10 +232,17 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
                 )}
                 {cfg.provedor === "cloudapi" && <Campo rotulo={`Token de acesso${d.temCloudApiToken ? " (salvo)" : ""}`} valor={cfg.cloudApiToken ?? ""} onChange={t("cloudApiToken")} texto placeholder="cole pra trocar" />}
               </div>
+              <Campo
+                rotulo="Endereço público do painel (para o webhook)"
+                valor={cfg.enderecoPublico ?? d.enderecoPublicoPadrao ?? ""}
+                onChange={t("enderecoPublico")}
+                texto
+                placeholder="https://painel.viasolbrazil.com.br"
+                dica="A WA-AKG 1.7 só manda as conversas para endereço https público. Vazio = localhost (só funciona até a 1.6)."
+              />
               <div className="cfg-campo">
-                <span>Webhook: cole na WA-AKG em Webhooks, com os eventos message.received, message.sent e message.status</span>
-                <Copiavel rotulo="WA-AKG na mesma máquina do painel (use este)" valor={d.webhookUrl.replace(/^https?:\/\/[^/]+/, "http://localhost:3100")} />
-                <Copiavel rotulo="WA-AKG em outra máquina" valor={d.webhookUrl} />
+                <span>Webhook: o painel cadastra e corrige sozinho em cada número (eventos message.received, message.sent e message.status)</span>
+                <Copiavel rotulo="Endereço usado" valor={d.webhookUsado ?? d.webhookUrl} />
                 <small>O código no fim (t=…) é o segredo que autentica; sem ele a rota recusa.</small>
               </div>
             </section>

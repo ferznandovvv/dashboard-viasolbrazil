@@ -53,6 +53,9 @@ export interface DadosConfig {
   campanhas: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[];
   lojas: string[];
   webhookUrl: string;
+  /** O endereço que o painel cadastra sozinho em cada número */
+  webhookUsado?: string;
+  enderecoPublicoPadrao?: string;
 }
 
 export type MensagemComCliente = Mensagem & { cliente: string };

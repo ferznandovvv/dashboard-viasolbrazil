@@ -26,12 +26,12 @@ export class WaAkg implements Adaptador {
     this.url = url.replace(/\/+$/, "");
   }
 
-  private async chamar(caminho: string, corpo?: unknown): Promise<{ status: number; json: Record<string, unknown> | null; texto: string }> {
+  private async chamar(caminho: string, corpo?: unknown, metodo?: "PUT" | "DELETE"): Promise<{ status: number; json: Record<string, unknown> | null; texto: string }> {
     const controle = new AbortController();
     const t = setTimeout(() => controle.abort(), 30000);
     try {
       const r = await fetch(`${this.url}${caminho}`, {
-        method: corpo ? "POST" : "GET",
+        method: metodo ?? (corpo ? "POST" : "GET"),
         headers: { "X-API-Key": this.apiKey, "Content-Type": "application/json" },
         body: corpo ? JSON.stringify(corpo) : undefined,
         cache: "no-store",
@@ -118,15 +118,26 @@ export class WaAkg implements Adaptador {
       const { id } = await this.resolver(sessao);
       const r = await this.chamar(`/api/webhooks/${encodeURIComponent(id)}`);
       if (r.status !== 200) return { ok: false, detalhe: `não consegui ver os webhooks (HTTP ${r.status})` };
-      const lista = (r.json?.data ?? []) as { url?: string; isActive?: boolean; events?: unknown }[];
-      const nosso = (Array.isArray(lista) ? lista : []).find((w) => w.isActive !== false && String(w.url ?? "").includes("/api/crm/webhook"));
-      if (nosso) {
-        const ev = Array.isArray(nosso.events) ? (nosso.events as string[]) : [];
+      const lista = (r.json?.data ?? []) as { id?: string; url?: string; isActive?: boolean; events?: unknown }[];
+      const nossos = (Array.isArray(lista) ? lista : []).filter((w) => String(w.url ?? "").includes("/api/crm/webhook"));
+      const erroDela = (c: { json: Record<string, unknown> | null }) => String(c.json?.message ?? c.json?.error ?? "").slice(0, 160);
+      const certo = nossos.find((w) => w.isActive !== false && w.url === url);
+      if (certo) {
+        const ev = Array.isArray(certo.events) ? (certo.events as string[]) : [];
         const faltam = EVENTOS.filter((e) => !ev.includes(e) && !ev.includes("*"));
-        return faltam.length ? { ok: false, detalhe: `webhook sem os eventos ${faltam.join(", ")}` } : { ok: true, detalhe: "webhook ok" };
+        if (!faltam.length) return { ok: true, detalhe: "webhook ok" };
+      }
+      // Já existe um nosso com endereço antigo (ex.: localhost) ou faltando evento: corrige ele
+      const corrigir = certo ?? nossos.find((w) => w.id);
+      if (corrigir?.id) {
+        const c = await this.chamar(`/api/webhooks/${encodeURIComponent(id)}/${encodeURIComponent(corrigir.id)}`, { url, events: EVENTOS, isActive: true }, "PUT");
+        if (c.status === 200) return { ok: true, detalhe: "webhook corrigido agora" };
+        return { ok: false, detalhe: `não consegui corrigir o webhook (HTTP ${c.status}${erroDela(c) ? `: ${erroDela(c)}` : ""})` };
       }
       const c = await this.chamar(`/api/webhooks/${encodeURIComponent(id)}`, { name: "CRM Via Sol", url, events: EVENTOS });
-      return c.status === 200 && c.json?.status ? { ok: true, detalhe: "webhook criado agora" } : { ok: false, detalhe: `não consegui criar o webhook (HTTP ${c.status})` };
+      return c.status === 200 && c.json?.status
+        ? { ok: true, detalhe: "webhook criado agora" }
+        : { ok: false, detalhe: `não consegui criar o webhook (HTTP ${c.status}${erroDela(c) ? `: ${erroDela(c)}` : ""})` };
     } catch (e) {
       return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
     }

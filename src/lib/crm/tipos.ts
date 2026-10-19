@@ -293,6 +293,12 @@ export interface ConfigCrm {
   cloudApiToken?: string;
   /** Segredo que o webhook precisa trazer na URL (?t=) */
   webhookSegredo: string;
+  /**
+   * Endereço público do painel (https://…), usado no webhook da WA-AKG. Desde
+   * a 1.7 ela só manda webhook para HTTPS público e recusa localhost. Vazio =
+   * usa http://localhost (só serve até a 1.6). Sem valor = o padrão abaixo.
+   */
+  enderecoPublico?: string;
   numeros: NumeroWhatsapp[];
   /** Horário de envio (hora cheia, SP) */
   envioInicio: number;
@@ -449,6 +455,9 @@ export const MODELOS_PADRAO: Modelo[] = [
   },
   { campanha: "avulsa", ativo: true, variacoes: [] },
 ];
+
+/** Endereço público do painel pelo túnel do Cloudflare */
+export const ENDERECO_PUBLICO_PADRAO = "https://painel.viasolbrazil.com.br";
 
 export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   cashbackPct: 15,

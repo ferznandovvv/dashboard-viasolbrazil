@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lerFaixa } from "@/lib/crm/atendimento";
-import { configurarWebhooks, urlDoWebhook } from "@/lib/crm/webhookAuto";
+import { configurarWebhooks, urlDoWebhook, webhookQueVale } from "@/lib/crm/webhookAuto";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
-import { CAMPANHAS, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
+import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
     campanhas: CAMPANHAS,
     lojas: Object.values(LOJAS),
     webhookUrl: `${origem}/api/crm/webhook?t=${base.config.webhookSegredo}`,
+    webhookUsado: urlDoWebhook(base.config),
+    enderecoPublicoPadrao: ENDERECO_PUBLICO_PADRAO,
   });
 }
 
@@ -62,8 +64,9 @@ export async function POST(req: NextRequest) {
       if (!n?.sessao) return NextResponse.json({ erro: "Essa loja não tem sessão configurada." }, { status: 400 });
       const sit = await adaptador.situacao(n.sessao);
       // Aproveita pra garantir que o painel recebe as conversas desse número
-      const wh = adaptador.garantirWebhook ? await adaptador.garantirWebhook(n.sessao, urlDoWebhook(base.config.webhookSegredo)) : null;
-      return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe].filter(Boolean).join(" · ") });
+      const vale = await webhookQueVale(base.config);
+      const wh = adaptador.garantirWebhook ? await adaptador.garantirWebhook(n.sessao, vale.url) : null;
+      return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe, vale.aviso].filter(Boolean).join(" · ") });
     }
     if (p.tipo === "limpar-atendimento") {
       // Apaga as conversas registradas de uma loja (ex.: o número de teste)
@@ -107,6 +110,13 @@ export async function POST(req: NextRequest) {
           reativacaoTicketMinimo: num(c.reativacaoTicketMinimo, atual.reativacaoTicketMinimo),
           reativacaoIntervaloDias: num(c.reativacaoIntervaloDias, atual.reativacaoIntervaloDias, 7, 3650),
           provedor: c.provedor && ["waakg", "cloudapi", "nenhum"].includes(c.provedor) ? c.provedor : atual.provedor,
+          // https://… ou vazio (vazio = localhost, só até a WA-AKG 1.6)
+          enderecoPublico:
+            c.enderecoPublico !== undefined
+              ? /^https:\/\/[^\s/]+/.test(c.enderecoPublico.trim()) || !c.enderecoPublico.trim()
+                ? c.enderecoPublico.trim().replace(/\/+$/, "")
+                : atual.enderecoPublico
+              : atual.enderecoPublico,
           waakgUrl: c.waakgUrl !== undefined ? c.waakgUrl.trim().replace(/\/+$/, "") || undefined : atual.waakgUrl,
           // Chave só muda se vier uma nova (a tela mostra mascarada)
           waakgApiKey: c.waakgApiKey && !c.waakgApiKey.includes("…") ? c.waakgApiKey.trim() : atual.waakgApiKey,
