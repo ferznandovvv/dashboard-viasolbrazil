@@ -31,6 +31,22 @@ export interface Adaptador {
   contatos?(sessao: string): Promise<Map<string, string>>;
   /** Garante que o provedor avisa o CRM das mensagens desse número (cria o webhook se faltar) */
   garantirWebhook?(sessao: string, url: string): Promise<{ ok: boolean; detalhe: string }>;
+  /** Mensagens das conversas (sem grupos) com movimento desde `desde` (ISO): para completar o que o aviso perdeu */
+  conversasRecentes?(sessao: string, desde: string): Promise<MensagemRecuperada[]>;
+}
+
+export interface MensagemRecuperada {
+  /** Conversa (telefone@s.whatsapp.net ou id@lid) */
+  jid: string;
+  /** Código da mensagem no WhatsApp */
+  id: string;
+  fromMe: boolean;
+  /** TEXT, IMAGE, AUDIO... */
+  tipo: string;
+  conteudo: string;
+  /** ISO */
+  em: string;
+  nome?: string;
 }
 
 export function adaptadorDe(cfg: ConfigCrm): Adaptador | null {

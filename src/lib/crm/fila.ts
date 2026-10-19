@@ -8,7 +8,7 @@
 
 import { adaptadorDe } from "./envio/adaptador";
 import { alterarBase, hojeSp, lerBase } from "./base";
-import type { BaseCrm, Mensagem } from "./tipos";
+import type { Atendimento, BaseCrm, Mensagem } from "./tipos";
 
 /** Quando cada número pode mandar de novo (ms). Em memória: reiniciar zera, e tudo bem. */
 const proximoEnvio = new Map<string, number>();
@@ -146,9 +146,23 @@ export interface EventoRecebido {
   em?: string;
   /** Nome que a cliente usa no WhatsApp */
   nome?: string;
+  /** Veio da busca de conversas (não do aviso na hora): pode ser antiga */
+  recuperada?: boolean;
 }
 
 const OPT_OUT = /^\s*(sair|parar|pare|stop|cancelar|cancela|remover|descadastrar|n[aã]o quero( mais)?( receber)?)\b/i;
+
+/**
+ * A mensagem já está no atendimento? Pelo código do WhatsApp; para as gravadas
+ * antes de o código existir, pela mesma loja, cliente, lado e horário (2 min).
+ */
+export function jaRegistrada(atendimento: Atendimento[], loja: string, ev: EventoRecebido): boolean {
+  const de = ev.fromMe ? "loja" : "cliente";
+  if (ev.idExterno && atendimento.some((a) => a.id === ev.idExterno)) return true;
+  if (!ev.recuperada || !ev.em) return false;
+  const t = new Date(ev.em).getTime();
+  return atendimento.some((a) => !a.id && a.loja === loja && a.telefone === ev.telefone && a.de === de && Math.abs(new Date(a.em).getTime() - t) <= 120000);
+}
 
 /** Processa o que o webhook trouxe. Devolve o que fez (para o log). */
 export async function receberEvento(ev: EventoRecebido): Promise<string> {
@@ -175,12 +189,14 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
 
   if (ev.tipo !== "mensagem") return "ignorado";
   const texto = (ev.texto ?? "").trim();
+  if (loja && jaRegistrada(base.atendimento, loja, ev)) return "repetida";
 
   // Resposta da loja (digitada no celular ou mandada pela API): só conta no atendimento
   if (ev.fromMe) {
     await alterarBase((b) => {
       if (!loja) return;
-      b.atendimento.push({ loja, telefone: ev.telefone, de: "loja", em: ev.em ?? new Date().toISOString(), texto: (ev.texto ?? "").slice(0, 120) || undefined });
+      if (jaRegistrada(b.atendimento, loja, ev)) return;
+      b.atendimento.push({ loja, telefone: ev.telefone, de: "loja", em: ev.em ?? new Date().toISOString(), texto: (ev.texto ?? "").slice(0, 120) || undefined, id: ev.idExterno });
       if (b.atendimento.length > 30000) b.atendimento.splice(0, b.atendimento.length - 30000);
     });
     return loja ? "resposta da loja" : "ignorado";
@@ -189,7 +205,7 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
   let feito = "recebida";
   await alterarBase((b) => {
     if (loja) {
-      b.atendimento.push({ loja, telefone: ev.telefone, de: "cliente", em: ev.em ?? new Date().toISOString(), texto: texto.slice(0, 120), nome: ev.nome });
+      b.atendimento.push({ loja, telefone: ev.telefone, de: "cliente", em: ev.em ?? new Date().toISOString(), texto: texto.slice(0, 120), nome: ev.nome, id: ev.idExterno });
       if (b.atendimento.length > 30000) b.atendimento.splice(0, b.atendimento.length - 30000);
     }
     const cliente = b.clientes.find((c) => c.telefone === ev.telefone);
@@ -199,7 +215,7 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
       clienteId: cliente?.id,
       loja,
       texto: texto.slice(0, 1000),
-      recebidoEm: new Date().toISOString(),
+      recebidoEm: ev.recuperada && ev.em ? ev.em : new Date().toISOString(),
     });
     if (b.recebidas.length > 5000) b.recebidas.splice(0, b.recebidas.length - 5000);
     if (!cliente) return;
@@ -229,7 +245,9 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
 
   // Confirma o opt-out com uma mensagem só, fora da fila (é resposta, não campanha).
   // Em modo sombra ou pausado, nem isso sai.
-  if (feito === "opt-out" && !base.config.modoSombra && !base.config.pausado) {
+  // Mensagem recuperada de horas atrás: marca o opt-out, mas não responde fora de hora
+  const recente = !ev.recuperada || !ev.em || Date.now() - new Date(ev.em).getTime() < 3 * 3600000;
+  if (feito === "opt-out" && recente && !base.config.modoSombra && !base.config.pausado) {
     const adaptador = adaptadorDe(base.config);
     if (adaptador) void adaptador.enviarTexto(ev.sessao, ev.telefone, "Tudo bem, não mandamos mais mensagens por aqui. Se mudar de ideia, é só chamar a gente.");
   }

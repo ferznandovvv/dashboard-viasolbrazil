@@ -9,6 +9,7 @@ import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
 import { completarTelefones, sincronizarDiaria } from "./crm/totvs";
 import { configurarWebhooks } from "./crm/webhookAuto";
+import { recuperarConversas } from "./crm/recuperar";
 import { sincronizarShopifyDiaria } from "./crm/shopify";
 import { rodarAutomacoes } from "./crm/automacoes";
 import { processarFila } from "./crm/fila";
@@ -92,6 +93,17 @@ export function iniciarAgendador(): void {
       .catch(() => {});
   setTimeout(webhooks, 30_000);
   setInterval(webhooks, 10 * 60_000);
+
+  // Busca na WA-AKG o que o aviso perdeu (painel desligado, atualizando, túnel oscilando)
+  const buscarConversas = () =>
+    recuperarConversas()
+      .then((r) => {
+        const novas = Object.entries(r).filter(([, d]) => d !== "em dia");
+        if (novas.length) console.log("[crm] conversas:", JSON.stringify(Object.fromEntries(novas)));
+      })
+      .catch(() => {});
+  setTimeout(buscarConversas, 60_000);
+  setInterval(buscarConversas, 10 * 60_000);
   setInterval(celularNoEndereco, 60 * 60_000);
   setInterval(() => {
     const { dia, hora } = horaSp();

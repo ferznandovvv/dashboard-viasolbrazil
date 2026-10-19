@@ -227,6 +227,8 @@ export interface Atendimento {
   texto?: string;
   /** Nome que a cliente usa no WhatsApp */
   nome?: string;
+  /** Código da mensagem no WhatsApp: evita gravar a mesma duas vezes (aviso + busca) */
+  id?: string;
 }
 
 /** Variações de texto de uma campanha. {nome}, {valor}, {loja}, {validade}, {codigo}, {primeiro} */

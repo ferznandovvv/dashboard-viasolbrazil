@@ -6,7 +6,7 @@
  * corpo { message: { text } }. A resposta traz data.key.id.
  */
 
-import type { Adaptador, ResultadoEnvio, SituacaoNumero } from "./adaptador";
+import type { Adaptador, MensagemRecuperada, ResultadoEnvio, SituacaoNumero } from "./adaptador";
 
 /**
  * Na WA-AKG cada sessão tem um nome (ex.: "centro") e um código interno
@@ -141,6 +141,42 @@ export class WaAkg implements Adaptador {
     } catch (e) {
       return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
     }
+  }
+
+  /**
+   * Conversas com movimento desde `desde`: a lista de conversas (as 50 mais
+   * recentes) e, das que mexeram, as últimas 100 mensagens.
+   */
+  async conversasRecentes(sessao: string, desde: string): Promise<MensagemRecuperada[]> {
+    const { id } = await this.resolver(sessao);
+    const r = await this.chamar(`/api/chat/${encodeURIComponent(id)}`);
+    if (r.status !== 200) throw new Error(`lista de conversas: HTTP ${r.status}`);
+    const chats = (Array.isArray(r.json?.data) ? r.json!.data : []) as { jid?: string; lastMessage?: { timestamp?: string } }[];
+    const out: MensagemRecuperada[] = [];
+    for (const c of chats) {
+      const jid = String(c.jid ?? "");
+      if (!/@(s\.whatsapp\.net|lid)$/.test(jid)) continue; // grupos, status e canais ficam de fora
+      const ultima = c.lastMessage?.timestamp ? new Date(c.lastMessage.timestamp).toISOString() : "";
+      if (ultima < desde) continue;
+      const m = await this.chamar(`/api/chat/${encodeURIComponent(id)}/${encodeURIComponent(jid)}`);
+      if (m.status !== 200 || !Array.isArray(m.json?.data)) continue;
+      for (const x of m.json!.data as Record<string, unknown>[]) {
+        const t = new Date(String(x.timestamp ?? ""));
+        if (Number.isNaN(t.getTime())) continue;
+        const em = t.toISOString();
+        if (em < desde) continue;
+        out.push({
+          jid,
+          id: String(x.keyId ?? ""),
+          fromMe: Boolean(x.fromMe),
+          tipo: String(x.type ?? "TEXT"),
+          conteudo: typeof x.content === "string" ? x.content : "",
+          em,
+          nome: typeof x.pushName === "string" && x.pushName.trim() ? x.pushName.trim().slice(0, 60) : undefined,
+        });
+      }
+    }
+    return out;
   }
 
   async enviarTexto(sessao: string, telefone: string, texto: string): Promise<ResultadoEnvio> {
