@@ -1552,3 +1552,24 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 @media (max-width: 900px) {
   .at-espera { order: -1; border-top: 0; padding-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
 }
+
+/* ——— Celular no caixa: com celular / cadastro sem celular / sem cliente ——— */
+.cap-legenda { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--text-secondary); margin: 2px 0 10px; }
+.cap-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.cap-barra { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--grid); min-width: 90px; }
+.cap-barra i { display: block; height: 100%; }
+.cap-legenda .com, .cap-barra .com { background: var(--good); }
+.cap-legenda .semcel, .cap-barra .semcel { background: var(--aviso); }
+.cap-legenda .semcad, .cap-barra .semcad { background: var(--critical); }
+.cap-tbl td.cap-semcel { color: var(--aviso); font-weight: 600; }
+.cap-tbl td.cap-semcad, .fin-tbl td.cap-semcad { color: var(--critical); font-weight: 600; }
+.cap-pior { color: var(--critical); }
+.cap-melhor { color: var(--good); }
+.cap-linha { cursor: pointer; }
+.cap-linha:hover td { background: color-mix(in srgb, var(--brand) 5%, transparent); }
+.link.cap-loja { color: var(--text-primary); text-decoration: none; font-weight: 600; }
+.cap-rodape { margin: 8px 0 0; }
+.cap-sub { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); margin: 6px 0 8px; }
+.cap-lista-cab { margin-top: 18px; }
+/* Texto só para leitor de tela (position: absolute) dentro de tabela que rola não pode alargar a página */
+.tbl-wrap { position: relative; }

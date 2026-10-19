@@ -254,46 +254,7 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
         </div>
       </div>
 
-      <section className="card">
-        <h2>Celular no caixa por loja</h2>
-        <p className="muted pg-nota">Das vendas dos últimos 30 dias, quantas saíram com o celular da cliente (no campo de celular ou no endereço do cadastro).</p>
-        {/* Rola de lado no celular: o teclado também precisa chegar nela */}
-        <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Celular no caixa por loja">
-          <table className="prod-tbl fin-tbl">
-            <thead>
-              <tr>
-                <th>Loja</th>
-                <th style={{ width: "34%" }}>Vendas com celular</th>
-                <th className="n">Vendas</th>
-                <th className="n">vs 30 dias antes</th>
-                <th className="n">Clientes novas na semana</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lojas.map((l) => {
-                const c = l.cadastro;
-                const delta = c.pct30 !== null && c.pctAnterior !== null ? c.pct30 - c.pctAnterior : null;
-                return (
-                  <tr key={l.loja}>
-                    <td className="fin-desc">{l.loja}</td>
-                    <td>
-                      <span className="an-linha">
-                        <span className={`an-bar ${(c.pct30 ?? 0) < 50 ? "baixo" : "bom"}`} style={{ width: `${c.pct30 ?? 0}%` }} />
-                        <em>{c.pct30 ?? 0}%</em>
-                      </span>
-                    </td>
-                    <td className="n">{c.vendas30}</td>
-                    <td className={`n ${delta !== null && delta < 0 ? "vencida" : ""}`}>{delta === null || delta === 0 ? "" : `${delta > 0 ? "+" : ""}${delta} pts`}</td>
-                    <td className="n">
-                      {c.novas7d} com celular{c.novas7dSemCelular ? `, ${c.novas7dSemCelular} sem` : ""}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <CapturaCelular />
 
       <ConferenciaCashback />
     </div>
@@ -538,5 +499,206 @@ function ConferenciaCashback() {
         </>
       )}
     </section>
+  );
+}
+
+interface LinhaCap {
+  vendas: number;
+  comCelular: number;
+  cadastroSemCelular: number;
+  semCadastro: number;
+  pct: number | null;
+}
+interface Captura {
+  dias: number;
+  total: LinhaCap;
+  lojas: (LinhaCap & { loja: string; pctAnterior: number | null })[];
+  loja?: string;
+  vendedoras?: (LinhaCap & { nome: string })[];
+  lista?: { data: string; vendedora: string; cliente: string; valor: number; tipo: "cadastro_sem_celular" | "sem_cadastro" }[];
+}
+
+/** Barra empilhada: com celular, cadastro sem celular, sem cadastro. */
+function BarraCaptura({ l }: { l: LinhaCap }) {
+  const w = (n: number) => `${l.vendas ? (n / l.vendas) * 100 : 0}%`;
+  return (
+    <span className="cap-barra" aria-hidden>
+      <i className="com" style={{ width: w(l.comCelular) }} />
+      <i className="semcel" style={{ width: w(l.cadastroSemCelular) }} />
+      <i className="semcad" style={{ width: w(l.semCadastro) }} />
+    </span>
+  );
+}
+
+const PERIODOS = [7, 30] as const;
+
+/** Celular no caixa por loja, separando cadastro sem celular de venda sem cadastro. */
+function CapturaCelular() {
+  const [dias, setDias] = useState<number>(30);
+  const [d, setD] = useState<Captura | null>(null);
+  const [aberta, setAberta] = useState<string | null>(null);
+  useEffect(() => {
+    api<Captura>(`/api/crm/captura?dias=${dias}`).then(setD).catch(() => setD(null));
+  }, [dias]);
+  return (
+    <section className="card">
+      <div className="fin-cab">
+        <h2>Celular no caixa por loja</h2>
+        <div className="seg">
+          {PERIODOS.map((n) => (
+            <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>
+              {n} dias
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted pg-nota">
+        Cada venda do caixa nos últimos {dias} dias cai em um de três jeitos. Clique na loja para ver por vendedora e a lista das vendas sem celular.
+      </p>
+      <div className="cap-legenda">
+        <span><i className="com" /> com celular</span>
+        <span><i className="semcel" /> cliente cadastrada, mas sem celular</span>
+        <span><i className="semcad" /> venda sem cliente na nota</span>
+      </div>
+      {!d ? (
+        <div className="empty">Carregando…</div>
+      ) : (
+        <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Celular no caixa por loja">
+          <table className="prod-tbl fin-tbl cap-tbl">
+            <thead>
+              <tr>
+                <th>Loja</th>
+                <th className="n">Vendas</th>
+                <th className="n">Com celular</th>
+                <th className="n">Cadastro sem celular</th>
+                <th className="n">Sem cliente na nota</th>
+                <th style={{ width: "26%" }}>
+                  <span className="so-leitor">Proporção</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.lojas.map((l) => {
+                const delta = l.pct !== null && l.pctAnterior !== null ? l.pct - l.pctAnterior : null;
+                return (
+                  <tr key={l.loja} className="cap-linha" onClick={() => setAberta(l.loja)}>
+                    <td className="fin-desc">
+                      <button className="link cap-loja" onClick={() => setAberta(l.loja)}>
+                        {l.loja}
+                      </button>
+                    </td>
+                    <td className="n">{l.vendas}</td>
+                    <td className="n">
+                      <b>{l.pct ?? 0}%</b> <small className="muted">({l.comCelular})</small>
+                      {delta ? <small className={delta < 0 ? "cap-pior" : "cap-melhor"}> {delta > 0 ? "▲" : "▼"}{Math.abs(delta)}</small> : null}
+                    </td>
+                    <td className={`n ${l.cadastroSemCelular ? "cap-semcel" : ""}`}>{l.cadastroSemCelular}</td>
+                    <td className={`n ${l.semCadastro ? "cap-semcad" : ""}`}>{l.semCadastro}</td>
+                    <td>
+                      <BarraCaptura l={l} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="muted pg-nota cap-rodape">▲▼ = pontos a mais ou a menos que nos {dias} dias anteriores.</p>
+        </div>
+      )}
+      {aberta && <CapturaDaLoja loja={aberta} dias={dias} fechar={() => setAberta(null)} />}
+    </section>
+  );
+}
+
+function CapturaDaLoja({ loja, dias, fechar }: { loja: string; dias: number; fechar: () => void }) {
+  const [d, setD] = useState<Captura | null>(null);
+  const [filtro, setFiltro] = useState<"todas" | "cadastro_sem_celular" | "sem_cadastro">("todas");
+  useEffect(() => {
+    api<Captura>(`/api/crm/captura?dias=${dias}&loja=${encodeURIComponent(loja)}`).then(setD).catch(() => setD(null));
+  }, [loja, dias]);
+  const lista = (d?.lista ?? []).filter((x) => filtro === "todas" || x.tipo === filtro);
+  return (
+    <Janela titulo={`${loja}: celular no caixa, ${dias} dias`} fechar={fechar} larga>
+      {!d?.vendedoras ? (
+        <div className="empty">Carregando…</div>
+      ) : (
+        <>
+          <h3 className="cap-sub">Por vendedora</h3>
+          <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Celular por vendedora">
+            <table className="prod-tbl fin-tbl cap-tbl">
+              <thead>
+                <tr>
+                  <th>Vendedora</th>
+                  <th className="n">Vendas</th>
+                  <th className="n">Com celular</th>
+                  <th className="n">Cadastro sem celular</th>
+                  <th className="n">Sem cliente na nota</th>
+                  <th style={{ width: "24%" }}>
+                    <span className="so-leitor">Proporção</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.vendedoras.map((v) => (
+                  <tr key={v.nome}>
+                    <td className="fin-desc">{v.nome}</td>
+                    <td className="n">{v.vendas}</td>
+                    <td className="n">
+                      <b>{v.pct ?? 0}%</b> <small className="muted">({v.comCelular})</small>
+                    </td>
+                    <td className={`n ${v.cadastroSemCelular ? "cap-semcel" : ""}`}>{v.cadastroSemCelular}</td>
+                    <td className={`n ${v.semCadastro ? "cap-semcad" : ""}`}>{v.semCadastro}</td>
+                    <td>
+                      <BarraCaptura l={v} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="fin-cab cap-lista-cab">
+            <h3 className="cap-sub">Vendas sem celular ({(d.lista ?? []).length})</h3>
+            <div className="seg">
+              <button className={filtro === "todas" ? "on" : ""} onClick={() => setFiltro("todas")}>
+                Todas
+              </button>
+              <button className={filtro === "cadastro_sem_celular" ? "on" : ""} onClick={() => setFiltro("cadastro_sem_celular")}>
+                Cadastro sem celular
+              </button>
+              <button className={filtro === "sem_cadastro" ? "on" : ""} onClick={() => setFiltro("sem_cadastro")}>
+                Sem cliente
+              </button>
+            </div>
+          </div>
+          {lista.length ? (
+            <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Vendas sem celular">
+              <table className="prod-tbl fin-tbl">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Vendedora</th>
+                    <th>Cliente</th>
+                    <th className="n">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.map((x, i) => (
+                    <tr key={i}>
+                      <td>{new Date(x.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</td>
+                      <td>{x.vendedora}</td>
+                      <td className={x.tipo === "sem_cadastro" ? "cap-semcad" : ""}>{x.cliente}</td>
+                      <td className="n">{reais(x.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="muted">Nenhuma venda sem celular nesse filtro.</p>
+          )}
+        </>
+      )}
+    </Janela>
   );
 }
