@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { limparCache } from "@/lib/cache";
-import { autorizacaoBasica, loginIntegracao, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { autorizacaoBasica, credTotvs, loginIntegracao, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
@@ -25,7 +25,7 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
   const base = totvsBaseUrl();
   det.push(`Endereço: ${base}`);
   const fim = (v: string) => (v ? `…${v.slice(-4)} (${v.length} caracteres)` : "vazio");
-  det.push(`Em uso: Client ID ${env("TOTVS_CLIENT_ID") || "vazio"} · secret ${fim(env("TOTVS_CLIENT_SECRET"))} · usuário ${env("TOTVS_USERNAME") || "vazio"} · senha com ${env("TOTVS_PASSWORD").length} caracteres`);
+  det.push(`Em uso: Client ID ${credTotvs("TOTVS_CLIENT_ID") || "vazio"} · secret ${fim(credTotvs("TOTVS_CLIENT_SECRET"))} · usuário ${credTotvs("TOTVS_USERNAME") || "vazio"} · senha com ${credTotvs("TOTVS_PASSWORD").length} caracteres`);
   const resumo = (status: number, texto: string) => `HTTP ${status} — ${texto.replace(/\s+/g, " ").slice(0, 280)}`;
   const tentar = async (rotulo: string, url: string, corpo: Record<string, string>, extra: Record<string, string> = {}) => {
     try {
@@ -51,10 +51,10 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
   };
 
   const credenciais = {
-    client_id: env("TOTVS_CLIENT_ID"),
-    client_secret: env("TOTVS_CLIENT_SECRET"),
-    username: env("TOTVS_USERNAME"),
-    password: env("TOTVS_PASSWORD"),
+    client_id: credTotvs("TOTVS_CLIENT_ID"),
+    client_secret: credTotvs("TOTVS_CLIENT_SECRET"),
+    username: credTotvs("TOTVS_USERNAME"),
+    password: credTotvs("TOTVS_PASSWORD"),
   };
   const urlToken = `${base}/api/totvsmoda/authorization/v2/token`;
   // 1) Como sempre funcionou: usuário e senha

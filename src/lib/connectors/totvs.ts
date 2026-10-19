@@ -11,7 +11,7 @@
 
 import { ChannelResult, NormalizedOrder, addDays } from "../types";
 import { comCache } from "../cache";
-import { env, envUrl } from "../env";
+import { env } from "../env";
 import { gravarBlob, lerBlobs } from "../blobCache";
 import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
@@ -42,13 +42,34 @@ export function nomeAtualDaLoja(nome: string): string {
   return RENOMEADAS[nome] ?? nome;
 }
 
+/**
+ * Endereço da API. Aceita o que vier colado de mensagem ou exemplo: pega só o
+ * endereço (até o primeiro espaço ou vírgula) e tira o caminho do login, se
+ * vier junto (".../api/totvsmoda/authorization/v2/token").
+ */
 export function totvsBaseUrl(): string {
-  return envUrl("TOTVS_API_URL", DEFAULT_URL);
+  const bruto = env("TOTVS_API_URL");
+  const url = (bruto.match(/https?:\/\/[^\s,;'"]+/i)?.[0] ?? bruto.split(/[\s,;]/)[0])
+    .replace(/\/api\/totvsmoda\/.*$/i, "")
+    .replace(/\/+$/, "");
+  if (!url) return DEFAULT_URL;
+  return /^https?:\/\//i.test(url) ? url : `https://${url.replace(/^\/+/, "")}`;
+}
+
+/**
+ * Credencial da TOTVS como foi salva, sem o que costuma vir junto quando se
+ * copia de um exemplo (curl, Postman): "client_secret=", aspas e barras.
+ */
+export function credTotvs(nome: "TOTVS_CLIENT_ID" | "TOTVS_CLIENT_SECRET" | "TOTVS_USERNAME" | "TOTVS_PASSWORD"): string {
+  return env(nome)
+    .replace(/^(--data(-urlencode)?\s+)?['"]?(client_id|client_secret|username|password|grant_type)=/i, "")
+    .replace(/['"\\\s]+$/, "")
+    .trim();
 }
 
 export function totvsConfigured(): boolean {
   // O login de integração dispensa o client id/secret: basta usuário, senha e o ambiente (tenant)
-  return Boolean(env("TOTVS_USERNAME") && env("TOTVS_PASSWORD") && (env("TOTVS_CLIENT_ID") || tenantsPossiveis().length));
+  return Boolean(credTotvs("TOTVS_USERNAME") && credTotvs("TOTVS_PASSWORD") && (credTotvs("TOTVS_CLIENT_ID") || tenantsPossiveis().length));
 }
 
 /**
@@ -65,7 +86,7 @@ export function tenantsPossiveis(): { valor: string; origem: string }[] {
     /* endereço inválido */
   }
   const doEndereco = host.match(/^api-gateway\.([a-z0-9-]+)\./i)?.[1] ?? "";
-  const clientId = env("TOTVS_CLIENT_ID");
+  const clientId = credTotvs("TOTVS_CLIENT_ID");
   // O Client ID costuma ser o ambiente + o nome do app (ex.: VSVIASOL217586 + APIV2PROD)
   const semApp = clientId.replace(/api(v\d+)?(prod|hml|homolog|dev|teste?)?$/i, "");
   const lista = [
@@ -106,7 +127,7 @@ const resumoErro = (status: number, texto: string) => `${status}: ${texto.replac
 
 /** Login de sempre: client id/secret + usuário e senha (usuário com privilégio "Padrão" na ADMFM026). */
 async function loginSenha(): Promise<Token | string> {
-  if (!env("TOTVS_CLIENT_ID") || !env("TOTVS_CLIENT_SECRET")) return "login com client id: falta o Client ID ou o secret";
+  if (!credTotvs("TOTVS_CLIENT_ID") || !credTotvs("TOTVS_CLIENT_SECRET")) return "login com client id: falta o Client ID ou o secret";
   const pedir = (comCabecalho: boolean) =>
     fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
       method: "POST",
@@ -119,10 +140,10 @@ async function loginSenha(): Promise<Token | string> {
       },
       body: new URLSearchParams({
         grant_type: "password",
-        client_id: env("TOTVS_CLIENT_ID"),
-        client_secret: env("TOTVS_CLIENT_SECRET"),
-        username: env("TOTVS_USERNAME"),
-        password: env("TOTVS_PASSWORD"),
+        client_id: credTotvs("TOTVS_CLIENT_ID"),
+        client_secret: credTotvs("TOTVS_CLIENT_SECRET"),
+        username: credTotvs("TOTVS_USERNAME"),
+        password: credTotvs("TOTVS_PASSWORD"),
       }),
       cache: "no-store",
     });
@@ -139,7 +160,7 @@ async function loginSenha(): Promise<Token | string> {
 
 /** Client id e secret no cabeçalho, como o OAuth prevê (Basic base64(id:secret)). */
 export const autorizacaoBasica = () =>
-  `Basic ${Buffer.from(`${env("TOTVS_CLIENT_ID")}:${env("TOTVS_CLIENT_SECRET")}`).toString("base64")}`;
+  `Basic ${Buffer.from(`${credTotvs("TOTVS_CLIENT_ID")}:${credTotvs("TOTVS_CLIENT_SECRET")}`).toString("base64")}`;
 
 /**
  * Login de integração (TOTVS 2.8 em diante): usuário com privilégio
@@ -153,8 +174,8 @@ export async function loginIntegracao(
   if (!tenants.length) return { resultado: "login de integração: falta o ambiente (tenant)", tentativas };
   for (const t of tenants) {
     const corpo = new FormData();
-    corpo.set("Username", env("TOTVS_USERNAME"));
-    corpo.set("Password", env("TOTVS_PASSWORD"));
+    corpo.set("Username", credTotvs("TOTVS_USERNAME"));
+    corpo.set("Password", credTotvs("TOTVS_PASSWORD"));
     corpo.set("Tenant", t.valor);
     // O Client ID aparece só com o final, por segurança
     const rotulo = t.origem === "Client ID" ? `Client ID …${t.valor.slice(-4)}` : `${t.origem}: ${t.valor}`;
@@ -197,7 +218,7 @@ async function renovar(refresh: string): Promise<Token | null> {
 /** Token de acesso da APIv2, com cache em memória. */
 export async function getTotvsToken(): Promise<string> {
   // Trocou o client id/secret ou o usuário na configuração: o token antigo não vale mais
-  const chave = `${totvsBaseUrl()}|${env("TOTVS_CLIENT_ID")}|${env("TOTVS_CLIENT_SECRET")}|${env("TOTVS_USERNAME")}|${env("TOTVS_PASSWORD")}|${env("TOTVS_TENANT")}`;
+  const chave = `${totvsBaseUrl()}|${credTotvs("TOTVS_CLIENT_ID")}|${credTotvs("TOTVS_CLIENT_SECRET")}|${credTotvs("TOTVS_USERNAME")}|${credTotvs("TOTVS_PASSWORD")}|${env("TOTVS_TENANT")}`;
   if (cachedToken && cachedToken.chave === chave && cachedToken.expiresAt > Date.now()) return cachedToken.token;
   const guardar = (r: Token) => {
     cachedToken = { token: r.token, expiresAt: Date.now() + Math.max(60, r.segundos - 300) * 1000, chave, refresh: r.refresh };
