@@ -69,6 +69,11 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
       // no evento message.sent (API) a outra parte vem em receiver
       const tel = telefoneDoJid(c.event === "message.sent" ? (d.receiver ?? key.remoteJid) : (key.remoteJid ?? d.from));
       if (!tel || tel.length < 10) return out;
+      const tipoMsg = String(d.type ?? "").toUpperCase();
+      const conteudo = typeof d.content === "string" ? d.content.trim() : "";
+      const legenda = typeof d.caption === "string" ? d.caption.trim() : "";
+      // Reação (❤️ numa mensagem), mensagem apagada e afins chegam como texto vazio: não é conversa
+      if (!conteudo && !legenda && (!tipoMsg || tipoMsg === "TEXT" || tipoMsg === "UNKNOWN")) return out;
       out.push({
         em: quando(d.messageTimestamp),
         // Nome que a cliente usa no WhatsApp (só quando é ela que escreve)
@@ -77,7 +82,8 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
         sessao,
         telefone: tel,
         fromMe,
-        texto: typeof d.content === "string" ? d.content : typeof d.caption === "string" ? d.caption : `[${String(d.type ?? "mídia").toLowerCase()}]`,
+        // Foto/áudio sem texto viram "[image]", "[audio]"... (a tela mostra "📷 Foto", "🎤 Áudio")
+        texto: conteudo || legenda || `[${(tipoMsg || "mídia").toLowerCase()}]`,
         idExterno: typeof key.id === "string" ? key.id : undefined,
       });
     } else if (c.event === "message.status") {

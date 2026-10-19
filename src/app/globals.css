@@ -1504,3 +1504,51 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .card, .tile, .pg-loja { min-width: 0; overflow-wrap: break-word; }
 .pg-esperando-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; }
 .pg-esperando-cab a { text-decoration: none; }
+
+/* ——— Atendimento: uma faixa por loja ——— */
+.at-atalhos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.at-atalhos a { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); text-decoration: none; font-size: 13.5px; font-weight: 600; }
+.at-atalhos a b { font-weight: 500; font-size: 12px; color: var(--good); }
+.at-atalhos a.espera { border-color: var(--aviso); }
+.at-atalhos a.espera b { color: var(--aviso); }
+.at-atalhos a.ruim { border-color: var(--critical); }
+.at-atalhos a.ruim b { color: var(--critical); }
+.at-loja { margin-bottom: 16px; scroll-margin-top: 16px; }
+.at-loja.com-espera { border-color: color-mix(in srgb, var(--aviso) 55%, var(--border)); }
+.at-loja.desligada { border-color: var(--critical); }
+.at-cab { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 14px; }
+.at-cab h2 { margin: 0; font-size: 20px; }
+.at-zap { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.at-zap.bom { color: var(--good); }
+.at-zap.ruim { color: var(--critical); }
+.at-cab-acoes { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.at-cab-acoes a { text-decoration: none; }
+.at-corpo { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px 28px; align-items: start; }
+.at-nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin-bottom: 14px; }
+.at-nums > div { min-width: 0; }
+.at-nums b { display: block; font-family: var(--font-serif); font-size: 24px; line-height: 1.15; }
+.at-nums small { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.35; margin-top: 2px; }
+.at-nums .bom b { color: var(--good); }
+.at-nums .medio b { color: var(--aviso); }
+.at-nums .ruim b { color: var(--critical); }
+.at-barras { height: 64px; }
+.at-espera { min-width: 0; border-left: 1px solid var(--border); padding-left: 24px; }
+.at-espera h3 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); margin: 0 0 8px; }
+.at-emdia { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
+.pend-ignorar { display: block; margin: 4px 0 0 auto; font-size: 12px; }
+@media (max-width: 900px) {
+  .at-corpo { grid-template-columns: 1fr; }
+  .at-espera { border-left: 0; padding-left: 0; border-top: 1px solid var(--border); padding-top: 14px; }
+}
+@media (max-width: 640px) {
+  .at-cab-acoes { margin-left: 0; width: 100%; }
+  .at-nums b { font-size: 21px; }
+}
+/* Dentro do bloco da loja a lista é estreita: sempre empilhada (quem + tempo, mensagem embaixo) */
+.at-espera .pend { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "quem tempo" "texto texto"; }
+.at-espera .pend-texto { margin-top: 2px; }
+.link.pend-ignorar { color: var(--text-muted); text-decoration: none; font-weight: 400; }
+.link.pend-ignorar:hover, .link.pend-ignorar:focus-visible { color: var(--text-primary); text-decoration: underline; }
+@media (max-width: 900px) {
+  .at-espera { order: -1; border-top: 0; padding-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+}

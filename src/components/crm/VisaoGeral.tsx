@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { api, dataHora } from "./comum";
 import { Janela } from "./Clientes";
 import { formatarTelefone } from "@/lib/crm/telefone";
-import type { CardLoja, Nivel } from "@/lib/crm/painel";
+import type { CardLoja } from "@/lib/crm/painel";
 
 type Loja = CardLoja & { conectado: boolean | null; detalheNumero?: string; peloWhats: { vendas: number; valor: number; pctVendas: number | null } };
 
 interface Pendente {
+  ultima?: string;
   loja: string;
   telefone: string;
   cliente?: string;
@@ -34,27 +35,19 @@ interface Painel {
     eventos: number;
   };
   pendentes: Pendente[];
-  acessos?: { loja: string; ultimo: string | null; hoje: { primeiro: string; ultimo: string; minutos: number } | null; dias7: number }[];
   envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number };
   gatewayUrl?: string;
 }
 
 export const minutos = (m: number | null | undefined) =>
-  m === null || m === undefined ? "–" : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`;
+  m === null || m === undefined ? "–" : m < 1 ? "< 1 min" : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`;
 
-const NIVEL: Record<Nivel, { nome: string; icone: string }> = {
-  ok: { nome: "Tudo certo", icone: "●" },
-  atencao: { nome: "Atenção", icone: "▲" },
-  critico: { nome: "Agir agora", icone: "■" },
-  inativo: { nome: "WhatsApp não ligado", icone: "○" },
-};
 
 const DIA = ["D", "S", "T", "Q", "Q", "S", "S"];
 const diaSemana = (d: string) => DIA[new Date(`${d}T12:00:00`).getDay()];
 
 /** Visão gerencial: um cartão por loja com atendimento, WhatsApp e captura de celular. */
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-const ehAlertaCelular = (t: string) => /vendas com celular/.test(t);
 
 function usePainel() {
   const [p, setP] = useState<Painel | null>(null);
@@ -72,141 +65,147 @@ function usePainel() {
     const t = setInterval(carregar, 60000);
     return () => clearInterval(t);
   }, [carregar]);
-  return { p, erro };
+  return { p, erro, carregar };
 }
 
-/** Aba Atendimento: WhatsApp de cada loja, quem está esperando e o que virou venda. */
+/** Aba Atendimento: uma faixa por loja, com quem está esperando dentro dela. */
 export function PainelAtendimento() {
-  const { p, erro } = usePainel();
+  const { p, erro, carregar } = usePainel();
   const [aberta, setAberta] = useState<string | null>(null);
+  const [ignorando, setIgnorando] = useState<Set<string>>(new Set());
   if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
-  const g = p.geral;
-  const ordem: Nivel[] = ["critico", "atencao", "ok", "inativo"];
-  // No atendimento, o semáforo é só do WhatsApp (celular no caixa fica no CRM)
-  const lojas = p.lojas.map((l) => {
-    const alertas = l.alertas.filter((x) => !ehAlertaCelular(x));
-    let nivel = l.nivel;
-    if (l.numero.ativo && nivel === "atencao" && !alertas.length) nivel = "ok";
-    return { ...l, alertas, nivel };
-  });
-  const ligadas = lojas.filter((l) => l.numero.ativo).sort((a, b) => ordem.indexOf(a.nivel) - ordem.indexOf(b.nivel));
-  const semNumero = lojas.filter((l) => !l.numero.ativo);
-  const vendasW = ligadas.reduce((s, l) => s + l.peloWhats.vendas, 0);
-  const valorW = ligadas.reduce((s, l) => s + l.peloWhats.valor, 0);
+
+  const ignorar = async (x: Pendente) => {
+    const chave = `${x.loja}|${x.telefone}`;
+    setIgnorando((s) => new Set(s).add(chave));
+    try {
+      await api("/api/crm/atendimento", { method: "POST", body: JSON.stringify({ acao: "ignorar", loja: x.loja, telefone: x.telefone, ate: x.ultima }) });
+      await carregar();
+    } finally {
+      setIgnorando((s) => {
+        const n = new Set(s);
+        n.delete(chave);
+        return n;
+      });
+    }
+  };
+
+  const pendentes = p.pendentes.filter((x) => !ignorando.has(`${x.loja}|${x.telefone}`));
+  const daLoja = (loja: string) => pendentes.filter((x) => x.loja === loja);
+  const ligadas = p.lojas
+    .filter((l) => l.numero.ativo)
+    .map((l) => ({ l, esp: daLoja(l.loja) }))
+    // Desconectada primeiro, depois quem tem gente esperando há mais tempo, depois quem tem mais conversa
+    .sort(
+      (a, b) =>
+        Number(b.l.conectado === false) - Number(a.l.conectado === false) ||
+        (b.esp[0]?.esperando ?? -1) - (a.esp[0]?.esperando ?? -1) ||
+        b.l.atend.conversasHoje - a.l.atend.conversasHoje
+    );
+  const semNumero = p.lojas.filter((l) => !l.numero.ativo);
 
   return (
     <div>
-      <div className="tiles pg-kpis">
-        <div className={`tile ${g.maiorEsperaMin > 60 ? "alerta" : ""}`}>
-          <div className="label">Esperando resposta</div>
-          <div className="value">{g.esperando}</div>
-          <div className="muted">{g.esperando ? `a mais antiga há ${minutos(g.maiorEsperaMin)}` : "ninguém há mais de 15 min"}</div>
-        </div>
-        <div className="tile">
-          <div className="label">Tempo de resposta</div>
-          <div className="value">{minutos(g.mediana7d)}</div>
-          <div className="muted">{g.rapidas7d !== null ? `${g.rapidas7d}% em até 15 min · 7 dias` : "mediana dos últimos 7 dias"}</div>
-        </div>
-        <div className="tile">
-          <div className="label">Clientes hoje</div>
-          <div className="value">{g.conversasHoje}</div>
-          <div className="muted">chamaram as lojas no WhatsApp</div>
-        </div>
-        <div className="tile">
-          <div className="label">Vendas pelo WhatsApp</div>
-          <div className="value">{vendasW}</div>
-          <div className="muted">{vendasW ? `${reais(valorW)} no mês` : "no mês"}</div>
-        </div>
-        <div className={`tile ${g.numeros && g.conectados < g.numeros ? "alerta" : ""}`}>
-          <div className="label">WhatsApp</div>
-          <div className="value">
-            {g.conectados}/{g.numeros}
-          </div>
-          <div className="muted">{g.numeros ? "números conectados" : "nenhum número ligado ainda"}</div>
-        </div>
-      </div>
-
-      {p.pendentes.length > 0 && (
-        <div className="card pg-esperando">
-          <div className="pg-esperando-cab">
-            <h2>Esperando resposta agora</h2>
-            {p.gatewayUrl && (
-              <a className="mini ghost" href={`${p.gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer">
-                Abrir conversas <span className="so-leitor">(abre em outra aba)</span>
-              </a>
-            )}
-          </div>
-          <ListaPendentes pendentes={p.pendentes} comLoja />
-        </div>
+      {ligadas.length > 1 && (
+        <nav className="at-atalhos" aria-label="Ir para a loja">
+          {ligadas.map(({ l, esp }) => (
+            <a key={l.loja} href={`#loja-${idLoja(l.loja)}`} className={l.conectado === false ? "ruim" : esp.length ? "espera" : ""}>
+              {l.loja}
+              <b>{l.conectado === false ? "desconectado" : esp.length ? `${esp.length} esperando` : "em dia"}</b>
+            </a>
+          ))}
+        </nav>
       )}
 
-      {!g.eventos && ligadas.length > 0 && (
+      {!p.geral.eventos && ligadas.length > 0 && (
         <div className="card muted pg-dica">
           Nenhuma conversa chegou ainda. O painel confere o webhook de cada número sozinho a cada 10 minutos; se continuar vazio, use &quot;situação&quot; em CRM → Configurar → Números, que mostra se o webhook está ok.
         </div>
       )}
 
-      <div className="pg-lojas">
-        {ligadas.map((l) => (
-          <CartaoLoja key={l.loja} l={l} abrir={() => setAberta(l.loja)} />
-        ))}
-      </div>
-      {semNumero.length > 0 && (
-        <p className="muted pg-semnumero">Sem WhatsApp ligado ao painel: {semNumero.map((l) => l.loja).join(", ")}.</p>
-      )}
+      {ligadas.map(({ l, esp }) => (
+        <BlocoLoja key={l.loja} l={l} esperando={esp} gatewayUrl={p.gatewayUrl} ignorar={ignorar} detalhes={() => setAberta(l.loja)} />
+      ))}
 
-      {p.acessos && p.acessos.length > 0 && <PainelAberto acessos={p.acessos} />}
+      {semNumero.length > 0 && <p className="muted pg-semnumero">Sem WhatsApp ligado ao painel: {semNumero.map((l) => l.loja).join(", ")}.</p>}
 
       {aberta && <DetalheLoja loja={aberta} gatewayUrl={p.gatewayUrl} fechar={() => setAberta(null)} />}
     </div>
   );
 }
 
-/** Há quanto tempo, em palavras curtas */
-function haQuanto(iso: string): string {
-  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (min < 60) return `há ${Math.max(1, min)} min`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `há ${h}h`;
-  const d = Math.round(h / 24);
-  return d === 1 ? "ontem" : `há ${d} dias`;
-}
+const idLoja = (loja: string) =>
+  loja
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-");
 
-/** As lojas estão olhando o painel delas? Só conta o computador da loja (ou o usuário de loja) com a aba visível. */
-function PainelAberto({ acessos }: { acessos: NonNullable<Painel["acessos"]> }) {
+/** Uma loja: os números dela e, do lado, quem está esperando resposta. */
+function BlocoLoja({ l, esperando, gatewayUrl, ignorar, detalhes }: { l: Loja; esperando: Pendente[]; gatewayUrl?: string; ignorar: (p: Pendente) => void; detalhes: () => void }) {
+  const a = l.atend;
+  const maxDia = Math.max(1, ...a.dias.map((d) => d.conversas));
+  const desligada = l.conectado === false;
+  const lenta = (m: number | null) => (m === null ? "" : m > 30 ? "ruim" : m > 15 ? "medio" : "bom");
   return (
-    <section className="card pg-aberto">
-      <h2>As lojas estão olhando o painel?</h2>
-      <p className="muted pg-nota">
-        Conta só o computador da loja ou o usuário de loja, com a aba do painel na frente. Você e a sócia abrindo não entram aqui.
-      </p>
-      <div className="tbl-wrap">
-        <table className="prod-tbl fin-tbl">
-          <thead>
-            <tr>
-              <th>Loja</th>
-              <th>Visto por último</th>
-              <th>Hoje</th>
-              <th className="n">Últimos 7 dias</th>
-            </tr>
-          </thead>
-          <tbody>
-            {acessos.map((a) => {
-              const agora = a.ultimo && Date.now() - new Date(a.ultimo).getTime() < 3 * 60000;
-              const longe = !a.ultimo || Date.now() - new Date(a.ultimo).getTime() > 2 * 86400000;
-              return (
-                <tr key={a.loja}>
-                  <td className="fin-desc">{a.loja}</td>
-                  <td className={agora ? "pg-aberto-agora" : longe ? "vencida" : ""}>
-                    {agora ? "● aberto agora" : a.ultimo ? haQuanto(a.ultimo) : "nunca abriu"}
-                  </td>
-                  <td className="muted">{a.hoje ? `das ${a.hoje.primeiro} às ${a.hoje.ultimo} · ${minutos(a.hoje.minutos)} na tela` : "não abriu"}</td>
-                  <td className="n">{a.dias7} de 7 dias</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <section className={`card at-loja ${desligada ? "desligada" : esperando.length ? "com-espera" : ""}`} id={`loja-${idLoja(l.loja)}`} aria-labelledby={`t-${idLoja(l.loja)}`}>
+      <header className="at-cab">
+        <h2 id={`t-${idLoja(l.loja)}`}>{l.loja}</h2>
+        <span className={`at-zap ${desligada ? "ruim" : l.conectado ? "bom" : ""}`}>{desligada ? "■ WhatsApp desconectado" : l.conectado ? "● conectado" : "sem provedor"}</span>
+        <span className="at-cab-acoes">
+          {gatewayUrl && (
+            <a className="mini ghost" href={`${gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer">
+              Abrir conversas <span className="so-leitor">(abre em outra aba)</span>
+            </a>
+          )}
+          <button className="mini ghost" onClick={detalhes}>
+            Detalhes
+          </button>
+        </span>
+      </header>
+
+      <div className="at-corpo">
+        <div className="at-lado">
+          <div className="at-nums">
+            <div className={esperando.length ? (esperando[0].esperando > 60 ? "ruim" : "medio") : "bom"}>
+              <b>{esperando.length}</b>
+              <small>{esperando.length ? `esperando · a mais antiga há ${minutos(esperando[0].esperando)}` : "esperando agora"}</small>
+            </div>
+            <div className={lenta(a.medianaHoje ?? a.mediana7d)}>
+              <b>{minutos(a.medianaHoje ?? a.mediana7d)}</b>
+              <small>{a.medianaHoje !== null ? `para responder hoje · 7 dias: ${minutos(a.mediana7d)}` : "para responder · 7 dias"}</small>
+            </div>
+            <div>
+              <b>{a.rapidas7d === null ? "–" : `${a.rapidas7d}%`}</b>
+              <small>respondidas em até 15 min · 7 dias</small>
+            </div>
+            <div>
+              <b>{a.conversasHoje}</b>
+              <small>clientes chamaram hoje</small>
+            </div>
+            <div>
+              <b>{l.peloWhats.vendas}</b>
+              <small>{l.peloWhats.vendas ? `vendas pelo WhatsApp no mês · ${reais(l.peloWhats.valor)}` : "vendas pelo WhatsApp no mês"}</small>
+            </div>
+          </div>
+          <div className="pg-barras at-barras" role="img" aria-label={`Clientes por dia, últimos 7 dias: ${a.dias.map((d) => d.conversas).join(", ")}`}>
+            {a.dias.map((d) => (
+              <span key={d.dia} title={`${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}: ${d.conversas} clientes`}>
+                <i style={{ height: `${Math.max(d.conversas ? 8 : 2, (d.conversas / maxDia) * 100)}%` }} />
+                <em>{diaSemana(d.dia)}</em>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="at-espera">
+          <h3>Esperando resposta</h3>
+          {esperando.length ? (
+            <ListaPendentes pendentes={esperando} ignorar={ignorar} />
+          ) : (
+            <p className="at-emdia">{desligada ? "Com o WhatsApp desconectado, as conversas novas não chegam aqui." : "Ninguém esperando. Tudo respondido."}</p>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -301,77 +300,7 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
   );
 }
 
-function CartaoLoja({ l, abrir }: { l: Loja; abrir: () => void }) {
-  const a = l.atend;
-  const maxDia = Math.max(1, ...a.dias.map((d) => d.conversas));
-  const n = NIVEL[l.nivel];
-  return (
-    <button className={`pg-loja nivel-${l.nivel}`} onClick={abrir}>
-      <div className="pg-loja-cab">
-        <span className="pg-loja-nome">{l.loja}</span>
-        <span className="pg-nivel">
-          <span aria-hidden>{n.icone}</span> {n.nome}
-        </span>
-      </div>
-      {l.alertas.length > 0 && (
-        <ul className="pg-alertas">
-          {l.alertas.slice(0, 3).map((x) => (
-            <li key={x}>{x}</li>
-          ))}
-        </ul>
-      )}
-
-      <div className="pg-sec">Atendimento</div>
-      {l.numero.ativo ? (
-        <>
-          <div className="pg-mini">
-            <div>
-              <b>{a.conversasHoje}</b>
-              <small>conversas hoje</small>
-            </div>
-            <div className={a.esperando ? (a.maiorEsperaMin > 60 ? "ruim" : "medio") : ""}>
-              <b>{a.esperando}</b>
-              <small>{a.esperando ? `esperando · ${minutos(a.maiorEsperaMin)}` : "esperando"}</small>
-            </div>
-            <div className={a.mediana7d !== null && a.mediana7d > 15 ? "medio" : ""}>
-              <b>{minutos(a.mediana7d)}</b>
-              <small>p/ responder</small>
-            </div>
-          </div>
-          <div className="pg-barras" aria-label="Conversas por dia, últimos 7 dias">
-            {a.dias.map((d) => (
-              <span key={d.dia} title={`${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}: ${d.conversas} conversas`}>
-                <i style={{ height: `${Math.max(d.conversas ? 8 : 2, (d.conversas / maxDia) * 100)}%` }} />
-                <em>{diaSemana(d.dia)}</em>
-              </span>
-            ))}
-          </div>
-          <div className="pg-rodape">
-            <span className={l.conectado === false ? "ruim" : l.conectado ? "bom" : ""}>
-              {l.conectado === false ? "■ desconectado" : l.conectado ? "● conectado" : "sem provedor"}
-            </span>
-            <span>
-              enviadas {l.numero.hoje}/{l.numero.teto} hoje{l.numero.naFila ? ` · ${l.numero.naFila} na fila` : ""}
-            </span>
-          </div>
-        </>
-      ) : (
-        <div className="muted pg-vazio">{l.numero.configurado ? "Número desligado no CRM." : "Ainda sem número de WhatsApp no CRM."}</div>
-      )}
-
-      <div className="pg-sec">Vendas pelo WhatsApp no mês</div>
-      <div className="pg-cel">
-        <span className="pg-cel-pct">{l.peloWhats.vendas}</span>
-        <span className="pg-cel-info">
-          {l.peloWhats.vendas ? `${reais(l.peloWhats.valor)}${l.peloWhats.pctVendas !== null ? `, ${l.peloWhats.pctVendas}% das vendas` : ""}` : "nenhuma ainda"}
-          <small className="muted">frete de motoboy ou conversa nos 7 dias antes</small>
-        </span>
-      </div>
-    </button>
-  );
-}
-
-export function ListaPendentes({ pendentes, comLoja }: { pendentes: Pendente[]; comLoja?: boolean }) {
+export function ListaPendentes({ pendentes, comLoja, ignorar }: { pendentes: Pendente[]; comLoja?: boolean; ignorar?: (p: Pendente) => void }) {
   return (
     <ul className="pend-lista">
       {pendentes.map((p) => (
@@ -388,6 +317,11 @@ export function ListaPendentes({ pendentes, comLoja }: { pendentes: Pendente[]; 
           <div className="pend-tempo">
             <span className={`fin-status ${p.esperando > 60 ? "vencida" : "hoje"}`}>há {minutos(p.esperando)}</span>
             <small>desde {dataHora(p.desde)}</small>
+            {ignorar && (
+              <button className="link pend-ignorar" onClick={() => ignorar(p)} title="Tira da lista até ela escrever de novo">
+                não precisa responder
+              </button>
+            )}
           </div>
         </li>
       ))}

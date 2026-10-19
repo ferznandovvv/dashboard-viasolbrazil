@@ -350,6 +350,8 @@ export interface BaseCrm {
   mensagens: Mensagem[];
   recebidas: Recebida[];
   atendimento: Atendimento[];
+  /** "Não precisa responder": loja|telefone → até quando (ISO) a espera foi dispensada */
+  atendimentoIgnorado?: Record<string, string>;
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */
   vendedoras: Record<string, string>;
   modelos: Modelo[];

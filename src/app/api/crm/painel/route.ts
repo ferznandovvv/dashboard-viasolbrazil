@@ -8,7 +8,6 @@ import { nomearPendentes } from "@/lib/crm/contatos";
 import { linkDaWaakg } from "@/lib/crm/tipos";
 import { aprenderVendedoras } from "@/lib/crm/vendasLoja";
 import { vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
-import { acessosDasLojas } from "@/lib/crm/acessos";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +60,7 @@ export async function GET(req: NextRequest) {
       numeros: lojas.filter((l) => l.numero.ativo).length,
       eventos: base.atendimento.length,
     },
-    pendentes: await nomearPendentes(base, p.semana.pendentes.slice(0, 12)),
-    acessos: await acessosDasLojas().catch(() => []),
+    pendentes: await nomearPendentes(base, p.semana.pendentes.slice(0, 100)),
     envio: {
       modoSombra: cfg.modoSombra,
       pausado: cfg.pausado,

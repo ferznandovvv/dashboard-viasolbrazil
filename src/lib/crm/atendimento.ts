@@ -32,6 +32,8 @@ export interface Pendente {
   esperando: number;
   desde: string;
   texto?: string;
+  /** Última mensagem dela (para "não precisa responder") */
+  ultima: string;
 }
 
 /** Horário de um dia: [abre, fecha] em minutos desde a meia-noite, ou null se fechado. */
@@ -87,17 +89,53 @@ export function minutosUteis(de: Date, ate: Date, janela: Janela): number {
 }
 
 /**
- * Mensagem da cliente que encerra a conversa e não pede resposta
- * ("obrigada!", "ok", "👍", figurinha). Não abre espera: senão toda
- * conversa terminada com um agradecimento viraria "esperando".
+ * Mensagem da cliente que encerra a conversa e não pede resposta ("obrigada ✅",
+ * "ok, tudo bem 🥰", "👍", figurinha). Cumprimento ("bom dia") e pergunta (com
+ * "?") nunca encerram: pedem resposta.
  */
-const ENCERRAMENTO = /^(ok(ay|ey)?|t[aá]( bom)?|beleza|blz|show|combinado|perfeito|[oó]timo|massa|valeu|vlw|obrigad[ao]s?|obg|brigad[ao]|muito obrigad[ao]|de nada|imagina|tchau|at[eé] (mais|logo|amanh[aã])|boa noite|bom dia|boa tarde|entendi|certo|top|amei|maravilha)[\s!.,😘🥰❤️💕🙏👍😊☺️🤗✨😍🧡]*$/i;
+const lista = (t: string) => new Set(t.split(" "));
+/** Palavras que encerram de fato */
+const FIM = lista(
+  "ok okay okey oks ta tah to beleza blz show combinado perfeito perfeita otimo otima massa valeu vlw obrigada obrigado " +
+    "obrigadas obrigados obg obgd brigada brigado brigadu agradeco grata grato nada imagina tchau ate entendi entendido certo " +
+    "certinho top amei maravilha bem joia fechado fechou igualmente bjs bjo bjos beijos beijo abraco abracos tmj ja"
+);
+/** Palavras que só acompanham ("obrigada, linda, boa noite"); sozinhas não encerram */
+const ACOMPANHA = lista(
+  "bom boa muito muita mto mt mta demais de mais logo amanha breve noite dia tarde tudo ah ahh e a pela pelo atencao ajuda " +
+    "carinho viu entao flor querida querido linda lindo amiga amigo semana fds feliz otimos deus abencoe kk kkk rs pra voce vc voces"
+);
 const SO_EMOJI = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u;
+
 export function encerraConversa(texto?: string): boolean {
   const t = (texto ?? "").trim();
   if (!t) return false;
-  if (t === "[sticker]" || t === "[stickermessage]" || t === "[reaction]" || t === "[reactionmessage]") return true;
-  return ENCERRAMENTO.test(t) || SO_EMOJI.test(t);
+  if (/^\[(sticker|stickermessage|reaction|reactionmessage)\]$/i.test(t)) return true;
+  if (t.includes("?")) return false;
+  if (SO_EMOJI.test(t)) return true;
+  const palavras = t
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\p{Extended_Pictographic}\p{Emoji_Component}]/gu, " ")
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    // "obrigadaaa", "okkk", "blzz": letra repetida no fim conta como uma
+    .map((w) => w.replace(/(.)\1+$/, "$1"));
+  if (!palavras.length || palavras.length > 8) return false;
+  const tem = (c: Set<string>, w: string) => c.has(w) || c.has(w.replace(/s$/, ""));
+  return palavras.every((w) => tem(FIM, w) || tem(ACOMPANHA, w)) && palavras.some((w) => tem(FIM, w));
+}
+
+/** Rótulo de mensagem sem texto (foto, áudio...) para mostrar na tela. */
+export function rotuloMensagem(texto?: string): string {
+  const t = (texto ?? "").trim();
+  const m = /^\[([a-z_]+?)(message)?\]$/i.exec(t);
+  if (!t) return "mensagem sem texto (foto, áudio ou figurinha)";
+  if (!m) return t;
+  const r: Record<string, string> = { image: "📷 Foto", audio: "🎤 Áudio", video: "🎬 Vídeo", document: "📄 Documento", sticker: "Figurinha", location: "📍 Localização", contact: "👤 Contato", ptt: "🎤 Áudio" };
+  return r[m[1].toLowerCase()] ?? "Mensagem sem texto";
 }
 
 export interface ResumoAtendimento {
@@ -131,7 +169,8 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
 
   const porLoja = new Map<string, { conversas: Set<string>; msgs: number; respondidas: number; tempos: number[]; lentas: number; rapidas: number }>();
   // Por conversa: última mensagem da cliente ainda sem resposta
-  const aberta = new Map<string, { em: string; texto?: string; loja: string }>();
+  const aberta = new Map<string, { em: string; ultima: string; texto?: string; loja: string }>();
+  const ignorados = base.atendimentoIgnorado ?? {};
   // Nome do WhatsApp de quem não está na base (o último que veio)
   const apelido = new Map<string, string>();
   for (const a of base.atendimento) if (a.de === "cliente" && a.nome) apelido.set(a.telefone, a.nome);
@@ -145,9 +184,14 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
       // Uma sequência de mensagens da cliente conta como uma espera só, a partir da primeira;
       // "obrigada!" e figurinha não abrem espera
       if (!aberta.has(chave)) {
-        if (!encerraConversa(ev.texto)) aberta.set(chave, { em: ev.em, texto: ev.texto, loja: ev.loja });
+        // Ninguém abre conversa com "obrigada": muitas vezes a conversa começou antes do painel ver
+        if (!encerraConversa(ev.texto)) aberta.set(chave, { em: ev.em, ultima: ev.em, texto: ev.texto, loja: ev.loja });
+      } else {
+        const a = aberta.get(chave)!;
+        a.ultima = ev.em;
+        // Mantém a pergunta: um "obrigada" depois dela não esconde o que ela perguntou
+        if (!encerraConversa(ev.texto)) a.texto = ev.texto ?? a.texto;
       }
-      else aberta.get(chave)!.texto = ev.texto ?? aberta.get(chave)!.texto;
     } else {
       if (automatica(ev)) continue;
       const a = aberta.get(chave);
@@ -167,10 +211,12 @@ export function resumoAtendimento(base: BaseCrm, dias = 7, desdeIso?: string): R
   const ligadas = new Set(base.config.numeros.filter((n) => n.ativo && n.sessao).map((n) => n.loja));
   for (const [chave, a] of aberta) {
     if (!ligadas.has(a.loja)) continue;
+    // Alguém marcou "não precisa responder" depois da última mensagem dela
+    if (ignorados[chave] && ignorados[chave] >= a.ultima) continue;
     const telefone = chave.split("|")[1];
     const esperando = minutosUteis(new Date(a.em), agora, janela(a.loja));
     if (esperando < 15) continue; // ainda é normal
-    pendentes.push({ loja: a.loja, telefone, cliente: nomes.get(telefone), apelido: apelido.get(telefone), esperando, desde: a.em, texto: a.texto });
+    pendentes.push({ loja: a.loja, telefone, cliente: nomes.get(telefone), apelido: apelido.get(telefone), esperando, desde: a.em, texto: rotuloMensagem(a.texto), ultima: a.ultima });
   }
   pendentes.sort((x, y) => y.esperando - x.esperando);
 
