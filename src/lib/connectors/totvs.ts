@@ -65,10 +65,14 @@ export function tenantsPossiveis(): { valor: string; origem: string }[] {
     /* endereço inválido */
   }
   const doEndereco = host.match(/^api-gateway\.([a-z0-9-]+)\./i)?.[1] ?? "";
+  const clientId = env("TOTVS_CLIENT_ID");
+  // O Client ID costuma ser o ambiente + o nome do app (ex.: VSVIASOL217586 + APIV2PROD)
+  const semApp = clientId.replace(/api(v\d+)?(prod|hml|homolog|dev|teste?)?$/i, "");
   const lista = [
     { valor: env("TOTVS_TENANT"), origem: "configurado" },
     { valor: doEndereco, origem: "do endereço" },
-    { valor: env("TOTVS_CLIENT_ID"), origem: "Client ID" },
+    { valor: clientId, origem: "Client ID" },
+    { valor: semApp, origem: "começo do Client ID" },
   ].filter((t) => t.valor);
   return lista.filter((t, i) => lista.findIndex((x) => x.valor === t.valor) === i);
 }

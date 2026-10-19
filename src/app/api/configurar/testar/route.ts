@@ -83,7 +83,9 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
           ? "A TOTVS não reconhece o Client ID / secret. Confira na LOGFC006 se o app está ativo e se o secret foi copiado inteiro."
           : /invalid_grant/i.test(tudo)
             ? "Client ID e secret aceitos, mas usuário ou senha recusados (ADMFM026) — ou o usuário perdeu a permissão de API."
-            : /Invalid client_id/i.test(tudo)
+            : /InvalidEnvironment/i.test(tudo)
+              ? "O endereço está certo, mas este servidor da TOTVS não reconhece o ambiente da Via Sol (nem pelo Client ID). Peça à TOTVS o Tenant da Via Sol para o login de integração, ou que cadastre o Client ID neste ambiente da nuvem, e coloque no campo Ambiente / tenant."
+              : /Invalid client_id/i.test(tudo)
               ? "Client ID/secret não valem neste endereço e o login de integração também não entrou. Confira se o endereço é o da nuvem da Via Sol e, na ADMFM026, o tipo de privilégio do usuário (Padrão para o login com client id; Integração para o login de integração)."
               : "A TOTVS recusou o login. Veja abaixo o que ela respondeu.";
     return { ok: false, mensagem, detalhes: det };
