@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { limparCache } from "@/lib/cache";
-import { loginIntegracao, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { autorizacaoBasica, loginIntegracao, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
@@ -24,12 +24,14 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
   if (!totvsConfigured()) return { ok: false, mensagem: "Faltam chaves: usuário e senha, e o Client ID (ou o endereço da nuvem da TOTVS).", detalhes: det };
   const base = totvsBaseUrl();
   det.push(`Endereço: ${base}`);
+  const fim = (v: string) => (v ? `…${v.slice(-4)} (${v.length} caracteres)` : "vazio");
+  det.push(`Em uso: Client ID ${env("TOTVS_CLIENT_ID") || "vazio"} · secret ${fim(env("TOTVS_CLIENT_SECRET"))} · usuário ${env("TOTVS_USERNAME") || "vazio"} · senha com ${env("TOTVS_PASSWORD").length} caracteres`);
   const resumo = (status: number, texto: string) => `HTTP ${status} — ${texto.replace(/\s+/g, " ").slice(0, 280)}`;
-  const tentar = async (rotulo: string, url: string, corpo: Record<string, string>) => {
+  const tentar = async (rotulo: string, url: string, corpo: Record<string, string>, extra: Record<string, string> = {}) => {
     try {
       const r = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR" },
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR", ...extra },
         body: new URLSearchParams(corpo),
         cache: "no-store",
       });
@@ -57,6 +59,9 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
   const urlToken = `${base}/api/totvsmoda/authorization/v2/token`;
   // 1) Como sempre funcionou: usuário e senha
   let token = await tentar("Login (usuário e senha)", urlToken, { grant_type: "password", ...credenciais });
+  // 1b) Igual, com o client id/secret também no cabeçalho Authorization (o exemplo da TOTVS manda um)
+  if (!token)
+    token = await tentar("Login (usuário e senha, client no cabeçalho)", urlToken, { grant_type: "password", ...credenciais }, { Authorization: autorizacaoBasica() });
   // 2) Algumas versões só aceitam as credenciais do app
   if (!token)
     token = await tentar("Login (só client id/secret)", urlToken, {

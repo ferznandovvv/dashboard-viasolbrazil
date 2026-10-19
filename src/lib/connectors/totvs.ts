@@ -107,22 +107,39 @@ const resumoErro = (status: number, texto: string) => `${status}: ${texto.replac
 /** Login de sempre: client id/secret + usuário e senha (usuário com privilégio "Padrão" na ADMFM026). */
 async function loginSenha(): Promise<Token | string> {
   if (!env("TOTVS_CLIENT_ID") || !env("TOTVS_CLIENT_SECRET")) return "login com client id: falta o Client ID ou o secret";
-  const res = await fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
-    method: "POST",
-    // Os mesmos cabeçalhos do exemplo de login que a TOTVS mandou
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "Accept-Language": "pt-BR" },
-    body: new URLSearchParams({
-      grant_type: "password",
-      client_id: env("TOTVS_CLIENT_ID"),
-      client_secret: env("TOTVS_CLIENT_SECRET"),
-      username: env("TOTVS_USERNAME"),
-      password: env("TOTVS_PASSWORD"),
-    }),
-    cache: "no-store",
-  });
-  const text = await res.text();
+  const pedir = (comCabecalho: boolean) =>
+    fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
+      method: "POST",
+      // Os mesmos cabeçalhos do exemplo de login que a TOTVS mandou
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        "Accept-Language": "pt-BR",
+        ...(comCabecalho ? { Authorization: autorizacaoBasica() } : {}),
+      },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: env("TOTVS_CLIENT_ID"),
+        client_secret: env("TOTVS_CLIENT_SECRET"),
+        username: env("TOTVS_USERNAME"),
+        password: env("TOTVS_PASSWORD"),
+      }),
+      cache: "no-store",
+    });
+  let res = await pedir(false);
+  let text = await res.text();
+  // O exemplo da TOTVS também manda um cabeçalho Authorization: se recusar o
+  // client id, tenta de novo com ele no cabeçalho (padrão Basic do OAuth)
+  if (!lerToken(text) && /invalid client/i.test(text)) {
+    res = await pedir(true);
+    text = await res.text();
+  }
   return lerToken(text) ?? `login com client id (${resumoErro(res.status, text)})`;
 }
+
+/** Client id e secret no cabeçalho, como o OAuth prevê (Basic base64(id:secret)). */
+export const autorizacaoBasica = () =>
+  `Basic ${Buffer.from(`${env("TOTVS_CLIENT_ID")}:${env("TOTVS_CLIENT_SECRET")}`).toString("base64")}`;
 
 /**
  * Login de integração (TOTVS 2.8 em diante): usuário com privilégio
