@@ -956,16 +956,19 @@ th.num { text-align: right; }
 .cfg { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: start; }
 @media (max-width: 760px) { .cfg { grid-template-columns: 1fr; } }
 .cfg-menu { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 16px; }
-@media (max-width: 760px) { .cfg-menu { flex-direction: row; overflow-x: auto; position: static; } }
+@media (max-width: 760px) {
+  .cfg-menu { flex-direction: row; overflow-x: auto; position: static; }
+  .cfg-menu button { white-space: nowrap; }
+}
 .cfg-menu button {
   text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent;
-  background: none; color: var(--text-secondary); font: inherit; cursor: pointer; white-space: nowrap;
+  background: none; color: var(--text-secondary); font: inherit; cursor: pointer;
 }
 .cfg-menu button b { display: block; font-size: 13.5px; color: var(--text-primary); }
 .cfg-menu button small { display: block; font-size: 12px; color: var(--text-muted); }
 .cfg-menu button.on { background: var(--surface-1); border-color: var(--border); }
 .cfg-menu button.on b { color: var(--brand); }
-.cfg-corpo { min-width: 0; }
+.cfg-corpo { min-width: 0; container-type: inline-size; }
 .cfg-card { margin-bottom: 14px; }
 .cfg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 6px 18px; }
 .cfg-campo { display: block; margin: 0 0 12px; font-size: 13px; }
@@ -995,10 +998,36 @@ th.num { text-align: right; }
   position: sticky; bottom: 12px; display: flex; align-items: center; gap: 14px; justify-content: flex-end;
   padding: 12px 16px; border-radius: 12px; background: var(--surface-1); border: 1px solid var(--border);
   box-shadow: 0 6px 20px rgba(0,0,0,.12); margin-top: 8px;
+  /* Acima da coluna fixa das tabelas, que rola por baixo da barra */
+  z-index: 3;
 }
 .cfg-salvar.on { border-color: var(--brand); }
 .cfg-salvar .muted { flex: 1; font-size: 12.5px; }
 .cfg-tabela td input { width: 100%; min-width: 90px; }
+.cfg-tabela td input[type="checkbox"] { width: 18px; height: 18px; min-width: 0; }
+/* Números do WhatsApp: cada loja em duas linhas — campos, depois os botões */
+.cfg-numeros { table-layout: fixed; }
+.cfg-numeros th:nth-child(1) { width: 17%; }
+.cfg-numeros th:nth-child(2) { width: 15%; }
+.cfg-numeros th:nth-child(3) { width: 17%; }
+.cfg-numeros th:nth-child(5) { width: 11%; }
+.cfg-numeros th:nth-child(6) { width: 8%; }
+.cfg-numeros td { vertical-align: middle; }
+.cfg-numeros td:first-child { min-width: 0; }
+.cfg-numeros td input { min-width: 0; }
+.cfg-numeros tr.cfg-numeros-acoes td { border-top: none; padding-top: 0; padding-bottom: 10px; }
+.cfg-numeros-botoes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
+.cfg-numeros-acoes .link { font-size: 12.5px; }
+/* Espaço estreito (celular ou janela pequena): cada loja vira um bloco */
+@container (max-width: 640px) {
+  .cfg-numeros thead { display: none; }
+  .cfg-numeros tbody { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .cfg-numeros tr { display: contents; }
+  .cfg-numeros td, .cfg-numeros tr.cfg-numeros-acoes td { display: block; padding: 0; border: none; position: static; min-width: 0; max-width: none; }
+  .cfg-numeros td.fin-desc, .cfg-numeros .cfg-numeros-end, .cfg-numeros-acoes td + td { grid-column: 1 / -1; }
+  .cfg-numeros-acoes td:first-child { display: none; }
+  .cfg-numeros td[data-rotulo]::before { content: attr(data-rotulo); display: block; margin-bottom: 3px; font-size: 12px; color: var(--text-muted); }
+}
 .cfg-modelo { padding: 12px 0; border-top: 1px solid var(--border); }
 .cfg-modelo:first-of-type { border-top: none; }
 .cfg-modelo.off .crm-variacao { opacity: .5; }

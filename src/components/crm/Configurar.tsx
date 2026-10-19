@@ -415,8 +415,13 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
             : "Escolha o provedor na seção Envio antes."}{" "}
         A vendedora é quem assina as mensagens quando a venda não tem vendedora identificada (aniversário, lembretes).
       </div>
+      <label className="cfg-campo">
+        <span>Seu celular, para os testes (sai na hora, fora da fila, mesmo em modo sombra)</span>
+        <input value={telTeste} onChange={(e) => setTelTeste(e.target.value)} placeholder="(16) 99999-8888" inputMode="tel" style={{ maxWidth: 220 }} />
+      </label>
+      {/* Cada loja em duas linhas (campos, depois os botões): cabe sem rolar para o lado */}
       <div className="tbl-wrap">
-        <table className="prod-tbl fin-tbl cfg-tabela">
+        <table className="prod-tbl fin-tbl cfg-tabela cfg-numeros">
           <thead>
             <tr>
               <th>Loja</th>
@@ -425,37 +430,41 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
               <th>Endereço (pra cliente do site)</th>
               <th>Teto/dia</th>
               <th>Ligado</th>
-              <th></th>
             </tr>
           </thead>
-          <tbody>
-            {lista.map((n, i) => (
-              <tr key={n.loja}>
+          {lista.map((n, i) => (
+            <tbody key={n.loja}>
+              <tr>
                 <td className="fin-desc">{n.loja}</td>
-                <td><input className="crm-input" value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
-                <td><input className="crm-input" value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
-                <td><input className="crm-input" value={n.endereco ?? ""} onChange={(e) => muda(i, { endereco: e.target.value })} placeholder="ex.: Rua do Comércio, 1200" /></td>
-                <td><input className="crm-input" style={{ width: 70 }} value={n.tetoDia ?? ""} onChange={(e) => muda(i, { tetoDia: e.target.value ? Number(e.target.value) : undefined })} placeholder="geral" /></td>
-                <td><input type="checkbox" checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
-                <td className="fin-acoes">
-                  <button className="link" disabled={!n.sessao} onClick={() => testar(n.loja)}>situação</button>
-                  <button className="link" disabled={!n.sessao || !telTeste} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
-                  <button
-                    className="link"
-                    title="Apaga o histórico de conversas desta loja no painel (tempo de resposta, quem está esperando). Não mexe no WhatsApp."
-                    onClick={async () => {
-                      if (!confirm(`Apagar as conversas registradas da ${n.loja} no painel? Serve pra limpar teste. O WhatsApp não é afetado.`)) return;
-                      const r = await api<{ apagados: number }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "limpar-atendimento", loja: n.loja }) });
-                      setTeste({ ...teste, [n.loja]: `${r.apagados} registros apagados` });
-                    }}
-                  >
-                    apagar conversas
-                  </button>
-                  {teste[n.loja] && <div className="fin-sub">{teste[n.loja]}</div>}
+                <td data-rotulo="Sessão / id"><input className="crm-input" aria-label={`Sessão da ${n.loja}`} value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
+                <td data-rotulo="Vendedora que assina"><input className="crm-input" aria-label={`Vendedora que assina pela ${n.loja}`} value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
+                <td data-rotulo="Endereço" className="cfg-numeros-end"><input className="crm-input" aria-label={`Endereço da ${n.loja}`} value={n.endereco ?? ""} onChange={(e) => muda(i, { endereco: e.target.value })} placeholder="ex.: Rua do Comércio, 1200" /></td>
+                <td data-rotulo="Teto/dia" className="cfg-numeros-teto"><input className="crm-input" aria-label={`Teto por dia da ${n.loja}`} inputMode="numeric" value={n.tetoDia ?? ""} onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); muda(i, { tetoDia: v ? Number(v) : undefined }); }} placeholder="geral" /></td>
+                <td data-rotulo="Ligado"><input type="checkbox" aria-label={`Número da ${n.loja} ligado`} checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
+              </tr>
+              <tr className="cfg-numeros-acoes">
+                <td />
+                <td colSpan={5}>
+                  <div className="cfg-numeros-botoes">
+                    <button className="link" disabled={!n.sessao} onClick={() => testar(n.loja)}>situação</button>
+                    <button className="link" disabled={!n.sessao || !telTeste} title={telTeste ? undefined : "Preencha seu celular acima"} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
+                    <button
+                      className="link"
+                      title="Apaga o histórico de conversas desta loja no painel (tempo de resposta, quem está esperando). Não mexe no WhatsApp."
+                      onClick={async () => {
+                        if (!confirm(`Apagar as conversas registradas da ${n.loja} no painel? Serve pra limpar teste. O WhatsApp não é afetado.`)) return;
+                        const r = await api<{ apagados: number }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "limpar-atendimento", loja: n.loja }) });
+                        setTeste({ ...teste, [n.loja]: `${r.apagados} registros apagados` });
+                      }}
+                    >
+                      apagar conversas
+                    </button>
+                    {teste[n.loja] && <span className="fin-sub" role="status">{teste[n.loja]}</span>}
+                  </div>
                 </td>
               </tr>
-            ))}
-          </tbody>
+            </tbody>
+          ))}
         </table>
       </div>
 
@@ -482,6 +491,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
                     <input
                       className="crm-input"
                       style={{ width: 120 }}
+                      aria-label={`${n.loja}, ${k === "semana" ? "segunda a sexta" : k === "sabado" ? "sábado" : "domingo e feriado"}`}
                       value={n.horario?.[k] ?? ""}
                       onChange={(e) => muda(i, { horario: { ...n.horario, [k]: e.target.value } })}
                       placeholder={k === "domingo" ? "fechado" : "10:00-22:00"}
@@ -494,10 +504,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
         </table>
       </div>
       <div className="cfg-salvar on" style={{ marginTop: 12 }}>
-        <label className="cfg-campo" style={{ margin: 0, flex: 1 }}>
-          <span>Seu celular, pro teste (sai na hora, fora da fila, mesmo em modo sombra)</span>
-          <input value={telTeste} onChange={(e) => setTelTeste(e.target.value)} placeholder="(16) 99999-8888" style={{ maxWidth: 220 }} />
-        </label>
+        <span className="muted">Números e horários só valem depois de salvar.</span>
         <button className="mini" onClick={() => salvar(lista)}>Salvar números</button>
       </div>
     </section>
