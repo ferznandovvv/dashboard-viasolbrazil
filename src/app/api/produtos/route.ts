@@ -3,6 +3,8 @@ import { LOJAS, fetchVendasPorProduto } from "@/lib/connectors/totvs";
 import { fetchEstoque } from "@/lib/connectors/estoque";
 import { fetchPrecos, tabelasVisiveis } from "@/lib/connectors/precos";
 import { rodandoLocal } from "@/lib/credenciais";
+import { lojasDoEstoque } from "@/lib/acesso/lojas";
+import { tabelasDasLojas } from "@/lib/tabelasDePreco";
 import { todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +17,7 @@ export interface LinhaProduto {
   vendidas: number;
   /** Peças vendidas por loja, no período */
   vendasPorLoja: Record<string, number>;
-  /** Saldo de agora, por loja — sempre de todas as lojas */
+  /** Saldo de agora, por loja — de todas as lojas que o usuário vê */
   porLoja: Record<string, number>;
   /** Preço de venda por tabela (Site, Franca, RP) */
   precos: Record<string, number>;
@@ -43,15 +45,20 @@ function normalizar(texto: string): string {
  *  - ?modo=busca&q=parte do nome → saldo de agora em todas as lojas
  *  - ?modo=vendidos&from&to&lojas&top → o que mais vendeu nas lojas e no
  *    período escolhidos, com o saldo de agora em todas as lojas ao lado
+ *
+ * O usuário de loja só recebe o saldo e o preço das lojas dele: o resto nem
+ * sai daqui.
  */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const modo = sp.get("modo") === "vendidos" ? "vendidos" : "busca";
-  const todasLojas = Object.values(LOJAS);
+  const lojasVistas = await lojasDoEstoque(req);
+  const restrito = lojasVistas.length < Object.keys(LOJAS).length;
 
   // Uma foto só do estoque, filtrada aqui: a API não filtra por parte do nome
   const [estoque, precos] = await Promise.all([fetchEstoque(), fetchPrecos()]);
-  const tabelas = tabelasVisiveis(precos);
+  const deLoja = tabelasDasLojas(lojasVistas);
+  const tabelas = tabelasVisiveis(precos).filter((t) => !restrito || deLoja.includes(t.rotulo));
   /** Preço do produto em cada tabela, pelo código da TOTVS */
   const anexarPreco = (l: LinhaProduto, codigo?: number) => {
     const p = codigo !== undefined ? precos?.porProduto[String(codigo)] : undefined;
@@ -60,7 +67,7 @@ export async function GET(req: NextRequest) {
   };
   const base = {
     modo,
-    lojas: todasLojas,
+    lojas: lojasVistas,
     tabelas: tabelas.map((t) => t.rotulo),
     estoqueEm: estoque.em ?? "",
     estoqueIncompleto: Boolean(estoque.incompleto),
@@ -79,11 +86,14 @@ export async function GET(req: NextRequest) {
       const alvo = normalizar(nome);
       if (!palavras.every((p) => alvo.includes(p)) || ignorado(alvo)) continue;
       const e = linhas.get(alvo) ?? { produto: nome, vendidas: 0, vendasPorLoja: {}, porLoja: {}, precos: {} };
-      somarSaldo(e, s.porLoja);
+      somarSaldo(e, s.porLoja, lojasVistas);
       anexarPreco(e, s.codigo);
       linhas.set(alvo, e);
     }
-    const itens = Array.from(linhas.values()).sort((a, b) => a.produto.localeCompare(b.produto, "pt-BR"));
+    // Para a loja, só o que tem saldo (ou divergência) nas lojas dela
+    const itens = Array.from(linhas.values())
+      .filter((l) => !restrito || Object.values(l.porLoja).some((q) => q !== 0))
+      .sort((a, b) => a.produto.localeCompare(b.produto, "pt-BR"));
     return NextResponse.json({ ...base, itens: itens.slice(0, 500), total: itens.length });
   }
 
@@ -100,7 +110,7 @@ export async function GET(req: NextRequest) {
   const lojasSel = (sp.get("lojas") ?? "")
     .split(",")
     .map((l) => l.trim())
-    .filter((l) => todasLojas.includes(l));
+    .filter((l) => lojasVistas.includes(l));
   const top = Math.min(Math.max(Number(sp.get("top")) || 20, 1), 200);
 
   // Na máquina própria não há limite de tempo: espera o período inteiro
@@ -109,7 +119,7 @@ export async function GET(req: NextRequest) {
   const linhas = new Map<string, LinhaProduto>();
   const ignorados = new Map<string, number>();
   for (const v of vendas.itens) {
-    if (lojasSel.length && !lojasSel.includes(v.loja)) continue;
+    if (lojasSel.length ? !lojasSel.includes(v.loja) : restrito && !lojasVistas.includes(v.loja)) continue;
     const chave = normalizar(v.nome);
     if (!chave) continue;
     if (ignorado(chave)) {
@@ -141,7 +151,7 @@ export async function GET(req: NextRequest) {
         ? curto
         : chaves.find((k) => alvo.startsWith(k) || k.startsWith(alvo));
     if (chave) {
-      somarSaldo(escolhidos.get(chave)!, s.porLoja);
+      somarSaldo(escolhidos.get(chave)!, s.porLoja, lojasVistas);
       anexarPreco(escolhidos.get(chave)!, s.codigo);
     }
   }
@@ -168,6 +178,7 @@ function nomeCompleto(nome: string, cor: string, tamanho: string): string {
   return [base, ...extra].join(" ");
 }
 
-function somarSaldo(l: LinhaProduto, porLoja: Record<string, number>) {
-  for (const [loja, qtd] of Object.entries(porLoja)) l.porLoja[loja] = (l.porLoja[loja] ?? 0) + qtd;
+function somarSaldo(l: LinhaProduto, porLoja: Record<string, number>, lojas: string[]) {
+  for (const [loja, qtd] of Object.entries(porLoja))
+    if (lojas.includes(loja)) l.porLoja[loja] = (l.porLoja[loja] ?? 0) + qtd;
 }

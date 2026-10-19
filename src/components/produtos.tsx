@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type Period, buildPresets } from "@/lib/periodos";
 import { fmtDay } from "@/components/viz";
 import { Abas } from "@/components/Abas";
-import { usePode } from "@/components/sessao";
+import { usePode, useSessao } from "@/components/sessao";
+import { lojasDaTabela } from "@/lib/tabelasDePreco";
 import { SeletorPeriodo } from "@/components/SeletorPeriodo";
 
 interface Linha {
@@ -50,12 +51,8 @@ const CURTO: Record<string, string> = {
 };
 const curto = (loja: string) => CURTO[loja] ?? loja;
 
-/** Em que lojas vale cada tabela de preço. */
-const LOJAS_DA_TABELA: Record<string, string> = {
-  Site: "SP, BH, PG e RJ",
-  Franca: "Centro e Fábrica",
-  RP: "RP e Fiusa",
-};
+/** "A, B e C" */
+const juntar = (l: string[]) => (l.length > 1 ? `${l.slice(0, -1).join(", ")} e ${l[l.length - 1]}` : l[0] ?? "");
 
 /** Preço sem "R$", para as colunas caberem. */
 const preco = (v?: number) =>
@@ -75,6 +72,9 @@ const tom = (v: number) => (v > 0 ? "tem" : v === 0 ? "vazio" : "negativo");
 export function Produtos() {
   // Usuário de loja consulta só o estoque; vendas por produto ficam com dono e sócia
   const veVendidos = usePode("produtos");
+  // e só das lojas dele (a API já manda só essas)
+  const sessao = useSessao();
+  const minhas = sessao?.papel === "loja" && sessao.lojas.length ? juntar(sessao.lojas) : "";
   const presets = useMemo(() => buildPresets().filter((p) => PERIODOS.includes(p.key)), []);
   const [aba, setAba] = useState<Aba>("busca");
   const [q, setQ] = useState("");
@@ -294,7 +294,8 @@ export function Produtos() {
             onChange={(e) => setQ(e.target.value)}
           />
           <div className="rank-aviso" style={{ margin: "4px 0 0" }}>
-            Mostra o estoque de agora em todas as lojas, cada cor e tamanho numa linha.
+            Mostra o estoque de agora {minhas ? `em ${minhas}` : "em todas as lojas"}, cada cor e
+            tamanho numa linha.
           </div>
         </>
       ) : (
@@ -441,7 +442,7 @@ export function Produtos() {
                           `preco:${t}`,
                           t,
                           `n preco${i === tabelas.length - 1 ? " fim-preco" : ""}`,
-                          `Tabela ${t}${LOJAS_DA_TABELA[t] ? ` — vale em ${LOJAS_DA_TABELA[t]}` : ""}`
+                          `Tabela ${t}${lojasDaTabela(t).length ? ` — vale em ${juntar(lojasDaTabela(t).map(curto))}` : ""}`
                         )
                       )}
                       {dados.modo === "vendidos" && cabOrdem("vendidas", "Vendidas", "n")}
@@ -505,7 +506,7 @@ export function Produtos() {
                     minute: "2-digit",
                     timeZone: "America/Sao_Paulo",
                   })}
-                  , em peças, de todas as lojas.{" "}
+                  , em peças, {minhas ? `de ${minhas}` : "de todas as lojas"}.{" "}
                 </>
               )}
               {dados.modo === "vendidos" &&

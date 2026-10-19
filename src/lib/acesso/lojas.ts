@@ -15,3 +15,13 @@ export async function lojasPermitidas(req: NextRequest): Promise<string[] | null
   if (!s || !temArea(s.papel, "loja")) return null;
   return s.papel === "loja" ? s.lojas.filter((l) => todas.includes(l)) : todas;
 }
+
+/**
+ * Lojas cujo estoque e preço este usuário vê na tela de produtos: todas, menos
+ * para o usuário de loja, que só vê as lojas dele.
+ */
+export async function lojasDoEstoque(req: NextRequest): Promise<string[]> {
+  const todas = Object.values(LOJAS);
+  const s = await sessaoDe(req);
+  return s?.papel === "loja" ? todas.filter((l) => s.lojas.includes(l)) : todas;
+}
