@@ -27,8 +27,15 @@ export const INTEGRACOES: Integracao[] = [
       { nome: "TOTVS_PASSWORD", rotulo: "Senha", dica: "Senha desse usuário" },
       {
         nome: "TOTVS_API_URL",
-        rotulo: "Endereço da API (só se a TOTVS mudar)",
-        dica: "Em branco = https://apitotvsmoda.bhan.com.br",
+        rotulo: "Endereço da API",
+        dica: "O da nuvem da TOTVS, ex.: https://api-gateway.t8671ea.external.saas.totvsmoda.cloudtotvs.com.br (em branco = o antigo, apitotvsmoda.bhan.com.br)",
+        opcional: true,
+        visivel: true,
+      },
+      {
+        nome: "TOTVS_TENANT",
+        rotulo: "Ambiente / tenant (só se a TOTVS informar)",
+        dica: "Usado no login de integração. Em branco, o sistema tenta o código do endereço (ex.: t8671ea) e o Client ID",
         opcional: true,
         visivel: true,
       },

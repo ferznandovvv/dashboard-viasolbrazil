@@ -1,7 +1,8 @@
 /**
  * TOTVS Moda (Virtual Age) — API de Integração V2.
- * Autenticação por senha (grant_type=password) usando o usuário de API
- * (LOGFC006) + um usuário do sistema (ADMFM026).
+ * Dois jeitos de entrar: o de sempre (grant_type=password: client id/secret
+ * da LOGFC006 + usuário "Padrão" da ADMFM026) e o de integração, da versão
+ * 2.8 em diante (usuário "Integração" da ADMFM026 + o ambiente, "tenant").
  *
  * As vendas das lojas físicas saem das notas fiscais de saída (NFC-e do PDV).
  * A API não filtra por data de emissão — só por data de alteração (`change`,
@@ -46,41 +47,62 @@ export function totvsBaseUrl(): string {
 }
 
 export function totvsConfigured(): boolean {
-  return Boolean(
-    env("TOTVS_CLIENT_ID") && env("TOTVS_CLIENT_SECRET") && env("TOTVS_USERNAME") && env("TOTVS_PASSWORD")
-  );
+  // O login de integração dispensa o client id/secret: basta usuário, senha e o ambiente (tenant)
+  return Boolean(env("TOTVS_USERNAME") && env("TOTVS_PASSWORD") && (env("TOTVS_CLIENT_ID") || tenantsPossiveis().length));
 }
 
-let cachedToken: { token: string; expiresAt: number; chave: string } | null = null;
+/**
+ * Ambiente (tenant) para o login de integração, em ordem de tentativa: o
+ * configurado; o código que vem no endereço da nuvem da TOTVS
+ * (api-gateway.<código>.external.saas.totvsmoda.cloudtotvs.com.br); e o
+ * Client ID, que a TOTVS também chama de "identificador do ambiente".
+ */
+export function tenantsPossiveis(): { valor: string; origem: string }[] {
+  let host = "";
+  try {
+    host = new URL(totvsBaseUrl()).hostname;
+  } catch {
+    /* endereço inválido */
+  }
+  const doEndereco = host.match(/^api-gateway\.([a-z0-9-]+)\./i)?.[1] ?? "";
+  const lista = [
+    { valor: env("TOTVS_TENANT"), origem: "configurado" },
+    { valor: doEndereco, origem: "do endereço" },
+    { valor: env("TOTVS_CLIENT_ID"), origem: "Client ID" },
+  ].filter((t) => t.valor);
+  return lista.filter((t, i) => lista.findIndex((x) => x.valor === t.valor) === i);
+}
+
+interface Token {
+  token: string;
+  segundos: number;
+  refresh?: string;
+}
+
+let cachedToken: { token: string; expiresAt: number; chave: string; refresh?: string } | null = null;
 /** Qual login funcionou por último — depois da atualização de 2026 a TOTVS ganhou o "de integração" */
 let modoLogin: "senha" | "integracao" = "senha";
 
 const CAMINHO_INTEGRACAO = "/api/totvsmoda/authorization/v2/integration/token";
 
-/** Credencial que cada campo do login pede, pelo nome do campo. */
-export function credencialDoCampo(nome: string): string {
-  if (/secret/i.test(nome)) return env("TOTVS_CLIENT_SECRET");
-  if (/client.?id|^id$/i.test(nome)) return env("TOTVS_CLIENT_ID");
-  if (/pass|senha/i.test(nome)) return env("TOTVS_PASSWORD");
-  if (/user|login|usuario/i.test(nome)) return env("TOTVS_USERNAME");
-  if (/grant/i.test(nome)) return "client_credentials";
-  return "";
-}
-
-/** Token e validade, aceitando os nomes de campo das duas versões do login. */
-function lerToken(texto: string): { token: string; segundos: number } | null {
+/** Token, validade e refresh token, aceitando os nomes de campo das duas versões do login. */
+function lerToken(texto: string): Token | null {
   try {
     const j = JSON.parse(texto) as Record<string, unknown>;
     const token = String(j.access_token ?? j.accessToken ?? j.token ?? "");
     if (!token) return null;
-    return { token, segundos: Number(j.expires_in ?? j.expiresIn ?? 3600) || 3600 };
+    const refresh = String(j.refresh_token ?? j.refreshToken ?? "") || undefined;
+    return { token, segundos: Number(j.expires_in ?? j.expiresIn ?? 3600) || 3600, refresh };
   } catch {
     return null;
   }
 }
 
-/** Login de sempre: client id/secret + usuário e senha. */
-async function loginSenha(): Promise<{ token: string; segundos: number } | string> {
+const resumoErro = (status: number, texto: string) => `${status}: ${texto.replace(/\s+/g, " ").slice(0, 200)}`;
+
+/** Login de sempre: client id/secret + usuário e senha (usuário com privilégio "Padrão" na ADMFM026). */
+async function loginSenha(): Promise<Token | string> {
+  if (!env("TOTVS_CLIENT_ID") || !env("TOTVS_CLIENT_SECRET")) return "login com client id: falta o Client ID ou o secret";
   const res = await fetch(`${totvsBaseUrl()}/api/totvsmoda/authorization/v2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -94,49 +116,91 @@ async function loginSenha(): Promise<{ token: string; segundos: number } | strin
     cache: "no-store",
   });
   const text = await res.text();
-  return lerToken(text) ?? `login (${res.status}): ${text.replace(/\s+/g, " ").slice(0, 200)}`;
+  return lerToken(text) ?? `login com client id (${resumoErro(res.status, text)})`;
 }
 
 /**
- * Login de integração (TOTVS atualizada): o formato vem do próprio manual da
- * API, que diz quais campos ele pede e se é formulário ou JSON.
+ * Login de integração (TOTVS 2.8 em diante): usuário com privilégio
+ * "Integração" na ADMFM026, senha e o ambiente (tenant), em multipart/form-data
+ * como pede o manual da API. Tenta cada tenant possível até um funcionar.
  */
-async function loginIntegracao(): Promise<{ token: string; segundos: number } | string> {
+export async function loginIntegracao(
+  tenants = tenantsPossiveis()
+): Promise<{ resultado: Token | string; tentativas: string[]; tenant?: string }> {
+  const tentativas: string[] = [];
+  if (!tenants.length) return { resultado: "login de integração: falta o ambiente (tenant)", tentativas };
+  for (const t of tenants) {
+    const corpo = new FormData();
+    corpo.set("Username", env("TOTVS_USERNAME"));
+    corpo.set("Password", env("TOTVS_PASSWORD"));
+    corpo.set("Tenant", t.valor);
+    // O Client ID aparece só com o final, por segurança
+    const rotulo = t.origem === "Client ID" ? `Client ID …${t.valor.slice(-4)}` : `${t.origem}: ${t.valor}`;
+    try {
+      const res = await fetch(`${totvsBaseUrl()}${CAMINHO_INTEGRACAO}`, { method: "POST", body: corpo, cache: "no-store" });
+      const text = await res.text();
+      const token = lerToken(text);
+      tentativas.push(`Login de integração (tenant ${rotulo}): ${token ? "OK" : `HTTP ${resumoErro(res.status, text)}`}`);
+      if (token) return { resultado: token, tentativas, tenant: t.valor };
+    } catch (e) {
+      tentativas.push(`Login de integração (tenant ${rotulo}): não conectou — ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  return { resultado: tentativas.join(" · "), tentativas };
+}
+
+/** Renova o token sem pedir a senha de novo, pelo refresh token de cada tipo de login. */
+async function renovar(refresh: string): Promise<Token | null> {
   const base = totvsBaseUrl();
-  const manual = await fetch(`${base}/api/totvsmoda/authorization/v2/swagger/v1/swagger.json`, { cache: "no-store" });
-  if (!manual.ok) return `manual do login (${manual.status})`;
-  const { camposDoCorpo } = await import("../swagger");
-  const c = camposDoCorpo(await manual.json(), CAMINHO_INTEGRACAO);
-  if (!c?.campos.length) return "login de integração não existe nesta TOTVS";
-  const corpo = Object.fromEntries(c.campos.map((n) => [n, credencialDoCampo(n)]).filter(([, v]) => v));
-  const res = await fetch(`${base}${CAMINHO_INTEGRACAO}`, {
-    method: "POST",
-    headers: { "Content-Type": c.formulario ? "application/x-www-form-urlencoded" : "application/json" },
-    body: c.formulario ? new URLSearchParams(corpo) : JSON.stringify(corpo),
-    cache: "no-store",
-  });
-  const text = await res.text();
-  return lerToken(text) ?? `integração (${res.status}): ${text.replace(/\s+/g, " ").slice(0, 200)}`;
+  const res =
+    modoLogin === "integracao"
+      ? await fetch(`${base}/api/totvsmoda/authorization/v2/integration/refresh`, {
+          method: "POST",
+          body: (() => {
+            const f = new FormData();
+            f.set("RefreshToken", refresh);
+            return f;
+          })(),
+          cache: "no-store",
+        })
+      : await fetch(`${base}/api/totvsmoda/authorization/v2/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh }),
+          cache: "no-store",
+        });
+  return res.ok ? lerToken(await res.text()) : null;
 }
 
 /** Token de acesso da APIv2, com cache em memória. */
 export async function getTotvsToken(): Promise<string> {
   // Trocou o client id/secret ou o usuário na configuração: o token antigo não vale mais
-  const chave = `${totvsBaseUrl()}|${env("TOTVS_CLIENT_ID")}|${env("TOTVS_CLIENT_SECRET")}|${env("TOTVS_USERNAME")}|${env("TOTVS_PASSWORD")}`;
+  const chave = `${totvsBaseUrl()}|${env("TOTVS_CLIENT_ID")}|${env("TOTVS_CLIENT_SECRET")}|${env("TOTVS_USERNAME")}|${env("TOTVS_PASSWORD")}|${env("TOTVS_TENANT")}`;
   if (cachedToken && cachedToken.chave === chave && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+  const guardar = (r: Token) => {
+    cachedToken = { token: r.token, expiresAt: Date.now() + Math.max(60, r.segundos - 300) * 1000, chave, refresh: r.refresh };
+    return r.token;
+  };
+  // Venceu: tenta renovar pelo refresh token antes de fazer o login inteiro
+  if (cachedToken?.chave === chave && cachedToken.refresh) {
+    const r = await renovar(cachedToken.refresh).catch(() => null);
+    if (r) return guardar(r);
+  }
 
   // Tenta primeiro o login que funcionou da última vez; se falhar, o outro
   const ordem = modoLogin === "senha" ? (["senha", "integracao"] as const) : (["integracao", "senha"] as const);
   const erros: string[] = [];
   for (const modo of ordem) {
-    const r = modo === "senha" ? await loginSenha() : await loginIntegracao().catch((e) => String(e));
+    const r =
+      modo === "senha"
+        ? await loginSenha().catch((e) => String(e))
+        : (await loginIntegracao().catch((e) => ({ resultado: String(e) }))).resultado;
     if (typeof r === "string") {
       erros.push(r);
       continue;
     }
     modoLogin = modo;
-    cachedToken = { token: r.token, expiresAt: Date.now() + Math.max(60, r.segundos - 300) * 1000, chave };
-    return r.token;
+    return guardar(r);
   }
   throw new Error(`Falha na autenticação — ${erros.join(" · ")}`);
 }

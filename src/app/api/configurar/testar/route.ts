@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { limparCache } from "@/lib/cache";
-import { totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { loginIntegracao, totvsBaseUrl, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 import { env } from "@/lib/env";
-import { type SwaggerDoc, camposDoCorpo, contrato } from "@/lib/swagger";
 import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
@@ -22,7 +21,7 @@ export const maxDuration = 60;
  */
 async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; detalhes: string[] }> {
   const det: string[] = [];
-  if (!totvsConfigured()) return { ok: false, mensagem: "Faltam chaves: Client ID, secret, usuário e senha.", detalhes: det };
+  if (!totvsConfigured()) return { ok: false, mensagem: "Faltam chaves: usuário e senha, e o Client ID (ou o endereço da nuvem da TOTVS).", detalhes: det };
   const base = totvsBaseUrl();
   det.push(`Endereço: ${base}`);
   const resumo = (status: number, texto: string) => `HTTP ${status} — ${texto.replace(/\s+/g, " ").slice(0, 280)}`;
@@ -66,59 +65,15 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
       client_secret: credenciais.client_secret,
     });
   if (!token) {
-    // 3) O caminho do login mudou? O manual da API diz quais existem — e
-    // o login novo de integração é tentado com os campos que ele pede
-    try {
-      const r = await fetch(`${base}/api/totvsmoda/authorization/v2/swagger/v1/swagger.json`, { cache: "no-store" });
-      const t = await r.text();
-      if (!r.ok) det.push(`Manual do login: ${resumo(r.status, t)}`);
-      else {
-        const doc = JSON.parse(t) as SwaggerDoc;
-        const caminhos = Object.keys(doc.paths ?? {});
-        det.push(`Caminhos de login no manual: ${caminhos.join(", ") || "nenhum"}`);
-        for (const caminho of caminhos.filter((c) => /integration\/token$/.test(c))) {
-          det.push("", contrato(doc, caminho));
-          const c = camposDoCorpo(doc, caminho);
-          if (!c?.campos.length) continue;
-          // Cada campo pedido recebe a credencial que o nome indica
-          const valor = (nome: string) =>
-            /secret/i.test(nome)
-              ? credenciais.client_secret
-              : /client.?id|^id$/i.test(nome)
-                ? credenciais.client_id
-                : /pass|senha/i.test(nome)
-                  ? credenciais.password
-                  : /user|login|usuario/i.test(nome)
-                    ? credenciais.username
-                    : /grant/i.test(nome)
-                      ? "client_credentials"
-                      : "";
-          const corpo = Object.fromEntries(c.campos.map((n) => [n, valor(n)]).filter(([, v]) => v));
-          try {
-            const resp = await fetch(`${base}${caminho}`, {
-              method: "POST",
-              headers: { "Content-Type": c.formulario ? "application/x-www-form-urlencoded" : "application/json" },
-              body: c.formulario ? new URLSearchParams(corpo) : JSON.stringify(corpo),
-              cache: "no-store",
-            });
-            const txt = await resp.text();
-            det.push(`Login de integração (${Object.keys(corpo).join(", ")}): ${resumo(resp.status, txt)}`);
-            if (/access_token|accessToken/.test(txt)) {
-              return {
-                ok: false,
-                mensagem:
-                  "O login NOVO de integração funcionou com essas chaves — a atualização mudou a forma de entrar. Me mande este resultado que eu ajusto o painel.",
-                detalhes: det,
-              };
-            }
-          } catch (e) {
-            det.push(`Login de integração: não conectou — ${e instanceof Error ? e.message : e}`);
-          }
-        }
-      }
-    } catch (e) {
-      det.push(`Manual do login: não conectou — ${e instanceof Error ? e.message : e}`);
+    // 3) Login de integração (TOTVS 2.8): usuário + senha + ambiente (tenant), em multipart
+    const integ = await loginIntegracao();
+    det.push(...integ.tentativas);
+    if (typeof integ.resultado !== "string") {
+      token = integ.resultado.token;
+      det.push(`Entrou pelo login de integração (tenant ${integ.tenant}). O painel passa a usar este login sozinho.`);
     }
+  }
+  if (!token) {
     const tudo = det.join(" ");
     const mensagem = /não conectou/.test(tudo) && !/HTTP/.test(tudo)
       ? `Não consegui falar com a TOTVS em ${base}. Sem internet ou o endereço mudou — veja o novo com a TOTVS e coloque em "Endereço da API".`
@@ -128,7 +83,9 @@ async function diagnosticoTotvs(): Promise<{ ok: boolean; mensagem: string; deta
           ? "A TOTVS não reconhece o Client ID / secret. Confira na LOGFC006 se o app está ativo e se o secret foi copiado inteiro."
           : /invalid_grant/i.test(tudo)
             ? "Client ID e secret aceitos, mas usuário ou senha recusados (ADMFM026) — ou o usuário perdeu a permissão de API."
-            : "A TOTVS recusou o login. Veja abaixo o que ela respondeu.";
+            : /Invalid client_id/i.test(tudo)
+              ? "Client ID/secret não valem neste endereço e o login de integração também não entrou. Confira se o endereço é o da nuvem da Via Sol e, na ADMFM026, o tipo de privilégio do usuário (Padrão para o login com client id; Integração para o login de integração)."
+              : "A TOTVS recusou o login. Veja abaixo o que ela respondeu.";
     return { ok: false, mensagem, detalhes: det };
   }
 
