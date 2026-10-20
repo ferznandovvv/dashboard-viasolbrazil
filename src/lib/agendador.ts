@@ -7,7 +7,7 @@
 
 import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
-import { completarTelefones, sincronizarDiaria } from "./crm/totvs";
+import { completarTelefones, diagnosticoDevolucoes, sincronizarDiaria } from "./crm/totvs";
 import { configurarWebhooks } from "./crm/webhookAuto";
 import { recuperarConversas } from "./crm/recuperar";
 import { ligarPortaoWhats } from "./acesso/portaoWhats";
@@ -146,6 +146,8 @@ export function iniciarAgendador(): void {
       })
       .catch(() => {});
   setTimeout(buscarConversas, 60_000);
+  // Diagnóstico temporário das devoluções da TOTVS (para a regra de estorno do cashback)
+  setTimeout(() => diagnosticoDevolucoes().then((r) => console.log("[crm] diagnóstico devoluções:", r)).catch((e) => console.log("[crm] diagnóstico devoluções falhou:", e)), 90_000);
   setInterval(buscarConversas, 10 * 60_000);
   setInterval(celularNoEndereco, 60 * 60_000);
   setInterval(() => {

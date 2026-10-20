@@ -581,3 +581,58 @@ export async function explorar(): Promise<Record<string, unknown>> {
     sondas,
   };
 }
+
+/**
+ * Diagnóstico (temporário): como a TOTVS registra devolução, troca e nota
+ * cancelada. Lê as notas de entrada e de saída dos últimos dias, conta por
+ * operação e guarda exemplos em dados/crm/diagnostico-devolucoes.json, para
+ * montar a regra de estorno do cashback em cima do formato real.
+ */
+export async function diagnosticoDevolucoes(dias = 12): Promise<string> {
+  if (!totvsConfigured()) return "TOTVS não configurada";
+  const { writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const hoje = hojeSp();
+  const de = somarDias(hoje, -dias);
+  const resumo: Record<string, unknown> = { geradoEm: new Date().toISOString(), de, ate: hoje };
+  const curto = (o: unknown, prof = 0): unknown => {
+    if (o === null || typeof o !== "object") return typeof o === "string" ? o.slice(0, 80) : o;
+    if (Array.isArray(o)) return prof > 1 ? `[${o.length} itens]` : o.slice(0, 3).map((x) => curto(x, prof + 1));
+    const r: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) r[k] = prof > 2 ? (typeof v === "object" ? "{…}" : v) : curto(v, prof + 1);
+    return r;
+  };
+  for (const tipo of ["Input", "Output"]) {
+    const ops: Record<string, number> = {};
+    const status: Record<string, number> = {};
+    const exemplos: unknown[] = [];
+    const naoEmitidas: unknown[] = [];
+    for (let pagina = 1; pagina <= 30; pagina++) {
+      const r = await totvsFetch(INVOICES, {
+        filter: { branchCodeList: Object.keys(LOJAS).map(Number), operationType: tipo, change: { startDate: `${de}T00:00:00`, endDate: `${hoje}T23:59:59` } },
+        expand: "items",
+        page: pagina,
+        pageSize: 100,
+      });
+      if (r.status !== 200) {
+        resumo[`erro${tipo}`] = `HTTP ${r.status}: ${r.text.slice(0, 300)}`;
+        break;
+      }
+      const itens = (r.json?.items as Obj[] | undefined) ?? [];
+      for (const inv of itens) {
+        const op = `${inv.operationCode ?? "?"} ${String(inv.operatioName ?? inv.operationName ?? "?")}`;
+        ops[op] = (ops[op] ?? 0) + 1;
+        const st = String(inv.invoiceStatus ?? "?");
+        status[st] = (status[st] ?? 0) + 1;
+        if (tipo === "Input" && /DEVOL|TROCA/i.test(op) && exemplos.length < 6) exemplos.push(curto(inv));
+        if (tipo === "Output" && /TROCA/i.test(op) && exemplos.length < 4) exemplos.push(curto(inv));
+        if (st !== "Issued" && naoEmitidas.length < 3) naoEmitidas.push(curto(inv));
+      }
+      if (itens.length < 100) break;
+    }
+    resumo[tipo] = { operacoes: ops, status, exemplos, naoEmitidas };
+  }
+  const arquivo = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm", "diagnostico-devolucoes.json");
+  await writeFile(arquivo, JSON.stringify(resumo, null, 1), "utf8");
+  return arquivo;
+}
