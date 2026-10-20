@@ -30,6 +30,8 @@ export interface DevolucaoLida {
   id: string;
   loja: string;
   data: string;
+  /** Data e hora da devolução (ISO com fuso), para não confundir com a venda nova da troca */
+  quando?: string;
   valor: number;
   codigoCliente?: string;
   nomeNaNota?: string;
@@ -47,11 +49,15 @@ const aberto = (v: Pick<Venda, "valor" | "devolvido">) => arred(v.valor - (v.dev
  */
 export function comprasDaDevolucao<V extends Pick<Venda, "data" | "valor" | "devolvido" | "itens">>(
   compras: V[],
-  dev: { data: string; itens?: string[] }
+  dev: { data: string; quando?: string; itens?: string[] }
 ): V[] {
   const desde = somarDias(dev.data, -JANELA_DEVOLUCAO_DIAS);
+  // Com a hora da devolução, só vale compra feita antes dela: na troca, a venda
+  // nova sai logo depois da devolução, no mesmo dia, e não é a compra devolvida
+  const limite = dev.quando ? Date.parse(dev.quando) : NaN;
+  const antes = (v: V) => (Number.isFinite(limite) && Number.isFinite(Date.parse(v.data)) ? Date.parse(v.data) < limite : v.data.slice(0, 10) <= dev.data);
   let c = compras
-    .filter((v) => v.valor > 0 && v.data.slice(0, 10) <= dev.data && v.data.slice(0, 10) >= desde && aberto(v) >= 0.01)
+    .filter((v) => v.valor > 0 && antes(v) && v.data.slice(0, 10) >= desde && aberto(v) >= 0.01)
     .sort((a, z) => z.data.localeCompare(a.data));
   if (dev.itens?.length) {
     const pecas = new Set(dev.itens);

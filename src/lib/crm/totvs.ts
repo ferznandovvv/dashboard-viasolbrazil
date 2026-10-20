@@ -266,6 +266,7 @@ async function buscarDevolucoes(de: string, ate: string): Promise<DevolucaoLida[
         id: `${filial}-${inv.invoiceSequence}`,
         loja: LOJAS[filial] ?? `Filial ${filial}`,
         data,
+        quando: `${data}T${inv.exitTime ?? "23:59:59"}-03:00`,
         valor: Number(inv.totalValue ?? 0),
         codigoCliente: nome && !NOME_GENERICO.test(nome) ? str(inv, "personCode", "customerCode") : undefined,
         nomeNaNota: nome,

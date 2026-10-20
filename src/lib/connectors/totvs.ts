@@ -366,7 +366,7 @@ async function vendedoraDaVendaOriginal(devs: { o: NormalizedOrder; pessoa?: str
     for (const d of comPessoa) {
       // Sem o "devolvido" do CRM: aqui só importa de quem foi a venda
       const compras = (porPessoa.get(d.pessoa!) ?? []).map((v) => ({ ...v, devolvido: 0 }));
-      const original = comprasDaDevolucao(compras, { data: d.o.createdAt.slice(0, 10), itens: d.itens })[0];
+      const original = comprasDaDevolucao(compras, { data: d.o.createdAt.slice(0, 10), quando: d.o.createdAt, itens: d.itens })[0];
       if (original?.vendedoraCpf) d.o.sellerCpf = original.vendedoraCpf;
     }
   } catch (e) {
@@ -502,12 +502,13 @@ async function vendasMenosDevolucoes(from: string, to: string, opts: OpcoesTotvs
 function variante(opts: OpcoesTotvs): string {
   // ignorarMemoria não entra aqui: é só instrumentação, não muda os dados
   const filiais = opts.filiais?.length ? opts.filiais.slice().sort().join("_") : "todas";
-  return `${opts.devolucoes ? "dev-" : ""}${opts.itens ? "itens" : "leve"}-${filiais}`;
+  return `${opts.devolucoes ? "dev2-" : ""}${opts.itens ? "itens" : "leve"}-${filiais}`;
 }
 
 const PREFIXO = "totvs/mes-";
 const PREFIXO_DIA = "totvsdia/";
-const PREFIXO_DIA_DEV = "totvsdevdia/";
+// v2: vendedora pela venda de antes da devolução (a v1 pegava a venda nova da troca)
+const PREFIXO_DIA_DEV = "totvsdevdia2/";
 const PREFIXO_PROD = "totvsprod/";
 
 /** Contadores para a tela de medição de desempenho. */
