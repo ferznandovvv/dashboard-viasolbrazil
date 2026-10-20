@@ -6,7 +6,7 @@
 import { diasEntre, hojeSp, novoId, somarDias } from "./base";
 import { creditarVenda, saldoDe, vencendoAte } from "./cashback";
 import { perfis } from "./perfil";
-import type { BaseCrm, Cliente, ClienteResumo, Venda } from "./tipos";
+import { contaComoCompra, valorLiquido, type BaseCrm, type Cliente, type ClienteResumo, type Venda } from "./tipos";
 import { normalizarCpf, normalizarData, normalizarTelefone } from "./telefone";
 
 export interface DadosCliente {
@@ -159,7 +159,11 @@ export function podeMarketing(base: BaseCrm, c: Cliente): boolean {
 
 /** Cliente com os números calculados. */
 export function resumir(base: BaseCrm, c: Cliente, hoje = hojeSp()): ClienteResumo {
-  const vendas = base.vendas.filter((v) => v.clienteId === c.id).sort((a, b) => b.data.localeCompare(a.data));
+  // Compra devolvida inteira não conta; troca fica uma compra só, pelo valor que ficou
+  const vendas = base.vendas
+    .filter((v) => v.clienteId === c.id && contaComoCompra(v))
+    .map((v) => ({ ...v, valor: valorLiquido(v) }))
+    .sort((a, b) => b.data.localeCompare(a.data));
   const venc = vencendoAte(base, c.id, somarDias(hoje, base.config.avisoVencimentoDias), hoje);
   const ultimaMsg = base.mensagens
     .filter((m) => m.clienteId === c.id && m.status !== "cancelada")

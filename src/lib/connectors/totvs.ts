@@ -320,7 +320,9 @@ interface TotvsInvoice {
   paymentConditionName?: string | null;
   exitTime: string | null;
   personName: string | null;
+  personCode?: number | string | null;
   items?: {
+    code?: string;
     name?: string;
     quantity?: number;
     netValue?: number;
@@ -335,6 +337,41 @@ function isVenda(inv: TotvsInvoice): boolean {
   const op = inv.operatioName ?? "";
   if (!/VENDA/i.test(op)) return false;
   return !/DEVOL|TRANSF|REMESSA|BONIFIC|BRINDE|COMODATO|AMOSTRA/i.test(op);
+}
+
+/** Nota de entrada de devolução de venda (troca ou devolução), que não foi cancelada. */
+function isDevolucao(inv: TotvsInvoice): boolean {
+  if (inv.operationType !== "Input" || inv.invoiceStatus === "Canceled") return false;
+  return /DEVOLU[CÇ][AÃ]O DE VENDA/i.test(inv.operatioName ?? "");
+}
+
+/**
+ * Vendedora da venda original de cada devolução, pela base do CRM: a compra
+ * da mesma cliente, do mesmo dia ou antes, com a mesma peça (quando dá para
+ * comparar) ou a mais recente. Sem achar, fica quem registrou a devolução.
+ */
+async function vendedoraDaVendaOriginal(devs: { o: NormalizedOrder; pessoa?: string; itens: string[] }[]): Promise<void> {
+  const comPessoa = devs.filter((d) => d.pessoa);
+  if (!comPessoa.length) return;
+  try {
+    const { lerBase } = await import("../crm/base");
+    const { comprasDaDevolucao } = await import("../crm/devolucoes");
+    const base = await lerBase();
+    const porPessoa = new Map<string, typeof base.vendas>();
+    const pessoas = new Set(comPessoa.map((d) => d.pessoa!));
+    for (const v of base.vendas) {
+      if (v.codigoClienteTotvs && pessoas.has(v.codigoClienteTotvs) && v.origem === "totvs")
+        (porPessoa.get(v.codigoClienteTotvs) ?? porPessoa.set(v.codigoClienteTotvs, []).get(v.codigoClienteTotvs)!).push(v);
+    }
+    for (const d of comPessoa) {
+      // Sem o "devolvido" do CRM: aqui só importa de quem foi a venda
+      const compras = (porPessoa.get(d.pessoa!) ?? []).map((v) => ({ ...v, devolvido: 0 }));
+      const original = comprasDaDevolucao(compras, { data: d.o.createdAt.slice(0, 10), itens: d.itens })[0];
+      if (original?.vendedoraCpf) d.o.sellerCpf = original.vendedoraCpf;
+    }
+  } catch (e) {
+    console.warn("[totvs] vendedora das devoluções:", e instanceof Error ? e.message : e);
+  }
 }
 
 /** Quebra o período em janelas de até 6 meses (limite da API). */
@@ -430,6 +467,8 @@ export interface OpcoesTotvs {
   filiais?: number[];
   /** Pula o cache de memória, para medir o cache compartilhado. */
   ignorarMemoria?: boolean;
+  /** Uso interno: busca as devoluções de venda em vez das vendas. */
+  devolucoes?: boolean;
 }
 
 export async function fetchTotvsSales(
@@ -440,19 +479,35 @@ export async function fetchTotvsSales(
   if (!totvsConfigured()) {
     return { channel: "lojas", connected: false, orders: [] };
   }
-  if (opts.ignorarMemoria) return porMeses(from, to, opts);
-  return comCache(`totvs|${from}|${to}|${variante(opts)}`, () => porMeses(from, to, opts), 5 * 60000);
+  const buscar = () => vendasMenosDevolucoes(from, to, opts);
+  if (opts.ignorarMemoria) return buscar();
+  return comCache(`totvs|${from}|${to}|${variante(opts)}`, buscar, 5 * 60000);
+}
+
+/**
+ * Vendas e, junto, as devoluções de venda do período (valor e peças
+ * negativos): o faturamento fica líquido, como no relatório da TOTVS. Se as
+ * devoluções falharem, as vendas saem assim mesmo.
+ */
+async function vendasMenosDevolucoes(from: string, to: string, opts: OpcoesTotvs): Promise<ChannelResult> {
+  const [vendas, devs] = await Promise.all([porMeses(from, to, opts), porMeses(from, to, { ...opts, devolucoes: true })]);
+  if (devs.error) console.warn("[totvs] devoluções:", devs.error);
+  return {
+    ...vendas,
+    orders: [...vendas.orders, ...devs.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  };
 }
 
 /** Identifica a variação da busca, para cache e nome de arquivo. */
 function variante(opts: OpcoesTotvs): string {
   // ignorarMemoria não entra aqui: é só instrumentação, não muda os dados
   const filiais = opts.filiais?.length ? opts.filiais.slice().sort().join("_") : "todas";
-  return `${opts.itens ? "itens" : "leve"}-${filiais}`;
+  return `${opts.devolucoes ? "dev-" : ""}${opts.itens ? "itens" : "leve"}-${filiais}`;
 }
 
 const PREFIXO = "totvs/mes-";
 const PREFIXO_DIA = "totvsdia/";
+const PREFIXO_DIA_DEV = "totvsdevdia/";
 const PREFIXO_PROD = "totvsprod/";
 
 /** Contadores para a tela de medição de desempenho. */
@@ -517,7 +572,8 @@ async function mesEmAberto(
   const cacheaveis = dias.filter((d) => d <= corte);
   const recentes = dias.filter((d) => d > corte);
 
-  const guardados = await lerBlobs<NormalizedOrder[]>(PREFIXO_DIA, cacheaveis);
+  const prefixoDia = opts.devolucoes ? PREFIXO_DIA_DEV : PREFIXO_DIA;
+  const guardados = await lerBlobs<NormalizedOrder[]>(prefixoDia, cacheaveis);
   const faltando = cacheaveis.filter((d) => !guardados.has(d));
 
   const orders: NormalizedOrder[] = [];
@@ -542,7 +598,7 @@ async function mesEmAberto(
       const porDia = new Map<string, NormalizedOrder[]>(faltando.map((d) => [d, []]));
       for (const o of r.orders) porDia.get(diaDaNota(o))?.push(o);
       await Promise.all(
-        Array.from(porDia.entries()).map(([d, lista]) => gravarBlob(PREFIXO_DIA, d, lista))
+        Array.from(porDia.entries()).map(([d, lista]) => gravarBlob(prefixoDia, d, lista))
       );
       orders.push(...r.orders.filter((o) => porDia.has(diaDaNota(o))));
     }
@@ -640,7 +696,7 @@ async function buscarTotvs(
     const corpo = (j: { start: string; end: string }, pagina: number) => ({
       filter: {
         branchCodeList: opts.filiais?.length ? opts.filiais : Object.keys(LOJAS).map(Number),
-        operationType: "Output",
+        operationType: opts.devolucoes ? "Input" : "Output",
         change: {
           startDate: `${j.start}T00:00:00`,
           endDate: `${(j.end >= hoje ? hoje : j.end)}T23:59:59`,
@@ -648,15 +704,49 @@ async function buscarTotvs(
       },
       // Os itens multiplicam o tamanho da resposta; só vêm quando há um card
       // que precisa deles (produtos e descontos, na visão de uma unidade)
-      ...(opts.itens ? { expand: "items" } : {}),
+      // Devolução vem sempre com os itens (são poucas notas): é pela peça que se acha a venda original
+      ...(opts.itens || opts.devolucoes ? { expand: "items" } : {}),
       page: pagina,
       pageSize: PAGE,
     });
 
+    const devs: { o: NormalizedOrder; pessoa?: string; itens: string[] }[] = [];
     const coletar = (itens: TotvsInvoice[]) => {
       for (const inv of itens) {
         const data = (inv.invoiceDate ?? "").slice(0, 10);
         if (data < from || data > to) continue;
+        if (opts.devolucoes) {
+          if (!isDevolucao(inv)) continue;
+          const loja = LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`;
+          const o: NormalizedOrder = {
+            channel: "lojas",
+            id: `dev-${inv.branchCode}-${inv.invoiceSequence}`,
+            label: `Devolução #${inv.invoiceCode ?? inv.invoiceSequence}`,
+            createdAt: `${data}T${inv.exitTime ?? "12:00:00"}-03:00`,
+            total: -Number(inv.totalValue ?? 0),
+            currency: "BRL",
+            status: loja,
+            customer: inv.personName ?? undefined,
+            store: loja,
+            qty: -Number(inv.quantity ?? 0),
+            payment: "Devoluções e trocas",
+            sellerCpf: inv.sellerCpf ?? undefined,
+            devolucao: true,
+            items: opts.itens
+              ? (inv.items ?? [])
+                  .filter((it) => it.name)
+                  .map((it) => ({ title: it.name!, qty: -Number(it.quantity ?? 1), revenue: -Number(it.netValue ?? 0) }))
+              : undefined,
+          };
+          orders.push(o);
+          const nome = inv.personName ?? "";
+          devs.push({
+            o,
+            pessoa: nome && !/CONSUMIDOR|N[AÃ]O IDENTIFICAD/i.test(nome) && inv.personCode != null ? String(inv.personCode) : undefined,
+            itens: (inv.items ?? []).map((it) => it.code).filter((c): c is string => Boolean(c)),
+          });
+          continue;
+        }
         if (!isVenda(inv)) continue;
         const loja = LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`;
         orders.push({
@@ -713,6 +803,7 @@ async function buscarTotvs(
       }
     }
 
+    if (devs.length) await vendedoraDaVendaOriginal(devs);
     await nomearVendedoras(orders);
     return { channel: "lojas", connected: true, orders };
   } catch (e) {

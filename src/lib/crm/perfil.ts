@@ -5,7 +5,7 @@
  */
 
 import { diasEntre, hojeSp } from "./base";
-import type { BaseCrm, FaixaCliente } from "./tipos";
+import { contaComoCompra, valorLiquido, type BaseCrm, type FaixaCliente } from "./tipos";
 
 export interface Perfil {
   /** Loja da última compra, senão a do cadastro */
@@ -29,8 +29,9 @@ export function faixaDe(compras: number, total: number, diasDesdeUltima: number 
 
 export function perfis(base: BaseCrm, hoje = hojeSp()): Map<string, Perfil> {
   const agg = new Map<string, { total: number; compras: number; primeira: string; ultima: string; lojaUltima: string }>();
-  for (const v of base.vendas) {
-    if (!v.clienteId || v.valor <= 0) continue;
+  for (const bruta of base.vendas) {
+    if (!bruta.clienteId || !contaComoCompra(bruta)) continue;
+    const v = { ...bruta, clienteId: bruta.clienteId, valor: valorLiquido(bruta) };
     const d = v.data.slice(0, 10);
     const a = agg.get(v.clienteId);
     if (!a) agg.set(v.clienteId, { total: v.valor, compras: 1, primeira: d, ultima: d, lojaUltima: v.loja });

@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   // Vendedoras ativas: venderam nesta loja nos últimos 30 dias
   const ativas = new Set(
     daLoja
-      .filter((o) => o.seller && spDateKey(o.createdAt) >= inicio30)
+      .filter((o) => o.seller && !o.devolucao && spDateKey(o.createdAt) >= inicio30)
       .map((o) => o.seller as string)
   );
 
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
         nome: v,
         vendidoMes,
         vendidoHoje,
-        vendasMes: dela.length,
+        vendasMes: dela.filter((o) => !o.devolucao).length,
         meta: metaCada,
         pct: metaCada > 0 ? vendidoMes / metaCada : 0,
         falta,

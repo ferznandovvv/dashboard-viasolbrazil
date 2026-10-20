@@ -443,8 +443,13 @@ function FichaCliente({ id, lojas, fechar, aoMudar }: { id: string; lojas: strin
                       {v.loja}
                       {v.pecas ? <span className="fin-sub"> {v.pecas} pç</span> : null}
                       {v.vendedoraCpf && c.cpf && v.vendedoraCpf === c.cpf && <span className="fin-status vencida"> vendeu para si mesma</span>}
+                      {v.devolvido ? (
+                        <span className="fin-status vencida"> {v.devolvido >= v.valor - 0.009 ? "devolvida / trocada" : `voltou ${brl.format(v.devolvido)}`}</span>
+                      ) : null}
                     </td>
-                    <td className="n">{brl.format(v.valor)}</td>
+                    <td className="n" style={v.devolvido && v.devolvido >= v.valor - 0.009 ? { textDecoration: "line-through", opacity: 0.6 } : undefined}>
+                      {brl.format(v.valor)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

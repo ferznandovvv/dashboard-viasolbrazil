@@ -55,6 +55,8 @@ export interface Venda {
   entrega?: boolean;
   /** Referências dos produtos da nota (código do item), quando veio com os itens: liga a devolução à compra certa */
   itens?: string[];
+  /** Quanto dessa compra voltou em devolução ou troca (R$) */
+  devolvido?: number;
   origem: "totvs" | "shopify" | "csv" | "manual";
 }
 
@@ -86,6 +88,12 @@ export interface MovimentoCashback {
  * TOTVS, e quanto de cashback saiu por causa dela. Fica registrada mesmo
  * quando não tira nada, para não ser lida de novo e para o dono conferir.
  */
+/** Valor que ficou com a loja: a venda menos o que voltou em devolução ou troca. */
+export const valorLiquido = (v: Pick<Venda, "valor" | "devolvido">) => Math.round((v.valor - (v.devolvido ?? 0)) * 100) / 100;
+
+/** A compra conta no histórico da cliente (não foi devolvida inteira). */
+export const contaComoCompra = (v: Pick<Venda, "valor" | "devolvido">) => valorLiquido(v) >= 0.01;
+
 export interface Devolucao {
   /** Nota de entrada (filial-sequência) ou "cancelada-" + id da venda */
   id: string;
@@ -98,8 +106,10 @@ export interface Devolucao {
   nomeNaNota?: string;
   /** Cashback tirado (R$, positivo) */
   estorno: number;
-  /** Vendas de onde o cashback saiu */
+  /** Vendas de onde a devolução saiu */
   vendas?: string[];
+  /** Quanto do valor devolvido saiu de cada venda, e o cashback tirado dela */
+  partes?: { vendaId: string; valor: number; estorno: number }[];
   /** Por que não tirou nada, ou tirou menos */
   obs?: string;
   vistoEm: string;
@@ -366,6 +376,8 @@ export interface ConfigCrm {
   diariaTotvsAte?: string;
   /** Até que dia as devoluções da TOTVS já foram conferidas (estorno de cashback) */
   devolucoesAte?: string;
+  /** Quando as devoluções de todo o histórico de vendas foram lidas (uma vez) */
+  devolucoesHistoricoEm?: string;
   diariaTotvsEm?: string;
   ultimaSincShopify?: string;
   ultimaSincShopifyResultado?: string;

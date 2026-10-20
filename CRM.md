@@ -308,6 +308,16 @@ compra em que ela usa precisa ser **pelo menos 5 vezes** o valor usado (ou
 seja, o cashback paga no máximo um quinto). Compra no site também gera, e
 compra paga em parte com cashback também gera (sobre o valor da nota).
 
+Devolução e troca não contam como venda. No painel de vendas (dashboard, metas,
+ranking, TV, painel da loja) as notas de entrada "DEVOLUCAO DE VENDA" entram com
+valor e peças negativos na data da devolução, sem contar como pedido: o
+faturamento fica líquido, como no relatório da TOTVS. O desconto sai da
+vendedora da venda original (achada pela cliente e pela peça, na base do CRM);
+sem achar, de quem registrou a devolução. No CRM, a compra devolvida fica
+marcada (`devolvido`): troca vira uma compra só e compra devolvida inteira não
+conta no histórico da cliente. A primeira diária lê as devoluções de todo o
+histórico.
+
 Devolução e venda cancelada tiram o cashback (`src/lib/crm/devolucoes.ts`).
 A sincronização diária lê as notas de entrada "DEVOLUCAO DE VENDA" e as
 vendas que ficaram canceladas. A TOTVS não diz de qual venda a peça voltou,

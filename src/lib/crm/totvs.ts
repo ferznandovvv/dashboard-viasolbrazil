@@ -13,7 +13,7 @@
 import { LOJAS, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
 import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
 import { conciliarVendas, registrarVenda, salvarCliente } from "./clientes";
-import { aplicarCancelamento, aplicarDevolucao, limparDevolucoes, type DevolucaoLida } from "./devolucoes";
+import { aplicarCancelamento, aplicarDevolucao, type DevolucaoLida } from "./devolucoes";
 import type { Venda } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
@@ -278,23 +278,25 @@ async function buscarDevolucoes(de: string, ate: string): Promise<DevolucaoLida[
 }
 
 /**
- * Confere as devoluções do período e tira o cashback das compras devolvidas.
- * Só na sincronização com cashback (a diária), nunca na carga histórica.
+ * Confere as devoluções do período: marca o valor devolvido na compra (troca
+ * vira uma compra só) e tira o cashback das compras devolvidas. Devolução de
+ * antes do cashback nas lojas só marca a compra. Mês a mês, para caber na API.
  */
 export async function conferirDevolucoes(de: string, ate: string): Promise<{ novas: number; estorno: number }> {
-  const devs = await buscarDevolucoes(de, ate);
   let novas = 0;
   let estorno = 0;
-  await alterarBase((b) => {
-    for (const d of devs.sort((a, z) => a.data.localeCompare(z.data))) {
-      const r = aplicarDevolucao(b, d);
-      if (!r) continue;
-      novas++;
-      estorno += r.estorno;
-    }
-    limparDevolucoes(b, hojeSp());
-    if (!b.config.devolucoesAte || ate > b.config.devolucoesAte) b.config.devolucoesAte = ate;
-  });
+  for (const t of trechos(de, ate)) {
+    const devs = await buscarDevolucoes(t.de, t.ate);
+    await alterarBase((b) => {
+      for (const d of devs.sort((a, z) => a.data.localeCompare(z.data))) {
+        const r = aplicarDevolucao(b, d, d.data >= INICIO_CASHBACK_LOJAS);
+        if (!r) continue;
+        novas++;
+        estorno += r.estorno;
+      }
+      if (!b.config.devolucoesAte || t.ate > b.config.devolucoesAte) b.config.devolucoesAte = t.ate;
+    });
+  }
   return { novas, estorno: Math.round(estorno * 100) / 100 };
 }
 
@@ -525,10 +527,19 @@ export async function sincronizarDiaria(): Promise<typeof progresso | null> {
     });
   // Devoluções: desde o último dia conferido (na primeira vez, desde o começo do cashback nas lojas)
   if (!r.erro) {
-    const devAte = (await lerBase()).config.devolucoesAte;
-    const devDe = devAte ? (somarDias(devAte, -2) < de ? somarDias(devAte, -2) : de) : INICIO_CASHBACK_LOJAS;
+    const cfg = (await lerBase()).config;
+    // Primeira vez: todo o histórico de vendas, para as trocas antigas virarem uma compra só
+    const historico = !cfg.devolucoesHistoricoEm;
+    const devAte = cfg.devolucoesAte;
+    let devDe = devAte && somarDias(devAte, -2) < de ? somarDias(devAte, -2) : de;
+    if (devDe < somarDias(hoje, -45)) devDe = somarDias(hoje, -45);
+    if (historico) devDe = cfg.sincVendasDesde ?? somarDias(hoje, -365);
     try {
-      const d = await conferirDevolucoes(devDe < somarDias(hoje, -45) ? somarDias(hoje, -45) : devDe, hoje);
+      const d = await conferirDevolucoes(devDe, hoje);
+      if (historico)
+        await alterarBase((b) => {
+          b.config.devolucoesHistoricoEm = new Date().toISOString();
+        });
       if (d.novas) console.log(`[crm] devoluções: ${d.novas} novas, R$ ${d.estorno} de cashback estornado`);
     } catch (e) {
       console.error("[crm] devoluções:", e instanceof Error ? e.message : e);

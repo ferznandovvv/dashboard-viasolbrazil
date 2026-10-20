@@ -6,7 +6,7 @@
 
 import { diasEntre, hojeSp, somarDias } from "./base";
 import { resumoAtendimento } from "./atendimento";
-import type { BaseCrm, Venda } from "./tipos";
+import { contaComoCompra, valorLiquido, type BaseCrm, type Venda } from "./tipos";
 import { faixaDe } from "./perfil";
 
 const arred = (v: number, c = 1) => Math.round(v * 10 ** c) / 10 ** c;
@@ -43,7 +43,8 @@ export interface Analise {
 
 export function analisar(base: BaseCrm): Analise {
   const hoje = hojeSp();
-  const vendas = base.vendas.filter((v) => v.valor > 0);
+  // Pelo valor que ficou: troca é uma compra só, devolvida inteira não conta
+  const vendas = base.vendas.filter((v) => v.valor > 0 && contaComoCompra(v)).map((v) => ({ ...v, valor: valorLiquido(v) }));
   const datas = vendas.map((v) => v.data.slice(0, 10)).sort();
   const de = datas[0];
   const ate = datas[datas.length - 1];

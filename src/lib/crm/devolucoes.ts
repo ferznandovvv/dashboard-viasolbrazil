@@ -1,17 +1,17 @@
 /**
- * Devolução e venda cancelada tiram o cashback que a compra gerou.
+ * Devolução e troca: a compra devolvida deixa de contar.
  *
- * Devolução: a TOTVS não diz de qual venda a peça voltou (referencedTaxInvoice
- * vem vazio), então o sistema procura a compra dela que gerou cashback, do mesmo
- * dia ou antes, dentro da validade. Quando as duas notas têm os itens, só vale a
- * compra que tem a mesma peça; peça de compra antiga (de antes do cashback) não
- * tira nada. Sai a parte proporcional ao que voltou (devolveu R$ 100 de uma compra
- * de R$ 200 com R$ 30 de cashback: sai R$ 15).
+ * A TOTVS não diz de qual venda a peça voltou (referencedTaxInvoice vem vazio),
+ * então o sistema procura a compra da cliente do mesmo dia ou antes. Quando as
+ * duas notas têm os itens, vale a compra que tem a mesma peça; sem itens, a
+ * mais recente. O valor devolvido é marcado na venda (`devolvido`): troca vira
+ * uma compra só, e a compra devolvida inteira some do histórico da cliente.
+ *
+ * Se a compra gerou cashback, sai a parte proporcional ao que voltou (devolveu
+ * R$ 100 de uma compra de R$ 200 com R$ 30 de cashback: sai R$ 15). Nunca tira
+ * mais do que a cliente tem de saldo: o que ela já usou fica (e o registro diz).
  *
  * Venda cancelada: sai o cashback inteiro dela e a venda some da base.
- *
- * Nunca tira mais do que a cliente tem de saldo: se ela já usou, o que usou fica
- * (e aparece no registro, para o dono saber).
  */
 
 import { novoId, somarDias } from "./base";
@@ -21,6 +21,9 @@ import type { BaseCrm, Devolucao, MovimentoCashback, Venda } from "./tipos";
 const arred = (v: number) => Math.round(v * 100) / 100;
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dataBr = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+/** Até quantos dias depois da compra uma devolução ainda é procurada nela. */
+export const JANELA_DEVOLUCAO_DIAS = 180;
 
 export interface DevolucaoLida {
   /** filial-sequência da nota de entrada */
@@ -34,18 +37,37 @@ export interface DevolucaoLida {
   itens?: string[];
 }
 
-/** Quanto do crédito de cada venda já saiu por devolução (R$). */
-function estornadoPorVenda(b: BaseCrm): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const x of b.cashback) if (x.devolucaoId && x.vendaId) m.set(x.vendaId, arred((m.get(x.vendaId) ?? 0) - x.valor));
-  return m;
+/** Quanto ainda dá para devolver de uma venda. */
+const aberto = (v: Pick<Venda, "valor" | "devolvido">) => arred(v.valor - (v.devolvido ?? 0));
+
+/**
+ * Compras de onde a devolução pode ter saído, na ordem em que o valor é
+ * descontado: as que têm a mesma peça (se der para saber) e, entre elas, a
+ * mais recente primeiro. Usado aqui e no dashboard (vendedora da venda original).
+ */
+export function comprasDaDevolucao<V extends Pick<Venda, "data" | "valor" | "devolvido" | "itens">>(
+  compras: V[],
+  dev: { data: string; itens?: string[] }
+): V[] {
+  const desde = somarDias(dev.data, -JANELA_DEVOLUCAO_DIAS);
+  let c = compras
+    .filter((v) => v.valor > 0 && v.data.slice(0, 10) <= dev.data && v.data.slice(0, 10) >= desde && aberto(v) >= 0.01)
+    .sort((a, z) => z.data.localeCompare(a.data));
+  if (dev.itens?.length) {
+    const pecas = new Set(dev.itens);
+    const mesmaPeca = c.filter((v) => v.itens?.some((i) => pecas.has(i)));
+    // Nenhuma com a mesma peça: só as que não têm itens para comparar
+    c = mesmaPeca.length ? mesmaPeca : c.filter((v) => !v.itens);
+  }
+  return c;
 }
 
 /** Cashback que ainda vale de uma venda: crédito menos o que já saiu por devolução. */
 export function creditoLiquidoDaVenda(b: BaseCrm, vendaId: string): number {
   const cred = b.cashback.find((m) => m.tipo === "credito" && m.vendaId === vendaId);
   if (!cred) return 0;
-  return arred(cred.valor - (estornadoPorVenda(b).get(vendaId) ?? 0));
+  const saiu = b.cashback.filter((m) => m.devolucaoId && m.vendaId === vendaId).reduce((s, m) => s - m.valor, 0);
+  return arred(cred.valor - saiu);
 }
 
 function lancar(b: BaseCrm, d: Devolucao, partes: { venda: Venda; valor: number }[], loja: string) {
@@ -93,64 +115,57 @@ function caberNoSaldo(b: BaseCrm, clienteId: string, partes: { venda: Venda; val
   return { partes: cortadas, faltou: arred(total - saldo) };
 }
 
-/** Confere uma devolução (uma vez só por nota). Devolve o registro, ou null se já tinha sido vista. */
-export function aplicarDevolucao(b: BaseCrm, dev: DevolucaoLida): Devolucao | null {
+/**
+ * Confere uma devolução (uma vez só por nota): marca o valor devolvido na compra
+ * e tira o cashback dela, se tiver. Devolve o registro, ou null se já tinha sido vista.
+ * `estornar=false` só marca a compra (devoluções antigas, de antes do cashback).
+ */
+export function aplicarDevolucao(b: BaseCrm, dev: DevolucaoLida, estornar = true): Devolucao | null {
   b.devolucoes ??= [];
   if (b.devolucoes.some((d) => d.id === dev.id)) return null;
-  const reg: Devolucao = { id: dev.id, tipo: "devolucao", loja: dev.loja, data: dev.data, valor: dev.valor, nomeNaNota: dev.nomeNaNota, estorno: 0, vistoEm: new Date().toISOString() };
+  const reg: Devolucao = { id: dev.id, tipo: "devolucao", loja: dev.loja, data: dev.data, valor: dev.valor, nomeNaNota: dev.nomeNaNota, estorno: 0, partes: [], vistoEm: new Date().toISOString() };
   b.devolucoes.push(reg);
 
   const c = dev.codigoCliente ? b.clientes.find((x) => x.codigoTotvs === dev.codigoCliente) : undefined;
   if (!c) {
-    reg.obs = "Cliente fora do CRM: nada a tirar";
+    reg.obs = "Cliente fora do CRM";
     return reg;
   }
   reg.clienteId = c.id;
 
-  // Compras dela com cashback, do dia da devolução para trás, dentro da validade
-  const desde = somarDias(dev.data, -b.config.cashbackValidadeDias);
-  const creditadas = new Set(b.cashback.filter((m) => m.tipo === "credito" && m.clienteId === c.id && m.vendaId).map((m) => m.vendaId!));
-  const estornado = estornadoPorVenda(b);
-  let candidatas = b.vendas
-    .filter((v) => v.clienteId === c.id && creditadas.has(v.id) && v.data.slice(0, 10) <= dev.data && v.data.slice(0, 10) >= desde)
-    .filter((v) => creditoLiquidoDaVenda(b, v.id) >= 0.01)
-    .sort((a, z) => z.data.localeCompare(a.data));
+  const candidatas = comprasDaDevolucao(
+    b.vendas.filter((v) => v.clienteId === c.id),
+    dev
+  );
   if (candidatas.length === 0) {
-    reg.obs = "Nenhuma compra dela com cashback antes da devolução (compra antiga)";
+    reg.obs = "Não achei a compra de onde saiu a peça (compra antiga ou fora do CRM)";
     return reg;
   }
-  // Com os itens das duas notas, só vale a compra que tem a mesma peça
-  if (dev.itens?.length) {
-    const pecas = new Set(dev.itens);
-    const mesmaPeca = candidatas.filter((v) => v.itens?.some((i) => pecas.has(i)));
-    const semItens = candidatas.filter((v) => !v.itens);
-    candidatas = mesmaPeca.length ? mesmaPeca : semItens;
-    if (candidatas.length === 0) {
-      reg.obs = "As peças devolvidas não são de nenhuma compra com cashback (compra antiga)";
-      return reg;
-    }
-  }
 
-  // Reparte o valor devolvido entre as compras, da mais recente para trás
+  // Reparte o valor devolvido entre as compras, na ordem acima
   let falta = dev.valor;
-  const partes: { venda: Venda; valor: number }[] = [];
+  const cashback: { venda: Venda; valor: number }[] = [];
   for (const v of candidatas) {
     if (falta < 0.01) break;
-    const cred = b.cashback.find((m) => m.tipo === "credito" && m.vendaId === v.id)!;
-    const taxa = v.valor > 0 ? cred.valor / v.valor : 0;
-    const jaSaiu = estornado.get(v.id) ?? 0;
-    const valorAindaComCashback = taxa > 0 ? v.valor - jaSaiu / taxa : 0;
-    const parte = Math.min(falta, valorAindaComCashback);
-    if (parte <= 0) continue;
-    const valor = arred(Math.min(parte * taxa, cred.valor - jaSaiu));
-    partes.push({ venda: v, valor });
+    const parte = arred(Math.min(falta, aberto(v)));
+    if (parte < 0.01) continue;
+    const cred = b.cashback.find((m) => m.tipo === "credito" && m.vendaId === v.id);
+    const liquido = creditoLiquidoDaVenda(b, v.id);
+    const estorno = cred && v.valor > 0 && estornar ? arred(Math.min((parte * cred.valor) / v.valor, liquido)) : 0;
+    v.devolvido = arred((v.devolvido ?? 0) + parte);
+    reg.partes!.push({ vendaId: v.id, valor: parte, estorno });
+    if (estorno >= 0.01) cashback.push({ venda: v, valor: estorno });
     falta = arred(falta - parte);
   }
-  const { partes: cabem, faltou } = caberNoSaldo(b, c.id, partes);
-  lancar(b, reg, cabem, dev.loja);
-  reg.estorno = arred(cabem.reduce((s, p) => s + p.valor, 0));
-  reg.vendas = cabem.filter((p) => p.valor >= 0.01).map((p) => p.venda.id);
-  if (faltou > 0) reg.obs = `Ela já tinha usado ${reais(faltou)} desse cashback: isso não volta`;
+  reg.vendas = reg.partes!.map((p) => p.vendaId);
+
+  if (cashback.length) {
+    const { partes: cabem, faltou } = caberNoSaldo(b, c.id, cashback);
+    lancar(b, reg, cabem, dev.loja);
+    for (const p of reg.partes!) p.estorno = cabem.find((x) => x.venda.id === p.vendaId)?.valor ?? 0;
+    reg.estorno = arred(cabem.reduce((s, p) => s + p.valor, 0));
+    if (faltou > 0) reg.obs = `Ela já tinha usado ${reais(faltou)} desse cashback: isso não volta`;
+  }
   return reg;
 }
 
@@ -184,10 +199,4 @@ export function aplicarCancelamento(b: BaseCrm, vendaId: string): Devolucao | nu
     if (faltou > 0) reg.obs = `Ela já tinha usado ${reais(faltou)} desse cashback: isso não volta`;
   }
   return reg;
-}
-
-/** Registros mais velhos que isso saem da lista (o estorno fica no extrato). */
-export function limparDevolucoes(b: BaseCrm, hoje: string) {
-  const corte = somarDias(hoje, -180);
-  if (b.devolucoes) b.devolucoes = b.devolucoes.filter((d) => d.data >= corte);
 }

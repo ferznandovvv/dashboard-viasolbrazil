@@ -31,7 +31,19 @@ export interface NormalizedOrder {
   /** Nome da vendedora, já traduzido a partir do CPF */
   seller?: string;
   items?: OrderItem[];
+  /**
+   * Devolução de venda (troca ou devolução na loja física): entra com valor e
+   * peças negativos, na data da devolução, para o faturamento ficar líquido.
+   * Não conta como pedido. A vendedora é a da venda original, quando dá para achar.
+   */
+  devolucao?: boolean;
 }
+
+/** Conta como pedido/venda (devolução só desconta valor e peças). */
+export const contaComoPedido = (o: NormalizedOrder) => !o.devolucao;
+
+/** Quantos pedidos de verdade tem a lista (sem as devoluções). */
+export const pedidosEm = (lista: NormalizedOrder[]) => lista.reduce((n, o) => n + (o.devolucao ? 0 : 1), 0);
 
 export interface ChannelResult {
   channel: ChannelId;

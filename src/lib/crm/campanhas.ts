@@ -9,7 +9,7 @@ import { saldoDe, creditosAbertos } from "./cashback";
 import { enviadasHoje } from "./fila";
 import { assinatura, compraMinimaPara, enfileirar, lojaDeEnvio, motivoBloqueio, renderizar } from "./mensagens";
 import { type Perfil, perfis } from "./perfil";
-import { CAMPANHAS, type BaseCrm, type CampanhaManual, type Cliente, type FaixaCliente, type FiltroCampanha, type Mensagem } from "./tipos";
+import { CAMPANHAS, contaComoCompra, valorLiquido, type BaseCrm, type CampanhaManual, type Cliente, type FaixaCliente, type FiltroCampanha, type Mensagem } from "./tipos";
 
 export interface Previa {
   /** Clientes no filtro (antes das regras de envio) */
@@ -264,7 +264,7 @@ export type ResultadoCampanha = ReturnType<typeof resultado>;
 
 export function listarCampanhas(base: BaseCrm) {
   const vendasDe = new Map<string, { data: string; valor: number }[]>();
-  for (const v of base.vendas) if (v.clienteId && v.valor > 0) (vendasDe.get(v.clienteId) ?? vendasDe.set(v.clienteId, []).get(v.clienteId)!).push({ data: v.data, valor: v.valor });
+  for (const v of base.vendas) if (v.clienteId && v.valor > 0 && contaComoCompra(v)) (vendasDe.get(v.clienteId) ?? vendasDe.set(v.clienteId, []).get(v.clienteId)!).push({ data: v.data, valor: valorLiquido(v) });
   const porCampanha = new Map<string, Mensagem[]>();
   const porTipo = new Map<string, Mensagem[]>();
   const desde30 = new Date(Date.now() - 30 * 86400000).toISOString();

@@ -64,10 +64,10 @@ export async function GET() {
     if (k === today) {
       const l = lojas.get(nome) ?? { nome, total: 0, pedidos: 0 };
       l.total += o.total;
-      l.pedidos += 1;
+      l.pedidos += o.devolucao ? 0 : 1;
       lojas.set(nome, l);
       hoje.lojas += o.total;
-      hoje.lojasPedidos += 1;
+      hoje.lojasPedidos += o.devolucao ? 0 : 1;
     }
   }
 

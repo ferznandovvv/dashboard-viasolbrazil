@@ -9,7 +9,7 @@
 
 import { LOJAS, fetchTotvsSales, fetchVendasPorProduto, totvsConfigured } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
-import { spDateKey } from "@/lib/types";
+import { pedidosEm, spDateKey } from "@/lib/types";
 import { alterarBase, hojeSp, somarDias } from "./base";
 import type { BaseCrm } from "./tipos";
 
@@ -114,7 +114,7 @@ export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<
     const nome = base.vendedoras?.[cpf] ?? nomes.get(cpf) ?? o.seller ?? `CPF •••${cpf.slice(3, 9)}`;
     const a = porVend.get(cpf) ?? porVend.set(cpf, { nome, vendido: 0, vendas: 0, hoje: 0, cpf }).get(cpf)!;
     a.vendido += o.total;
-    a.vendas++;
+    if (!o.devolucao) a.vendas++;
     if (spDateKey(o.createdAt) === hoje) a.hoje += o.total;
   }
 
@@ -126,8 +126,8 @@ export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<
     meta,
     pct: meta > 0 ? Math.round((vendido / meta) * 100) : null,
     hoje: Math.round(daLoja.filter((o) => spDateKey(o.createdAt) === hoje).reduce((s, o) => s + o.total, 0)),
-    vendas: daLoja.length,
-    ticket: daLoja.length ? Math.round(vendido / daLoja.length) : 0,
+    vendas: pedidosEm(daLoja),
+    ticket: pedidosEm(daLoja) ? Math.round(vendido / pedidosEm(daLoja)) : 0,
     diasRestantes,
     porDia: meta > vendido && diasRestantes > 0 ? Math.round((meta - vendido) / diasRestantes) : 0,
     rankingMeta,

@@ -181,6 +181,17 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Devoluções conferidas antes de a compra ficar marcada (troca = uma compra só):
+    // desfaz e deixa a diária ler de novo, já do jeito novo
+    id: "devolucoes-marcam-compra",
+    aplicar: (b) => {
+      const velhas = new Set((b.devolucoes ?? []).filter((d) => d.tipo === "devolucao" && !d.partes).map((d) => d.id));
+      if (!velhas.size) return;
+      b.devolucoes = (b.devolucoes ?? []).filter((d) => !velhas.has(d.id));
+      b.cashback = b.cashback.filter((m) => !(m.devolucaoId && velhas.has(m.devolucaoId)));
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
