@@ -217,6 +217,14 @@ export function Produtos() {
   const colunasLojas = lojas.length ? lojas : dados?.lojas ?? [];
   const tabelas = dados?.tabelas ?? [];
   const escolhidas = dados?.modo === "vendidos" ? dados.lojasSel ?? [] : [];
+  // Nos mais vendidos, o estoque das lojas escolhidas vem logo depois de
+  // "Vendidas", para comparar o que vendeu com o que tem; as outras depois
+  const colunasEstoque = [
+    ...colunasLojas.filter((l) => escolhidas.includes(l)),
+    ...colunasLojas.filter((l) => !escolhidas.includes(l)),
+  ];
+  const ultimaEscolhida = escolhidas.length && escolhidas.length < colunasLojas.length ? colunasEstoque[escolhidas.length - 1] : "";
+  const marcaLoja = (loja: string) => (escolhidas.includes(loja) ? ` loja-sel${loja === ultimaEscolhida ? " loja-sel-fim" : ""}` : "");
   const posicao = new Map((dados?.itens ?? []).map((l, i) => [l.produto, i + 1]));
 
   const lista = (() => {
@@ -247,14 +255,14 @@ export function Produtos() {
       "Produto",
       ...tabelas.map((t) => `Preço ${t}`),
       ...(vend ? ["Vendidas"] : []),
-      ...colunasLojas,
+      ...colunasEstoque,
     ];
     const corpo = lista.map((l) => [
       ...(vend ? [String(posicao.get(l.produto) ?? "")] : []),
       `"${l.produto.replace(/"/g, '""')}"`,
       ...tabelas.map((t) => (l.precos?.[t] ? l.precos[t].toFixed(2).replace(".", ",") : "")),
       ...(vend ? [String(l.vendidas)] : []),
-      ...colunasLojas.map((loja) => String(l.porLoja[loja] ?? 0)),
+      ...colunasEstoque.map((loja) => String(l.porLoja[loja] ?? 0)),
     ]);
     const csv = [cab, ...corpo].map((r) => r.join(";")).join("\n");
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
@@ -411,7 +419,7 @@ export function Produtos() {
                       </p>
                     )}
                     <dl className="prod-cartao-lojas">
-                      {colunasLojas.map((loja) => {
+                      {colunasEstoque.map((loja) => {
                         const v = l.porLoja[loja] ?? 0;
                         return (
                           <div key={loja} className={`${tom(v)}${escolhidas.includes(loja) ? " loja-sel" : ""}`}>
@@ -432,7 +440,7 @@ export function Produtos() {
                         <th />
                         <th colSpan={tabelas.length} className="fim-preco">Preço</th>
                         {dados.modo === "vendidos" && <th />}
-                        <th colSpan={colunasLojas.length}>Estoque</th>
+                        <th colSpan={colunasEstoque.length}>Estoque</th>
                       </tr>
                     )}
                     <tr>
@@ -446,8 +454,8 @@ export function Produtos() {
                         )
                       )}
                       {dados.modo === "vendidos" && cabOrdem("vendidas", "Vendidas", "n")}
-                      {colunasLojas.map((loja) =>
-                        cabOrdem(`loja:${loja}`, <abbr title={loja}>{curto(loja)}</abbr>, `n${escolhidas.includes(loja) ? " loja-sel" : ""}`, loja)
+                      {colunasEstoque.map((loja) =>
+                        cabOrdem(`loja:${loja}`, <abbr title={loja}>{curto(loja)}</abbr>, `n${marcaLoja(loja)}`, loja)
                       )}
                     </tr>
                   </thead>
@@ -470,12 +478,12 @@ export function Produtos() {
                             );
                           })}
                           {dados.modo === "vendidos" && <td className="n">{l.vendidas}</td>}
-                          {colunasLojas.map((loja) => {
+                          {colunasEstoque.map((loja) => {
                             const v = l.porLoja[loja] ?? 0;
                             return (
                               <td
                                 key={loja}
-                                className={`n ${tom(v)}${escolhidas.includes(loja) ? " loja-sel" : ""}`}
+                                className={`n ${tom(v)}${marcaLoja(loja)}`}
                               >
                                 {v}
                               </td>

@@ -615,6 +615,8 @@ th.num { text-align: right; }
 .prod-tbl td.vazio { color: var(--text-muted); font-weight: 400; }
 .prod-tbl td.negativo { color: var(--text-muted); }
 .prod-tbl .loja-sel { background: color-mix(in srgb, var(--brand) 9%, transparent); }
+/* Divisa entre as lojas escolhidas (que vêm primeiro) e as outras */
+.prod-tbl .loja-sel-fim { border-right: 1px solid var(--baseline); }
 .wday .wdia { display: block; font-size: 12px; opacity: 0.7; }
 
 /* Preços: bloco à parte, em tom mais suave que o estoque */
