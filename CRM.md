@@ -124,12 +124,11 @@ Só entra quem veio do painel logado como **Dono**:
 4. A WA-AKG continua pedindo o login dela por cima; desligue
    **Enable User Registration** em Settings.
 
-Não troque o `BASE_URL` do `WA-AKG\.env`: até a 1.6 a WA-AKG manda esse
-endereço a cada 30 segundos para o servidor de monitoramento do autor dela (o
-atualizador põe `ENABLE_TELEMETRY="false"`, que desliga isso na 1.7). Deixando
-`localhost`, o link público não vaza. O login funciona pelo link mesmo assim
-(ela aceita o endereço de quem acessa). O painel continua falando com ela por
-`http://localhost:3200`, então nada muda no CRM.
+No `WA-AKG\.env`: `BASE_URL="https://whats.viasolbrazil.com.br"` (libera o chat
+ao vivo pelo link; desde a 1.7, com `ENABLE_TELEMETRY="false"`, esse endereço não
+é mandado para ninguém) e **sem** `NEXTAUTH_URL` (com `localhost` ali, o login
+pelo link manda para o localhost). Mudou o `.env`: CRM → Configurar → Envio →
+Reiniciar WhatsApp. O painel continua falando com ela por `http://localhost:3200`.
 
 Comece com uma ou duas lojas e teto baixo. Se der problema de conexão
 repetido, o adaptador da Cloud API (oficial) está pronto em
