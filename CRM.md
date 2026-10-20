@@ -110,21 +110,19 @@ banco com o `.sql`. Sem restaurar o banco a versão antiga não lê as sessões
 
 ### Acessar a WA-AKG de fora (whats.viasolbrazil.com.br)
 
-1. Cloudflare → Networking → Tunnels → `painel` (o mesmo túnel, não precisa
-   de outro) → **Add route** → *Published application*: subdomínio `whats`,
-   domínio `viasolbrazil.com.br`, serviço `http://localhost:3200`.
-2. **Proteja antes de usar**: Zero Trust → Access → Applications → Add →
-   Self-hosted, domínio `whats.viasolbrazil.com.br`, política *Allow* com o
-   seu e-mail. Só entra quem recebe o código no e-mail. Isso importa porque a
-   WA-AKG até a 1.6 vem com o cadastro de usuários aberto e a senha da tela
-   /swagger visível no código da página (a 1.7 corrigiu as duas); quem
-   chegasse nela controlaria o WhatsApp de todas as lojas.
-3. Na WA-AKG → Settings, desligue **Enable User Registration**.
-4. No `WA-AKG\.env`, **não** deixe `NEXTAUTH_URL` (sem ele a WA-AKG usa o
-   endereço por onde a pessoa entrou; com `localhost`, o login pelo link
-   manda para o localhost) e ponha `BASE_URL="https://whats.viasolbrazil.com.br"`
-   (libera o chat ao vivo pelo link). Depois, CRM → Configurar → Envio →
-   **Reiniciar WhatsApp**.
+O painel tem uma portaria para a WA-AKG (porta 3300, dentro do próprio painel).
+Só entra quem veio do painel logado como **Dono**:
+
+1. Cloudflare → Networking → Tunnels → `painel` → Routes: a rota `whats`
+   (`whats.viasolbrazil.com.br`) aponta para `http://localhost:3300`, **não**
+   para a 3200. Apontando para a 3200, a WA-AKG fica aberta para qualquer um.
+2. Para entrar: botão "Abrir conversas" no Atendimento, ou
+   `painel.viasolbrazil.com.br/whats`. O painel gera um passe de uso único
+   (1 minuto) e a portaria troca por um cookie de 30 dias naquele navegador.
+   Quem abre `whats.` direto sem o cookie é mandado para o painel.
+3. Para sair num computador emprestado: `whats.viasolbrazil.com.br/__portao/sair`.
+4. A WA-AKG continua pedindo o login dela por cima; desligue
+   **Enable User Registration** em Settings.
 
 Não troque o `BASE_URL` do `WA-AKG\.env`: até a 1.6 a WA-AKG manda esse
 endereço a cada 30 segundos para o servidor de monitoramento do autor dela (o

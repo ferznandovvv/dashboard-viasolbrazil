@@ -120,7 +120,7 @@ export function PainelAtendimento() {
           <h2 id="at-geral-titulo">Lojas agora</h2>
           {p.gatewayUrl && (
             <span className="at-cab-acoes">
-              <a className="mini ghost" href={`${p.gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer">
+              <a className="mini ghost" href="/whats?volta=%2Fdashboard%2Fchat" target="_blank" rel="noreferrer">
                 Abrir conversas <span className="so-leitor">(abre em outra aba)</span>
               </a>
             </span>
@@ -337,7 +337,7 @@ function DetalheLoja({ loja, gatewayUrl, fechar }: { loja: string; gatewayUrl?: 
         </div>
         <span style={{ flex: 1 }} />
         {gatewayUrl && (
-          <a className="mini ghost" href={`${gatewayUrl}/dashboard/chat`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+          <a className="mini ghost" href="/whats?volta=%2Fdashboard%2Fchat" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
             Abrir conversas (WA-AKG) <span className="so-leitor">(abre em outra aba)</span>
           </a>
         )}

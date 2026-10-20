@@ -10,6 +10,7 @@ import { aquecer, continuarEstoque } from "./aquecer";
 import { completarTelefones, sincronizarDiaria } from "./crm/totvs";
 import { configurarWebhooks } from "./crm/webhookAuto";
 import { recuperarConversas } from "./crm/recuperar";
+import { ligarPortaoWhats } from "./acesso/portaoWhats";
 import { shopifyConfigured, sincronizarShopifyDiaria } from "./crm/shopify";
 import { totvsConfigured } from "./connectors/totvs";
 import { rodarAutomacoes } from "./crm/automacoes";
@@ -110,6 +111,8 @@ let iniciado = false;
 export function iniciarAgendador(): void {
   if (iniciado || !rodandoLocal()) return;
   iniciado = true;
+  // Portaria do link whats. (só deixa entrar na WA-AKG quem veio do painel como dono)
+  ligarPortaoWhats();
 
   const feitos = new Set<string>();
 
