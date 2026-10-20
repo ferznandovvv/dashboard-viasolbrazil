@@ -200,3 +200,32 @@ export function aplicarCancelamento(b: BaseCrm, vendaId: string): Devolucao | nu
   }
   return reg;
 }
+
+/**
+ * Pedido do site reembolsado em parte depois de entrar na base: a diferença
+ * para o valor que ficou vira devolução da própria venda (desconta no
+ * histórico e tira o cashback proporcional). Uma vez por valor novo.
+ */
+export function aplicarReembolsoParcial(b: BaseCrm, vendaId: string, valorAtual: number): Devolucao | null {
+  const v = b.vendas.find((x) => x.id === vendaId);
+  if (!v) return null;
+  const diferenca = arred(aberto(v) - valorAtual);
+  if (diferenca < 0.01) return null;
+  b.devolucoes ??= [];
+  const id = `reembolso-${vendaId}-${Math.round(valorAtual * 100)}`;
+  if (b.devolucoes.some((d) => d.id === id)) return null;
+  const reg: Devolucao = { id, tipo: "devolucao", loja: v.loja, data: new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10), valor: diferenca, clienteId: v.clienteId, nomeNaNota: v.nomeNaNota, estorno: 0, partes: [], vendas: [vendaId], obs: "Reembolso parcial no site", vistoEm: new Date().toISOString() };
+  b.devolucoes.push(reg);
+  const cred = b.cashback.find((m) => m.tipo === "credito" && m.vendaId === vendaId);
+  const estorno = cred && v.valor > 0 ? arred(Math.min((diferenca * cred.valor) / v.valor, creditoLiquidoDaVenda(b, vendaId))) : 0;
+  v.devolvido = arred((v.devolvido ?? 0) + diferenca);
+  reg.partes!.push({ vendaId, valor: diferenca, estorno });
+  if (estorno >= 0.01 && v.clienteId) {
+    const { partes, faltou } = caberNoSaldo(b, v.clienteId, [{ venda: v, valor: estorno }]);
+    lancar(b, reg, partes, v.loja);
+    reg.partes![0].estorno = partes[0].valor;
+    reg.estorno = partes[0].valor;
+    if (faltou > 0) reg.obs += `. Ela já tinha usado ${reais(faltou)} desse cashback: isso não volta`;
+  }
+  return reg;
+}

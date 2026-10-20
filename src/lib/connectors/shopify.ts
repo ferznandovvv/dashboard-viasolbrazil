@@ -6,6 +6,9 @@ import "../credenciais"; // chaves salvas em disco, quando roda fora da Vercel
 
 const API_VERSION = "2024-10";
 
+/** Pedido pago, inclusive o que teve parte reembolsada (vale o valor que ficou). */
+const PAGOS = "(financial_status:paid OR financial_status:partially_refunded)";
+
 interface ShopifyOrderNode {
   id: string;
   name: string;
@@ -82,8 +85,9 @@ async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
           body: JSON.stringify({
             query,
             variables: {
-              // Só pedidos efetivamente pagos — pagamento pendente não é venda
-              query: `created_at:>='${since.toISOString()}'${ate ? ` AND created_at:<'${ate.toISOString()}'` : ""} AND financial_status:paid`,
+              // Só pedidos efetivamente pagos — pagamento pendente não é venda. O
+              // reembolsado em parte continua venda, pelo valor que ficou (current total)
+              query: `created_at:>='${since.toISOString()}'${ate ? ` AND created_at:<'${ate.toISOString()}'` : ""} AND ${PAGOS}`,
               cursor,
             },
           }),
@@ -133,7 +137,8 @@ async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
   }
 }
 
-const PREFIXO_MES = "shopifymes/";
+// v2: o total do mês passou a contar o pedido reembolsado em parte (antes sumia inteiro)
+const PREFIXO_MES = "shopifymes2/";
 
 /**
  * Total pago do site num mês (AAAA-MM, no fuso de São Paulo), para o
@@ -169,7 +174,7 @@ export async function totalShopifyDoMes(mes: string): Promise<number | null> {
               }
             }`,
             variables: {
-              query: `created_at:>='${mes}-01T00:00:00-03:00' AND created_at:<'${proximo}-01T00:00:00-03:00' AND financial_status:paid`,
+              query: `created_at:>='${mes}-01T00:00:00-03:00' AND created_at:<'${proximo}-01T00:00:00-03:00' AND ${PAGOS}`,
               cursor,
             },
           }),

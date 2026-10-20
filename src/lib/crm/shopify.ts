@@ -12,6 +12,7 @@ import { env } from "../env";
 import "../credenciais";
 import { alterarBase, hojeSp, lerBase, somarDias } from "./base";
 import { registrarVenda, salvarCliente } from "./clientes";
+import { aplicarReembolsoParcial } from "./devolucoes";
 import type { BaseCrm, Venda } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
@@ -68,7 +69,9 @@ interface PedidoNode {
  */
 function pedidoElegivel(n: PedidoNode): boolean {
   if (n.cancelledAt) return false;
-  if (n.displayFinancialStatus && n.displayFinancialStatus !== "PAID") return false;
+  // Reembolsado em parte continua compra, pelo valor que ficou
+  if (n.displayFinancialStatus && n.displayFinancialStatus !== "PAID" && n.displayFinancialStatus !== "PARTIALLY_REFUNDED") return false;
+  if (parseFloat(n.currentTotalPriceSet.shopMoney.amount) < 0.01) return false;
   if (n.disputes?.length) return false;
   if ((n.risk?.recommendation ?? "").toUpperCase() === "CANCEL") return false;
   return true;
@@ -190,6 +193,8 @@ export async function sincronizarShopify(de: string, ate: string, opcoes: { cred
           if (nova) progressoShopify.clientesNovos++;
           else progressoShopify.clientesAtualizados++;
         }
+        // Pedido que já tinha entrado e teve parte reembolsada: desconta e tira o cashback dessa parte
+        if (b.vendas.some((v) => v.id === venda.id)) aplicarReembolsoParcial(b, venda.id, venda.valor);
         if (registrarVenda(b, venda)) progressoShopify.vendasNovas++;
       }
       b.config.cashbackPct = pctAntes;
