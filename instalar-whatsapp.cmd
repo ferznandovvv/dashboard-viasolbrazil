@@ -98,7 +98,6 @@ if exist ".env" (
   >> .env echo BASE_URL="http://localhost:%PORTA%"
   >> .env echo NODE_ENV="production"
   >> .env echo HOSTNAME="0.0.0.0"
-  >> .env echo NEXTAUTH_URL="http://localhost:%PORTA%"
   >> .env echo AUTH_TRUST_HOST="true"
   >> .env echo NEXT_PUBLIC_APP_URL="http://localhost:%PORTA%"
   >> .env echo NEXT_PUBLIC_API_URL="http://localhost:%PORTA%/api"

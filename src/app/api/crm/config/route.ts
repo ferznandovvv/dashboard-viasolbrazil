@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { NextRequest, NextResponse } from "next/server";
 import { lerFaixa } from "@/lib/crm/atendimento";
 import { configurarWebhooks, urlDoWebhook, webhookQueVale } from "@/lib/crm/webhookAuto";
@@ -33,7 +34,8 @@ type Pedido =
   | { tipo: "modelo"; modelo: Modelo }
   | { tipo: "testar-numero"; loja: string }
   | { tipo: "backup" }
-  | { tipo: "limpar-atendimento"; loja: string };
+  | { tipo: "limpar-atendimento"; loja: string }
+  | { tipo: "reiniciar-waakg" };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
   const n = Number(v);
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
       const wh = adaptador.garantirWebhook ? await adaptador.garantirWebhook(n.sessao, vale.url) : null;
       return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe, vale.aviso].filter(Boolean).join(" · ") });
     }
+    if (p.tipo === "reiniciar-waakg") return NextResponse.json(await reiniciarWaakg());
     if (p.tipo === "limpar-atendimento") {
       // Apaga as conversas registradas de uma loja (ex.: o número de teste)
       const n = await alterarBase((b) => {
@@ -167,4 +170,33 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ erro: e instanceof Error ? e.message : "Erro" }, { status: 400 });
   }
+}
+
+/**
+ * Reinicia a WA-AKG de longe (ex.: depois de mudar o .env dela). Só derruba se
+ * ela foi ligada pelo painel, que a religa sozinho em uns 10 segundos; aberta
+ * por fora, ninguém religaria, então não mexe.
+ */
+function reiniciarWaakg(): Promise<{ ok: boolean; detalhe: string }> {
+  if (process.platform !== "win32") return Promise.resolve({ ok: false, detalhe: "Só funciona no computador com Windows onde a WA-AKG roda." });
+  const script = `
+$ps = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -match 'server.index\\.ts' })
+if ($ps.Count -eq 0) { 'nao-rodando'; exit }
+$doPainel = $false
+foreach ($p in $ps) {
+  $pai = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)" -ErrorAction SilentlyContinue
+  if ($pai -and $pai.CommandLine -match 'painel\\.mjs') { $doPainel = $true }
+}
+if (-not $doPainel) { 'por-fora'; exit }
+$ps | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+'ok'`;
+  return new Promise((resolve) => {
+    execFile("powershell", ["-NoProfile", "-Command", script], { timeout: 30000 }, (erro, saida) => {
+      const r = String(saida ?? "").trim().split(/\s+/).pop();
+      if (r === "ok") resolve({ ok: true, detalhe: "WhatsApp reiniciando. Volta em uns 30 segundos." });
+      else if (r === "nao-rodando") resolve({ ok: false, detalhe: "A WA-AKG não está rodando. O painel deve ligá-la em até 1 minuto." });
+      else if (r === "por-fora") resolve({ ok: false, detalhe: "A WA-AKG foi aberta fora do painel (iniciar-whatsapp.cmd); feche aquela janela e reinicie o painel." });
+      else resolve({ ok: false, detalhe: `Não consegui reiniciar${erro ? `: ${erro.message}` : ""}` });
+    });
+  });
 }

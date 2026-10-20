@@ -120,6 +120,11 @@ banco com o `.sql`. Sem restaurar o banco a versão antiga não lê as sessões
    /swagger visível no código da página (a 1.7 corrigiu as duas); quem
    chegasse nela controlaria o WhatsApp de todas as lojas.
 3. Na WA-AKG → Settings, desligue **Enable User Registration**.
+4. No `WA-AKG\.env`, **não** deixe `NEXTAUTH_URL` (sem ele a WA-AKG usa o
+   endereço por onde a pessoa entrou; com `localhost`, o login pelo link
+   manda para o localhost) e ponha `BASE_URL="https://whats.viasolbrazil.com.br"`
+   (libera o chat ao vivo pelo link). Depois, CRM → Configurar → Envio →
+   **Reiniciar WhatsApp**.
 
 Não troque o `BASE_URL` do `WA-AKG\.env`: até a 1.6 a WA-AKG manda esse
 endereço a cada 30 segundos para o servidor de monitoramento do autor dela (o

@@ -236,6 +236,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
                       dica="É o que os botões de abrir conversas usam. Vazio = abre pelo endereço de cima (só funciona neste computador)."
                     />
                     <Campo rotulo={`API Key${d.temWaakgApiKey ? " (salva)" : ""}`} valor={cfg.waakgApiKey ?? ""} onChange={t("waakgApiKey")} texto placeholder="cole pra trocar" />
+                    <ReiniciarWhats />
                   </>
                 )}
                 {cfg.provedor === "cloudapi" && <Campo rotulo={`Token de acesso${d.temCloudApiToken ? " (salvo)" : ""}`} valor={cfg.cloudApiToken ?? ""} onChange={t("cloudApiToken")} texto placeholder="cole pra trocar" />}
@@ -569,5 +570,35 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
         })}
       {erro && <div className="login-error">{erro}</div>}
     </section>
+  );
+}
+
+/** Reinicia a WA-AKG no computador do painel (serve de longe, pelo link). */
+function ReiniciarWhats() {
+  const [msg, setMsg] = useState("");
+  const [indo, setIndo] = useState(false);
+  const reiniciar = async () => {
+    if (!window.confirm("Reiniciar o WhatsApp de todas as lojas? Fica fora uns 30 segundos.")) return;
+    setIndo(true);
+    setMsg("");
+    try {
+      const r = await api<{ ok: boolean; detalhe: string }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "reiniciar-waakg" }) });
+      setMsg(r.detalhe);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "erro");
+    } finally {
+      setIndo(false);
+    }
+  };
+  return (
+    <div className="cfg-campo">
+      <span>Reiniciar a WA-AKG</span>
+      <div>
+        <button className="mini ghost" onClick={reiniciar} disabled={indo}>
+          {indo ? "Reiniciando…" : "Reiniciar WhatsApp"}
+        </button>
+      </div>
+      <small>{msg || "Use depois de mudar a configuração dela ou se ela travar. As conversas perdidas nesse meio tempo o painel busca sozinho."}</small>
+    </div>
   );
 }
