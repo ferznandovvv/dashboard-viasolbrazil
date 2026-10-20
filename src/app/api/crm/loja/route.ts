@@ -145,8 +145,10 @@ export async function POST(req: NextRequest) {
       const r = await alterarBase((b) => {
         const { cliente, nova } = salvarCliente(b, { nome: p.nome, telefone: p.telefone, nascimento: p.nascimento, cpf: p.cpf, lojaOrigem: p.loja, optIn: p.optIn }, "loja");
         if (p.optIn) {
+          // A cliente aceitou de novo no caixa: vale mais que um SAIR antigo
           cliente.optIn = true;
           cliente.optOut = false;
+          if (cliente.telefone && b.naoContatar) delete b.naoContatar[cliente.telefone];
         }
         let boasVindas = false;
         if (nova && p.optIn) boasVindas = Boolean(enfileirar(b, { cliente, campanha: "boas_vindas", loja: p.loja, chave: `bv-${cliente.id}` }).mensagem);

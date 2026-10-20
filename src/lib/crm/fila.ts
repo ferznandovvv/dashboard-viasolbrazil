@@ -150,7 +150,25 @@ export interface EventoRecebido {
   recuperada?: boolean;
 }
 
-const OPT_OUT = /^\s*(sair|parar|pare|stop|cancelar|cancela|remover|descadastrar|n[aã]o quero( mais)?( receber)?)\b/i;
+/**
+ * A cliente está pedindo para não receber mais? Palavra sozinha ("SAIR",
+ * "parar", "stop", com "por favor" ou emoji) ou frase clara ("me tira da
+ * lista", "não quero mais receber", "parem de mandar"). "Cancelar a compra"
+ * ou "pare aí na frente" não contam.
+ */
+export function pedeParaSair(texto?: string): boolean {
+  const t = (texto ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return false;
+  if (/(quero sair|sair da (lista|lista de transmissao)|me (tira|tire|retira|retire|remove|remova|exclui|exclua|descadastra)|descadastr|nao (quero|desejo) (mais )?(receber|mensage)|(para|param|parar|pare|parem) de (me )?(mandar|enviar)|nao (me )?(mand|envi)(e|em) mais|remov(e|er|a) (meu|o meu) (numero|contato)|nao tenho interesse)/.test(t)) return true;
+  const sobra = t.replace(/\b(por favor|pfv|pf|obrigad[ao]s?|obg|ok|ta|eu|quero|so)\b/g, " ").replace(/\s+/g, " ").trim();
+  return /^(sair|sai|parar|pare|stop|cancelar|descadastrar|remover|chega)$/.test(sobra);
+}
 
 /**
  * A mensagem já está no atendimento? Pelo código do WhatsApp; para as gravadas
@@ -218,6 +236,11 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
       recebidoEm: ev.recuperada && ev.em ? ev.em : new Date().toISOString(),
     });
     if (b.recebidas.length > 5000) b.recebidas.splice(0, b.recebidas.length - 5000);
+    // Pedido de SAIR vale pelo telefone, mesmo de quem ainda não está cadastrada
+    if (pedeParaSair(texto)) {
+      (b.naoContatar ??= {})[ev.telefone] = { em: ev.em ?? new Date().toISOString(), loja, texto: texto.slice(0, 120) };
+      feito = "opt-out";
+    }
     if (!cliente) return;
 
     // Última mensagem nossa para ela nos últimos 7 dias vira "respondida"
@@ -234,7 +257,7 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     cliente.semResposta = 0;
     cliente.atualizadoEm = new Date().toISOString();
 
-    if (OPT_OUT.test(texto)) {
+    if (feito === "opt-out") {
       cliente.optOut = true;
       cliente.optOutEm = new Date().toISOString();
       // Cancela o que ainda estava na fila para ela

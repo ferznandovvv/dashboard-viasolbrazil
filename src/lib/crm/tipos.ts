@@ -355,6 +355,11 @@ export interface BaseCrm {
   mensagens: Mensagem[];
   recebidas: Recebida[];
   atendimento: Atendimento[];
+  /**
+   * Telefones que pediram para não receber mais (SAIR), cadastrados ou não:
+   * vale para qualquer cliente com esse telefone, inclusive cadastrada depois.
+   */
+  naoContatar?: Record<string, { em: string; loja?: string; texto?: string }>;
   /** "Não precisa responder": loja|telefone → até quando (ISO) a espera foi dispensada */
   atendimentoIgnorado?: Record<string, string>;
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */

@@ -61,6 +61,12 @@ export async function GET(req: NextRequest) {
       eventos: base.atendimento.length,
     },
     pendentes: await nomearPendentes(base, p.semana.pendentes.slice(0, 100)),
+    // Quem respondeu SAIR (ou parecido) nos últimos 60 dias
+    sairam: Object.entries(base.naoContatar ?? {})
+      .filter(([, x]) => x.em >= new Date(Date.now() - 60 * 86400000).toISOString())
+      .sort((a, b) => b[1].em.localeCompare(a[1].em))
+      .slice(0, 50)
+      .map(([telefone, x]) => ({ telefone, nome: base.clientes.find((c) => c.telefone === telefone)?.nome, ...x })),
     envio: {
       modoSombra: cfg.modoSombra,
       pausado: cfg.pausado,

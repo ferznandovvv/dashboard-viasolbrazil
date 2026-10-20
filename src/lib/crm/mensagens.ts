@@ -145,7 +145,7 @@ export function mensagensNoMes(base: BaseCrm, clienteId: string): number {
 export function motivoBloqueio(base: BaseCrm, c: Cliente, campanha: TipoCampanha, forcar = false): string | undefined {
   if (!c.telefone) return "sem telefone";
   if (forcar) return undefined;
-  if (c.optOut) return "pediu para não receber";
+  if (c.optOut || base.naoContatar?.[c.telefone]) return "pediu para não receber";
   if (!c.optIn) return "sem aceite";
   if (ehMarketing(campanha) && c.semResposta >= base.config.maxSemResposta) return "sem resposta nas últimas campanhas";
   if (!FORA_DO_LIMITE.includes(campanha) && mensagensNoMes(base, c.id) >= base.config.maxMensagensMes) return "já recebeu o máximo do mês";

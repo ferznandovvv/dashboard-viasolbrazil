@@ -42,6 +42,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         case "optout":
           c.optOut = a.valor;
           c.optOutEm = a.valor ? new Date().toISOString() : undefined;
+          // "Voltar a receber" também tira o telefone da lista de quem pediu SAIR
+          if (!a.valor && c.telefone && b.naoContatar) delete b.naoContatar[c.telefone];
           if (a.valor) for (const m of b.mensagens) if (m.clienteId === id && m.status === "fila") m.status = "cancelada";
           return { ok: true };
         case "resgate":

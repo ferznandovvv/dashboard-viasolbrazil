@@ -35,6 +35,7 @@ interface Painel {
     eventos: number;
   };
   pendentes: Pendente[];
+  sairam?: { telefone: string; nome?: string; em: string; loja?: string; texto?: string }[];
   envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number };
   gatewayUrl?: string;
 }
@@ -276,6 +277,30 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
       </div>
 
       <CapturaCelular />
+
+      {p.sairam && p.sairam.length > 0 && (
+        <section className="card">
+          <h2>Pediram para não receber mensagens</h2>
+          <p className="muted pg-nota">
+            Responderam SAIR (ou parecido) nos últimos 60 dias. O sistema não manda mais nada automático para esse telefone, em nenhuma loja. A loja pode continuar respondendo se a cliente chamar, mas não deve mandar promoção.
+          </p>
+          <ul className="pend-lista">
+            {p.sairam.map((x) => (
+              <li key={x.telefone} className="pend sair">
+                <div className="pend-quem">
+                  {x.loja && <span className="pend-loja">{x.loja}</span>}
+                  <b>{x.nome ?? "Não cadastrada"}</b>
+                  <small>{formatarTelefone(x.telefone)}</small>
+                </div>
+                {x.texto && <p className="pend-texto">“{x.texto}”</p>}
+                <div className="pend-tempo">
+                  <small>{dataHora(x.em)}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <ConferenciaCashback />
     </div>
