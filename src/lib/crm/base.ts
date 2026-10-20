@@ -161,6 +161,26 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Lançamento: as vendas das lojas desde 16/10 entraram pela carga (sem
+    // cashback). O Fernando decidiu creditar todas elas, com a regra de hoje;
+    // o aviso sai na automação seguinte, com a data de cada compra.
+    id: "cashback-retroativo-2026-10-16",
+    aplicar: (b) => {
+      const pct = b.config.cashbackPct;
+      if (!(pct > 0)) return;
+      const creditadas = new Set(b.cashback.filter((m) => m.tipo === "credito").map((m) => m.vendaId));
+      const agora = new Date().toISOString();
+      for (const v of b.vendas) {
+        if (v.loja === "Site" || !v.clienteId || v.valor <= 0 || v.valor < b.config.cashbackCompraMinima) continue;
+        if (v.data.slice(0, 10) < "2026-10-16" || creditadas.has(v.id)) continue;
+        const valor = Math.round(v.valor * pct) / 100;
+        if (valor < 0.01) continue;
+        b.cashback.push({ id: novoId(), clienteId: v.clienteId, tipo: "credito", valor, vendaId: v.id, validade: somarDias(v.data.slice(0, 10), b.config.cashbackValidadeDias), loja: v.loja, criadoEm: agora, por: "sistema" });
+        creditadas.add(v.id);
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
