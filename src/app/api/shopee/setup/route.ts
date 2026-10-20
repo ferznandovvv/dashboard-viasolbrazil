@@ -67,6 +67,8 @@ export async function GET(req: NextRequest) {
        sozinha para esta página.</p>
        <p style="font-size:12.5px">Se a Shopee recusar o endereço de retorno: no app do
        Open Platform, o domínio de redirecionamento tem que ser <code>${new URL(redirect).host}</code>.</p>
+       <p style="font-size:12.5px">Se ela responder <code>invalid_partner_id</code>, o Partner ID salvo é o
+       de teste: faça o Go Live do app no Open Platform e cole o <b>Live</b> Partner ID e a Live Partner Key.</p>
        <a class="btn" href="${url}">Autorizar a loja na Shopee</a>`,
       true
     );

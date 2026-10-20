@@ -80,8 +80,12 @@ export const INTEGRACOES: Integracao[] = [
     nome: "Shopee",
     para: "Pedidos da Shopee",
     campos: [
-      { nome: "SHOPEE_PARTNER_ID", rotulo: "Partner ID", dica: "open.shopee.com → Console → seu app" },
-      { nome: "SHOPEE_PARTNER_KEY", rotulo: "Partner Key", dica: "open.shopee.com → Console → seu app (Live)" },
+      {
+        nome: "SHOPEE_PARTNER_ID",
+        rotulo: "Partner ID (Live)",
+        dica: "open.shopee.com → App List → seu app. Use o Live, que aparece depois do Go Live: o de teste dá \"invalid_partner_id\"",
+      },
+      { nome: "SHOPEE_PARTNER_KEY", rotulo: "Partner Key (Live)", dica: "Mesmo lugar: a Live Partner Key, não a de teste" },
     ],
     geradas: ["SHOPEE_REFRESH_TOKEN", "SHOPEE_SHOP_ID"],
     autorizar: "/api/shopee/setup",
