@@ -24,6 +24,8 @@ export interface Variaveis {
   compraMinima?: string;
   /** Endereço da loja próxima (vira " (endereço)" no texto, ou nada) */
   endereco?: string;
+  /** Dia da compra (AAAA-MM-DD): vira {quando} = "ontem" / "no dia 16/10" e {daCompra} = "de ontem" / "do dia 16/10" */
+  dataCompra?: string;
 }
 
 /** Compra mínima para usar `valor` de cashback, pela regra do múltiplo. */
@@ -46,6 +48,14 @@ export function assinatura(base: BaseCrm, loja?: string, vendedoraCpf?: string):
   return p[0].toUpperCase() + p.slice(1).toLowerCase();
 }
 
+/** "ontem" se a compra foi ontem; senão "no dia 16/10" (ou "do dia 16/10"). Sem data: vazio. */
+function quandoFoi(data: string | undefined, ontem: string, prefixo: string): string {
+  if (!data) return "";
+  const d = data.slice(0, 10);
+  if (d === somarDias(hojeSp(), -1)) return ontem;
+  return `${prefixo} ${d.slice(8, 10)}/${d.slice(5, 7)}`;
+}
+
 export function renderizar(texto: string, cliente: Cliente, loja: string, v: Variaveis = {}): string {
   return texto
     .replace(/\{primeiro\}/g, primeiroNome(cliente.nome))
@@ -60,6 +70,8 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{vendedora\}/g, v.vendedora ?? "equipe")
     .replace(/\{compraMinima\}/g, v.compraMinima ?? "")
     .replace(/\{endereco\}/g, v.endereco?.trim() ? ` (${v.endereco.trim()})` : "")
+    .replace(/\{quando\}/g, quandoFoi(v.dataCompra, "ontem", "no dia"))
+    .replace(/\{daCompra\}/g, quandoFoi(v.dataCompra, "de ontem", "do dia"))
     // Sem vendedora: "aqui é a equipe, da Via Sol Centro" vira "aqui é da Via Sol Centro"
     .replace(/(^|[\s,])([EeÉé]) a equipe,? da /g, "$1$2 da ")
     .replace(/(^|[\s,])([EeÉé]) a equipe\b/g, "$1$2 da equipe")

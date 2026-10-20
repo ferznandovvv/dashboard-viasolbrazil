@@ -529,7 +529,7 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
     <section className="card cfg-card">
       <h2>Textos das campanhas</h2>
       <div className="muted" style={{ marginBottom: 12 }}>
-        Cada campanha tem variações; o sistema sorteia uma por mensagem, pro mesmo número não mandar sempre igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{vendedora}"} (quem assina), {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{compraMinima}"} (compra mínima pra usar o valor), {"{oferta}"} e {"{codigo}"} (aniversário e reativação; o código é único por mensagem e mede qual campanha trouxe a cliente), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
+        Cada campanha tem variações; o sistema sorteia uma por mensagem, pro mesmo número não mandar sempre igual. Variáveis: {"{primeiro}"} (primeiro nome), {"{nome}"}, {"{vendedora}"} (quem assina), {"{loja}"}, {"{valor}"}, {"{validade}"}, {"{compraMinima}"} (compra mínima pra usar o valor), {"{quando}"} e {"{daCompra}"} (dia da compra: &quot;ontem&quot; / &quot;no dia 16/10&quot; e &quot;de ontem&quot; / &quot;do dia 16/10&quot;), {"{oferta}"} e {"{codigo}"} (aniversário e reativação; o código é único por mensagem e mede qual campanha trouxe a cliente), {"{lojaProxima}"} e {"{cidade}"} (compra no site com loja na cidade dela).
       </div>
       {d.campanhas
         .filter((c) => c.id !== "avulsa")

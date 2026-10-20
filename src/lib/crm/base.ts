@@ -148,6 +148,19 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Lançamento do cashback nas lojas: o texto leva a data certa da compra
+    // (não "ontem" fixo) e, na primeira fase, só saem os avisos de cashback
+    // (aniversário fica para depois)
+    id: "lancamento-cashback-v1",
+    aplicar: (b) => {
+      for (const m of b.modelos) {
+        if (m.campanha === "cashback_creditado")
+          m.variacoes = m.variacoes.map((t) => t.replace("Sua compra de ontem", "Sua compra {daCompra}").replace("obrigada pela visita ontem!", "obrigada pela visita {quando}!"));
+        if (m.campanha === "aniversario") m.ativo = false;
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

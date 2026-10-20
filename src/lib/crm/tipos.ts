@@ -408,8 +408,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "cashback_creditado",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, tudo bem? Aqui é a {vendedora}, da Via Sol {loja} ☀️ Sua compra de ontem rendeu {valor} de cashback, que fica guardado no seu nome até {validade}. Pra usar, a compra precisa ser pelo menos {compraMinima}. Quando quiser vir, me avisa que eu te recebo.",
-      "{primeiro}, obrigada pela visita ontem! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Quando chegar peça nova eu te mando foto, pode ser?",
+      "Oi {primeiro}, tudo bem? Aqui é a {vendedora}, da Via Sol {loja} ☀️ Sua compra {daCompra} rendeu {valor} de cashback, que fica guardado no seu nome até {validade}. Pra usar, a compra precisa ser pelo menos {compraMinima}. Quando quiser vir, me avisa que eu te recebo.",
+      "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Quando chegar peça nova eu te mando foto, pode ser?",
       "Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Entrou {valor} de cashback pra você, válido até {validade} em qualquer loja nossa (vale em compra a partir de {compraMinima}). Adorei te atender, volta logo.",
     ],
   },
