@@ -53,6 +53,8 @@ export interface Venda {
   desconto?: number;
   /** A nota tem frete de motoboy/entrega (venda à distância), quando veio com os itens */
   entrega?: boolean;
+  /** Referências dos produtos da nota (código do item), quando veio com os itens: liga a devolução à compra certa */
+  itens?: string[];
   origem: "totvs" | "shopify" | "csv" | "manual";
 }
 
@@ -75,6 +77,32 @@ export interface MovimentoCashback {
   criadoEm: string;
   /** Quem registrou (vendedora, sistema) */
   por?: string;
+  /** Estorno por devolução ou nota cancelada: id do registro em `devolucoes` */
+  devolucaoId?: string;
+}
+
+/**
+ * Devolução (nota de entrada de devolução de venda) ou venda cancelada na
+ * TOTVS, e quanto de cashback saiu por causa dela. Fica registrada mesmo
+ * quando não tira nada, para não ser lida de novo e para o dono conferir.
+ */
+export interface Devolucao {
+  /** Nota de entrada (filial-sequência) ou "cancelada-" + id da venda */
+  id: string;
+  tipo: "devolucao" | "cancelamento";
+  loja: string;
+  /** YYYY-MM-DD */
+  data: string;
+  valor: number;
+  clienteId?: string;
+  nomeNaNota?: string;
+  /** Cashback tirado (R$, positivo) */
+  estorno: number;
+  /** Vendas de onde o cashback saiu */
+  vendas?: string[];
+  /** Por que não tirou nada, ou tirou menos */
+  obs?: string;
+  vistoEm: string;
 }
 
 /**
@@ -336,6 +364,8 @@ export interface ConfigCrm {
   sincVendasDesde?: string;
   /** Último dia coberto pela sincronização automática do TOTVS, e quando ela terminou bem */
   diariaTotvsAte?: string;
+  /** Até que dia as devoluções da TOTVS já foram conferidas (estorno de cashback) */
+  devolucoesAte?: string;
   diariaTotvsEm?: string;
   ultimaSincShopify?: string;
   ultimaSincShopifyResultado?: string;
@@ -360,6 +390,8 @@ export interface BaseCrm {
    * vale para qualquer cliente com esse telefone, inclusive cadastrada depois.
    */
   naoContatar?: Record<string, { em: string; loja?: string; texto?: string }>;
+  /** Devoluções e vendas canceladas já conferidas (estorno de cashback) */
+  devolucoes?: Devolucao[];
   /** "Não precisa responder": loja|telefone → até quando (ISO) a espera foi dispensada */
   atendimentoIgnorado?: Record<string, string>;
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */

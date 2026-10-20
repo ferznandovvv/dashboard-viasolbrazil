@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, dataHora } from "./comum";
+import { api, brl, dataBr, dataHora } from "./comum";
 import { Janela } from "./Clientes";
 import { formatarTelefone } from "@/lib/crm/telefone";
 import type { CardLoja } from "@/lib/crm/painel";
+import type { Devolucao } from "@/lib/crm/tipos";
 
 type Loja = CardLoja & { conectado: boolean | null; detalheNumero?: string; peloWhats: { vendas: number; valor: number; pctVendas: number | null } };
 
@@ -36,6 +37,7 @@ interface Painel {
   };
   pendentes: Pendente[];
   sairam?: { telefone: string; nome?: string; em: string; loja?: string; texto?: string }[];
+  devolucoes?: (Devolucao & { nome?: string })[];
   envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number };
   gatewayUrl?: string;
 }
@@ -296,6 +298,29 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
                 <div className="pend-tempo">
                   <small>{dataHora(x.em)}</small>
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {p.devolucoes && p.devolucoes.length > 0 && (
+        <section className="card">
+          <h2>Devoluções e vendas canceladas</h2>
+          <p className="muted pg-nota">
+            Últimos 30 dias, só de clientes do CRM. Quando a peça volta, sai o cashback que ela gerou (a parte do valor devolvido); venda cancelada perde o cashback inteiro. Se a cliente já tinha usado, o que ela usou não volta.
+          </p>
+          <ul className="pend-lista">
+            {p.devolucoes.map((d) => (
+              <li key={d.id} className="pend">
+                <div className="pend-quem">
+                  <span className="pend-loja">{d.loja}</span>
+                  <b>{d.nome ?? "Sem nome"}</b>
+                  <small>
+                    {d.tipo === "cancelamento" ? "venda cancelada" : "devolução"} de {brl.format(d.valor)} em {dataBr(d.data)}
+                  </small>
+                </div>
+                <p className="pend-texto">{d.estorno > 0 ? `Saiu ${brl.format(d.estorno)} de cashback` : "Não mexeu no cashback"}{d.obs ? `. ${d.obs}` : ""}</p>
               </li>
             ))}
           </ul>

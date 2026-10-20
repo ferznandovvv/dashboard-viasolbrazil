@@ -15,6 +15,7 @@ export interface CreditoAberto {
   restante: number;
   validade: string;
   criadoEm: string;
+  vendaId?: string;
 }
 
 /** Créditos ainda válidos e não consumidos de uma cliente, do mais antigo ao mais novo. */
@@ -30,7 +31,18 @@ export function creditosAbertos(base: BaseCrm, clienteId: string, hoje = hojeSp(
         restante: m.valor,
         validade: m.validade ?? somarDias(m.criadoEm.slice(0, 10), base.config.cashbackValidadeDias),
         criadoEm: m.criadoEm,
+        vendaId: m.vendaId,
       });
+    } else if (m.devolucaoId && m.vendaId) {
+      // Estorno de devolução sai primeiro do crédito da compra devolvida
+      let falta = -m.valor;
+      const daVenda = creditos.find((c) => c.vendaId === m.vendaId);
+      if (daVenda) {
+        const usa = Math.min(daVenda.restante, falta);
+        daVenda.restante = arred(daVenda.restante - usa);
+        falta = arred(falta - usa);
+      }
+      debitoPendente += falta;
     } else {
       debitoPendente += -m.valor;
     }

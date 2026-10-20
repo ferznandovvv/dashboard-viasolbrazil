@@ -67,6 +67,11 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b[1].em.localeCompare(a[1].em))
       .slice(0, 50)
       .map(([telefone, x]) => ({ telefone, nome: base.clientes.find((c) => c.telefone === telefone)?.nome, ...x })),
+    devolucoes: (base.devolucoes ?? [])
+      .filter((d) => d.vistoEm >= new Date(Date.now() - 30 * 86400000).toISOString() && (d.clienteId || d.tipo === "cancelamento"))
+      .sort((a, b) => b.data.localeCompare(a.data))
+      .slice(0, 60)
+      .map((d) => ({ ...d, nome: base.clientes.find((c) => c.id === d.clienteId)?.nome ?? d.nomeNaNota })),
     envio: {
       modoSombra: cfg.modoSombra,
       pausado: cfg.pausado,

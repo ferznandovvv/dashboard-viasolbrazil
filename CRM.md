@@ -304,8 +304,21 @@ TOTVS). Só colocam mensagens na fila:
 | Reativação | desligada até combinar com as gerentes; oferta por faixa de total gasto (R$ 500 → 10%, R$ 1.000 → presente) | marketing |
 
 Regra do cashback combinada: **15%** da compra, válido por **90 dias**, e a
-compra em que ela usa precisa ser **pelo menos 3 vezes** o valor usado (ou
-seja, o cashback paga no máximo um terço). Compra no site também gera.
+compra em que ela usa precisa ser **pelo menos 5 vezes** o valor usado (ou
+seja, o cashback paga no máximo um quinto). Compra no site também gera, e
+compra paga em parte com cashback também gera (sobre o valor da nota).
+
+Devolução e venda cancelada tiram o cashback (`src/lib/crm/devolucoes.ts`).
+A sincronização diária lê as notas de entrada "DEVOLUCAO DE VENDA" e as
+vendas que ficaram canceladas. A TOTVS não diz de qual venda a peça voltou,
+então o sistema procura a compra dela com cashback do mesmo dia ou antes;
+quando as duas notas têm os itens, só vale a compra com a mesma peça (peça
+de compra antiga, de antes do cashback, não tira nada). Sai a parte
+proporcional ao valor devolvido; venda cancelada perde tudo e sai da base.
+Nunca tira mais que o saldo: o que ela já usou fica. Troca = devolução +
+venda nova, então o cashback fica só o da compra nova. Se o aviso de
+cashback ainda estava na fila e não sobrou nada, ele é cancelado. A lista
+dos últimos 30 dias aparece na Visão geral.
 
 Os textos têm variações (sorteadas) e aceitam `{primeiro}`, `{nome}`,
 `{loja}`, `{valor}`, `{validade}`, `{codigo}`. Edite em Configurar → Textos.

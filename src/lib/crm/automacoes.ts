@@ -5,6 +5,7 @@
 
 import { alterarBase, diasEntre, hojeSp, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
+import { creditoLiquidoDaVenda } from "./devolucoes";
 import { resumir } from "./clientes";
 import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
@@ -84,11 +85,14 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
     const venda = mov.vendaId ? vendaPorId.get(mov.vendaId) : undefined;
     const diaDaCompra = (venda?.data ?? mov.criadoEm).slice(0, 10);
     if (diaDaCompra >= hoje) continue;
+    // Devolveu ou cancelou antes do aviso: avisa só o que sobrou (ou nada)
+    const valor = mov.vendaId ? creditoLiquidoDaVenda(b, mov.vendaId) : mov.valor;
+    if (valor < 0.01) continue;
     if (mov.loja === "Site") {
       // Compra no site: avisa que tem loja na cidade dela, quando tiver
       const perto = lojaNaCidade(c);
       const campanha = perto ? "cashback_site_perto" : "cashback_site_longe";
-      tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor: mov.valor, validade: mov.validade, dataCompra: diaDaCompra, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined, endereco: b.config.numeros.find((n) => n.loja === perto)?.endereco }, chave: `cb-credito-${mov.id}` }));
+      tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined, endereco: b.config.numeros.find((n) => n.loja === perto)?.endereco }, chave: `cb-credito-${mov.id}` }));
       continue;
     }
     tentar(
@@ -97,7 +101,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
         cliente: c,
         campanha: "cashback_creditado",
         loja: mov.loja,
-        variaveis: { valor: mov.valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
+        variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
         chave: `cb-credito-${mov.id}`,
       })
     );

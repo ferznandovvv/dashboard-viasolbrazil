@@ -13,6 +13,7 @@
 import { LOJAS, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
 import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
 import { conciliarVendas, registrarVenda, salvarCliente } from "./clientes";
+import { aplicarCancelamento, aplicarDevolucao, limparDevolucoes, type DevolucaoLida } from "./devolucoes";
 import type { Venda } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
@@ -219,8 +220,86 @@ function temFrete(inv: Obj): boolean {
   return ((inv.items as Obj[] | undefined) ?? []).some((it) => ITEM_FRETE.test(String(it.name ?? it.productName ?? "")));
 }
 
+/** Referências das peças da nota (sem frete), para ligar devolução à compra. */
+function referencias(inv: Obj): string[] {
+  const out = new Set<string>();
+  for (const it of (inv.items as Obj[] | undefined) ?? []) {
+    if (ITEM_FRETE.test(String(it.name ?? it.productName ?? ""))) continue;
+    const cod = str(it, "code", "referenceCode");
+    if (cod) out.add(cod);
+  }
+  return [...out];
+}
+
+/** Nota de venda (mesmas operações de ehVenda) que está cancelada. */
+function vendaCancelada(inv: Obj): boolean {
+  return ehVenda({ ...inv, invoiceStatus: "Issued" }) && inv.invoiceStatus === "Canceled";
+}
+
+/** Primeiro dia com cashback nas lojas físicas: devolução antes disso não tem o que tirar. */
+const INICIO_CASHBACK_LOJAS = "2026-10-16";
+
+const DEVOLUCAO_DE_VENDA = /DEVOLU[CÇ][AÃ]O DE VENDA/i;
+
+/** Notas de entrada de devolução de venda (lojas e site) entre `de` e `ate`, com as peças. */
+async function buscarDevolucoes(de: string, ate: string): Promise<DevolucaoLida[]> {
+  const out: DevolucaoLida[] = [];
+  const hoje = hojeSp();
+  const changeAte = somarDias(ate, 10) > hoje ? hoje : somarDias(ate, 10);
+  for (let pagina = 1; pagina <= 50; pagina++) {
+    const r = await totvsFetch(INVOICES, {
+      filter: { branchCodeList: Object.keys(LOJAS).map(Number), operationType: "Input", change: { startDate: `${de}T00:00:00`, endDate: `${changeAte}T23:59:59` } },
+      expand: "items",
+      page: pagina,
+      pageSize: 100,
+    });
+    if (r.status !== 200) throw new Error(`Devoluções: HTTP ${r.status} — ${r.text.slice(0, 200)}`);
+    const lista = (r.json?.items as Obj[] | undefined) ?? [];
+    for (const inv of lista) {
+      const data = String(inv.invoiceDate ?? "").slice(0, 10);
+      if (data < de || data > ate) continue;
+      if (!DEVOLUCAO_DE_VENDA.test(String(inv.operatioName ?? inv.operationName ?? ""))) continue;
+      if (inv.invoiceStatus === "Canceled") continue;
+      const filial = Number(inv.branchCode);
+      const nome = str(inv, "personName", "customerName");
+      out.push({
+        id: `${filial}-${inv.invoiceSequence}`,
+        loja: LOJAS[filial] ?? `Filial ${filial}`,
+        data,
+        valor: Number(inv.totalValue ?? 0),
+        codigoCliente: nome && !NOME_GENERICO.test(nome) ? str(inv, "personCode", "customerCode") : undefined,
+        nomeNaNota: nome,
+        itens: referencias(inv),
+      });
+    }
+    if (lista.length < 100) break;
+  }
+  return out;
+}
+
+/**
+ * Confere as devoluções do período e tira o cashback das compras devolvidas.
+ * Só na sincronização com cashback (a diária), nunca na carga histórica.
+ */
+export async function conferirDevolucoes(de: string, ate: string): Promise<{ novas: number; estorno: number }> {
+  const devs = await buscarDevolucoes(de, ate);
+  let novas = 0;
+  let estorno = 0;
+  await alterarBase((b) => {
+    for (const d of devs.sort((a, z) => a.data.localeCompare(z.data))) {
+      const r = aplicarDevolucao(b, d);
+      if (!r) continue;
+      novas++;
+      estorno += r.estorno;
+    }
+    limparDevolucoes(b, hojeSp());
+    if (!b.config.devolucoesAte || ate > b.config.devolucoesAte) b.config.devolucoesAte = ate;
+  });
+  return { novas, estorno: Math.round(estorno * 100) / 100 };
+}
+
 /** Notas emitidas entre `de` e `ate` (datas YYYY-MM-DD), paginadas pela data de alteração. */
-async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens = false): Promise<VendaLida[]> {
+async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens = false, canceladas: string[] = []): Promise<VendaLida[]> {
   const out: VendaLida[] = [];
   const hoje = hojeSp();
   const changeAte = somarDias(ate, 25) > hoje ? hoje : somarDias(ate, 25);
@@ -239,7 +318,10 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens 
     if (!Array.isArray(itens)) return;
     for (const inv of itens as Obj[]) {
       const data = String(inv.invoiceDate ?? "").slice(0, 10);
-      if (data < de || data > ate || !ehVenda(inv)) continue;
+      if (data < de || data > ate) continue;
+      // Venda que foi cancelada depois de emitida: o cashback dela sai
+      if (vendaCancelada(inv)) canceladas.push(`${Number(inv.branchCode)}-${inv.invoiceSequence}`);
+      if (!ehVenda(inv)) continue;
       const filial = Number(inv.branchCode);
       const loja = LOJAS[filial] ?? `Filial ${filial}`;
       const codigoCliente = str(inv, "personCode", "customerCode", "personId");
@@ -261,6 +343,7 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens 
           cpfNaNota: str(inv, "personCpfCnpj", "cpfCnpj", "personDocument", "customerCpf")?.replace(/\D/g, "") || undefined,
           desconto: itens ? descontoDaNota(inv) : undefined,
           entrega: itens ? temFrete(inv) : undefined,
+          itens: itens ? referencias(inv) : undefined,
           origem: "totvs",
         },
       });
@@ -281,7 +364,8 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens 
 
 /** Um trecho (até um mês): notas, cadastro das clientes que apareceram, ligação e cashback. */
 async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: boolean; pessoasAlteradas?: boolean; itens?: boolean }): Promise<void> {
-  const vendas = await buscarVendas(de, ate, 300, opcoes.itens);
+  const canceladas: string[] = [];
+  const vendas = await buscarVendas(de, ate, 300, opcoes.itens, canceladas);
   progresso.etapa = `${de} a ${ate}: lendo cadastro de ${vendas.length} notas`;
 
   // Um código que aparece em boa parte das notas não é uma pessoa: é o
@@ -366,6 +450,8 @@ async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: b
       if (registrarVenda(b, venda)) progresso.vendasNovas++;
     }
     conciliarVendas(b);
+    // Venda cancelada na TOTVS sai da base e leva o cashback junto
+    for (const id of canceladas) aplicarCancelamento(b, id);
     b.config.cashbackPct = pctAntes;
     b.config.ultimaSincTotvs = new Date().toISOString();
     b.config.ultimaSincTotvsResultado = `${de} a ${ate}: ${progresso.vendasNovas} vendas novas, ${progresso.clientesNovos} clientes novos`;
@@ -437,6 +523,17 @@ export async function sincronizarDiaria(): Promise<typeof progresso | null> {
       b.config.diariaTotvsAte = hoje;
       b.config.diariaTotvsEm = new Date().toISOString();
     });
+  // Devoluções: desde o último dia conferido (na primeira vez, desde o começo do cashback nas lojas)
+  if (!r.erro) {
+    const devAte = (await lerBase()).config.devolucoesAte;
+    const devDe = devAte ? (somarDias(devAte, -2) < de ? somarDias(devAte, -2) : de) : INICIO_CASHBACK_LOJAS;
+    try {
+      const d = await conferirDevolucoes(devDe < somarDias(hoje, -45) ? somarDias(hoje, -45) : devDe, hoje);
+      if (d.novas) console.log(`[crm] devoluções: ${d.novas} novas, R$ ${d.estorno} de cashback estornado`);
+    } catch (e) {
+      console.error("[crm] devoluções:", e instanceof Error ? e.message : e);
+    }
+  }
   return r;
 }
 
@@ -580,59 +677,4 @@ export async function explorar(): Promise<Record<string, unknown>> {
     documentacao: docs,
     sondas,
   };
-}
-
-/**
- * Diagnóstico (temporário): como a TOTVS registra devolução, troca e nota
- * cancelada. Lê as notas de entrada e de saída dos últimos dias, conta por
- * operação e guarda exemplos em dados/crm/diagnostico-devolucoes.json, para
- * montar a regra de estorno do cashback em cima do formato real.
- */
-export async function diagnosticoDevolucoes(dias = 12): Promise<string> {
-  if (!totvsConfigured()) return "TOTVS não configurada";
-  const { writeFile } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  const hoje = hojeSp();
-  const de = somarDias(hoje, -dias);
-  const resumo: Record<string, unknown> = { geradoEm: new Date().toISOString(), de, ate: hoje };
-  const curto = (o: unknown, prof = 0): unknown => {
-    if (o === null || typeof o !== "object") return typeof o === "string" ? o.slice(0, 80) : o;
-    if (Array.isArray(o)) return prof > 1 ? `[${o.length} itens]` : o.slice(0, 3).map((x) => curto(x, prof + 1));
-    const r: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(o)) r[k] = prof > 2 ? (typeof v === "object" ? "{…}" : v) : curto(v, prof + 1);
-    return r;
-  };
-  for (const tipo of ["Input", "Output"]) {
-    const ops: Record<string, number> = {};
-    const status: Record<string, number> = {};
-    const exemplos: unknown[] = [];
-    const naoEmitidas: unknown[] = [];
-    for (let pagina = 1; pagina <= 30; pagina++) {
-      const r = await totvsFetch(INVOICES, {
-        filter: { branchCodeList: Object.keys(LOJAS).map(Number), operationType: tipo, change: { startDate: `${de}T00:00:00`, endDate: `${hoje}T23:59:59` } },
-        expand: "items",
-        page: pagina,
-        pageSize: 100,
-      });
-      if (r.status !== 200) {
-        resumo[`erro${tipo}`] = `HTTP ${r.status}: ${r.text.slice(0, 300)}`;
-        break;
-      }
-      const itens = (r.json?.items as Obj[] | undefined) ?? [];
-      for (const inv of itens) {
-        const op = `${inv.operationCode ?? "?"} ${String(inv.operatioName ?? inv.operationName ?? "?")}`;
-        ops[op] = (ops[op] ?? 0) + 1;
-        const st = String(inv.invoiceStatus ?? "?");
-        status[st] = (status[st] ?? 0) + 1;
-        if (tipo === "Input" && /DEVOL|TROCA/i.test(op) && exemplos.length < 6) exemplos.push(curto(inv));
-        if (tipo === "Output" && /TROCA/i.test(op) && exemplos.length < 4) exemplos.push(curto(inv));
-        if (st !== "Issued" && naoEmitidas.length < 3) naoEmitidas.push(curto(inv));
-      }
-      if (itens.length < 100) break;
-    }
-    resumo[tipo] = { operacoes: ops, status, exemplos, naoEmitidas };
-  }
-  const arquivo = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm", "diagnostico-devolucoes.json");
-  await writeFile(arquivo, JSON.stringify(resumo, null, 1), "utf8");
-  return arquivo;
 }
