@@ -238,7 +238,7 @@ export const OFICIAL_PADRAO: ConfigOficial = {
   sombra: true,
   campanhas: ["carrinho_abandonado", "pix_pendente"],
   inicio: 8,
-  fim: 21,
+  fim: 22,
   dias: [0, 1, 2, 3, 4, 5, 6],
   tetoDia: 250,
   carrinhoMinutos: 60,

@@ -130,7 +130,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
           </span>
         </label>
         <div className="cfg-grid">
-          <Campo rotulo="Manda das" valor={of.inicio} onChange={num("inicio")} sufixo="h" />
+          <Campo rotulo="Carrinho e Pix: manda das" valor={of.inicio} onChange={num("inicio")} sufixo="h" dica="Vale pro número oficial e pro número do site na WA-AKG. Os outros avisos seguem o horário das lojas" />
           <Campo rotulo="até as" valor={of.fim} onChange={num("fim")} sufixo="h" />
         </div>
         <div className="cfg-dias">

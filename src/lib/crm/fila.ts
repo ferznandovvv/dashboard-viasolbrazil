@@ -9,7 +9,7 @@
 import { adaptadorDe } from "./envio/adaptador";
 import { CloudApi } from "./envio/cloudApi";
 import { alterarBase, hojeSp, lerBase } from "./base";
-import { LOJA_OFICIAL, oficialDe, tetoDoNumero, type Atendimento, type BaseCrm, type Mensagem } from "./tipos";
+import { CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, tetoDoNumero, type Atendimento, type BaseCrm, type Mensagem } from "./tipos";
 
 /** Quando cada número pode mandar de novo (ms). Em memória: reiniciar zera, e tudo bem. */
 const proximoEnvio = new Map<string, number>();
@@ -65,7 +65,11 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
     if (cfg.modoSombra) return { enviadas: 0, erros: 0, motivo: "modo sombra: nada sai" };
     const adaptador = adaptadorDe(cfg);
     if (!adaptador) return { enviadas: 0, erros: 0, motivo: "sem provedor configurado" };
-    if (!ignorarJanela && !dentroDaJanela(base)) return { enviadas: 0, erros: 0, motivo: "fora do horário de envio" };
+    // Carrinho e Pix do site têm horário próprio (todo dia, até mais tarde): a cliente acabou de estar no site
+    const janelaLojas = ignorarJanela || dentroDaJanela(base);
+    const janelaSite = ignorarJanela || dentroDaJanelaOficial(base);
+    const podeAgora = (m: Mensagem) => (CAMPANHAS_SITE.includes(m.campanha) ? janelaSite : janelaLojas);
+    if (!janelaLojas && !janelaSite) return { enviadas: 0, erros: 0, motivo: "fora do horário de envio" };
 
     const agora = Date.now();
     const agoraIso = new Date(agora).toISOString();
@@ -76,7 +80,7 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
       if ((proximoEnvio.get(n.loja) ?? 0) > agora) continue;
       if (enviadasHoje(base, n.loja, hoje) >= tetoDoNumero(cfg, n, hoje)) continue;
       const m = base.mensagens
-        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso)
+        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso && podeAgora(x))
         .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];
       if (m) escolhidas.push(m);
     }
