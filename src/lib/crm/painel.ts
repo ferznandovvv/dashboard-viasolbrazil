@@ -74,7 +74,9 @@ export function painel(base: BaseCrm): { lojas: CardLoja[]; hoje: ResumoAtendime
     (porDia.get(k) ?? porDia.set(k, new Set()).get(k)!).add(a.telefone);
   }
 
-  const lojas = Object.values(LOJAS).map((loja): CardLoja => {
+  // As lojas e, se tiver número ligado na WA-AKG, o atendimento do site
+  const temSite = base.config.numeros.some((n) => n.loja === "Site" && n.sessao);
+  const lojas = [...Object.values(LOJAS), ...(temSite ? ["Site"] : [])].map((loja): CardLoja => {
     const n = base.config.numeros.find((x) => x.loja === loja);
     const configurado = Boolean(n?.sessao);
     const ativo = Boolean(n?.ativo && n.sessao);
@@ -181,7 +183,7 @@ export function painel(base: BaseCrm): { lojas: CardLoja[]; hoje: ResumoAtendime
       a.push(`Responde em ${card.atend.mediana7d} min (mediana)`);
       piora("atencao");
     }
-    if (card.cadastro.pct30 !== null && card.cadastro.vendas30 >= 10 && card.cadastro.pct30 < 50) {
+    if (loja !== "Site" && card.cadastro.pct30 !== null && card.cadastro.vendas30 >= 10 && card.cadastro.pct30 < 50) {
       a.push(`Só ${card.cadastro.pct30}% das vendas com celular`);
       if (nivel !== "inativo") piora("atencao");
     }

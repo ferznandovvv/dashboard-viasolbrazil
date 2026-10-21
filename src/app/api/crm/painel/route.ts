@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const loja = req.nextUrl.searchParams.get("loja");
   await aprenderVendedoras(base).catch(() => {});
   if (loja) {
-    if (!Object.values(LOJAS).includes(loja)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
+    if (!Object.values(LOJAS).includes(loja) && loja !== "Site") return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
     const dias = Math.min(90, Math.max(1, Number(req.nextUrl.searchParams.get("dias")) || 7));
     const d = detalheLoja(base, loja, dias);
     return NextResponse.json({ ...d, pendentes: await nomearPendentes(base, d.pendentes) });
@@ -59,8 +59,9 @@ export async function GET(req: NextRequest) {
       mediana7d: p.semana.medianaMin,
       rapidas7d: p.semana.respondidas ? Math.round((p.semana.rapidas / p.semana.respondidas) * 100) : null,
       respondidas7d: p.semana.respondidas,
-      vendas30: lojas.reduce((s, l) => s + l.cadastro.vendas30, 0),
-      comCelular30: lojas.reduce((s, l) => s + l.cadastro.comCelular30, 0),
+      // Celular no caixa é só das lojas físicas
+      vendas30: lojas.filter((l) => l.loja !== "Site").reduce((s, l) => s + l.cadastro.vendas30, 0),
+      comCelular30: lojas.filter((l) => l.loja !== "Site").reduce((s, l) => s + l.cadastro.comCelular30, 0),
       conectados: lojas.filter((l) => l.conectado).length,
       numeros: lojas.filter((l) => l.numero.ativo).length,
       eventos: base.atendimento.length,
