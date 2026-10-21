@@ -60,7 +60,7 @@ async function gravar(base: BaseCrm): Promise<void> {
 const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
   { id: "atendimento", aplicar: (b) => void (b.atendimento ??= []) },
   {
-    // Regras combinadas em 16/10: 15% com compra de 3x, 90 dias, dois lembretes,
+    // Regras combinadas em 16/10: 15% com compra de 3x, 90 dias (33 desde 21/10), dois lembretes,
     // site gera cashback, textos novos, boas-vindas desligada
     id: "regras-v2",
     aplicar: (b) => {
@@ -355,6 +355,37 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
       if (of) {
         if (of.pixMinutos === undefined || of.pixMinutos >= 30) of.pixMinutos = 10;
         if (of.campanhas?.includes("pix_pendente") && !of.campanhas.includes("pix_expirado")) of.campanhas.push("pix_expirado");
+      }
+    },
+  },
+  {
+    // 21/10: cashback passa a valer 33 dias da compra (30 depois do aviso), pra
+    // dar urgência de voltar. O que já foi avisado à cliente mantém a data
+    // prometida. O que ainda não foi avisado (e a loja tem número) passa a valer
+    // 33 dias a partir de hoje, e o texto na fila ganha a data nova.
+    id: "validade-33-dias-2026-10-21",
+    aplicar: (b) => {
+      b.config.cashbackValidadeDias = 33;
+      const nova = somarDias(hojeSp(), 33);
+      const saiu = new Set(["enviada", "entregue", "lida", "respondida", "enviando"]);
+      const doAviso = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe"];
+      const avisados = new Set<string>();
+      const clienteAvisado = new Set<string>();
+      for (const m of b.mensagens) {
+        if (!doAviso.includes(m.campanha) || !saiu.has(m.status)) continue;
+        clienteAvisado.add(m.clienteId);
+        if (m.chave?.startsWith("cb-credito-")) avisados.add(m.chave.slice(11));
+      }
+      // Créditos que foram "junto" de um aviso que já saiu também foram avisados
+      for (const m of b.mensagens) if (m.status === "cancelada" && m.erro === "Junto com outro aviso de cashback" && m.chave?.startsWith("cb-credito-") && clienteAvisado.has(m.clienteId)) avisados.add(m.chave.slice(11));
+      const comNumero = new Set(b.config.numeros.filter((n) => n.ativo && n.sessao).map((n) => n.loja));
+      for (const mov of b.cashback) {
+        if (mov.tipo !== "credito" || avisados.has(mov.id) || !mov.validade || mov.validade <= nova) continue;
+        if (mov.loja !== "Site" && !comNumero.has(mov.loja ?? "")) continue;
+        const antiga = mov.validade;
+        mov.validade = nova;
+        for (const k of b.codigos ?? []) if (k.movimentoId === mov.id) k.validade = nova;
+        for (const m of b.mensagens) if (m.status === "fila" && m.chave === `cb-credito-${mov.id}`) m.texto = m.texto.split(dataBr(antiga)).join(dataBr(nova));
       }
     },
   },

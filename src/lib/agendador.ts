@@ -182,11 +182,11 @@ export function iniciarAgendador(): void {
   }, 20_000);
 
   // Uma vez: avisos de cashback de quem comprou mais de uma vez passam a levar o total
-  // (v2: regra em % só quando a compra mínima passa de R$ 500)
+  // (v2: regra em % só quando a compra mínima passa de R$ 500; v3: validade nova de 33 dias)
   void alterarBaseCrm((b) => {
-    if (b.config.migracoes?.includes("reagrupar-avisos-v2")) return;
+    if (b.config.migracoes?.includes("reagrupar-avisos-v3")) return;
     const n = reagruparAvisos(b);
-    (b.config.migracoes ??= []).push("reagrupar-avisos-v2");
+    (b.config.migracoes ??= []).push("reagrupar-avisos-v3");
     if (n) console.log(`[crm] avisos de cashback com o total: ${n}`);
   }).catch(() => {});
 

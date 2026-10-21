@@ -91,7 +91,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
               <h2>Quanto ela ganha</h2>
               <div className="cfg-grid">
                 <Campo rotulo="Percentual da compra" sufixo="%" valor={cfg.cashbackPct} onChange={n("cashbackPct")} />
-                <Campo rotulo="Vale por" sufixo="dias" valor={cfg.cashbackValidadeDias} onChange={n("cashbackValidadeDias")} dica="Quem viajou demora a voltar; 90 dá folga" />
+                <Campo rotulo="Vale por" sufixo="dias" valor={cfg.cashbackValidadeDias} onChange={n("cashbackValidadeDias")} dica="Conta da compra. O aviso sai 3 dias depois, então 33 dá 30 dias pra ela voltar" />
                 <Campo rotulo="Compra mínima pra gerar" prefixo="R$" valor={cfg.cashbackCompraMinima} onChange={n("cashbackCompraMinima")} dica="0 = qualquer compra gera" />
               </div>
             </section>

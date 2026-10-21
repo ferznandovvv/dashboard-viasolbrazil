@@ -663,7 +663,7 @@ export function linkDaWaakg(config: Pick<ConfigCrm, "provedor" | "waakgUrl" | "w
 
 export const CONFIG_PADRAO: Omit<ConfigCrm, "webhookSegredo"> = {
   cashbackPct: 15,
-  cashbackValidadeDias: 90,
+  cashbackValidadeDias: 33,
   cashbackCompraMinima: 0,
   cashbackResgateMinimo: 0,
   cashbackSite: true,
