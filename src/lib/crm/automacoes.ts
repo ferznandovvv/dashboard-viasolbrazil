@@ -7,7 +7,7 @@ import { alterarBase, diasEntre, hojeSp, lerBase, novoId, somarDias } from "./ba
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
 import { JUNTO, campanhaDoCredito, creditosParaAviso, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
 import { resumir } from "./clientes";
-import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar } from "./mensagens";
+import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar, renderizar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -19,6 +19,41 @@ export function lojaNaCidade(c: Cliente): string | undefined {
   // Em Franca tem três lojas: a cliente é mandada pra Centro
   for (const [loja, cidade] of Object.entries(LOJA_CIDADE)) if (semAcento(cidade) === cid) return loja;
   return undefined;
+}
+
+/** Aviso de cashback de quem tem mais de uma compra pra avisar: o total, numa mensagem só. */
+export function textoVarios(b: BaseCrm): string {
+  const m = b.config.cashbackMultiploCompra;
+  const regra = m > 0 ? ` (em cada compra dá pra usar até ${Math.round(100 / m)}% do valor)` : "";
+  return `Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Suas últimas compras com a gente renderam {valor} de cashback, que fica guardado no seu nome até {validade} pra usar em qualquer loja nossa${regra}. Adorei te atender, volta logo.`;
+}
+
+/**
+ * Uma vez: avisos de cashback na fila de quem tem outros créditos marcados
+ * como "avisados junto" passam a levar o total (antes iam só com a compra
+ * mais recente).
+ */
+export function reagruparAvisos(b: BaseCrm): number {
+  const credito = new Map(b.cashback.map((m) => [m.id, m]));
+  const juntos = new Map<string, string[]>();
+  for (const m of b.mensagens) if (m.status === "cancelada" && m.erro === JUNTO && m.chave) (juntos.get(m.clienteId) ?? juntos.set(m.clienteId, []).get(m.clienteId)!).push(m.chave.replace("cb-credito-", ""));
+  let n = 0;
+  for (const m of b.mensagens) {
+    if (m.campanha !== "cashback_creditado" || m.status !== "fila" || !m.chave || !juntos.has(m.clienteId)) continue;
+    const c = b.clientes.find((x) => x.id === m.clienteId);
+    const ids = [m.chave.replace("cb-credito-", ""), ...juntos.get(m.clienteId)!];
+    const movs = ids.map((id) => credito.get(id)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+    if (!c || movs.length < 2) continue;
+    const abertos = new Map(creditosAbertos(b, c.id).map((x) => [x.movimentoId, x.restante]));
+    const total = Math.round(movs.reduce((t, x) => t + (abertos.get(x.id) ?? 0), 0) * 100) / 100;
+    if (total < 0.01) continue;
+    const validade = movs.map((x) => x.validade ?? "").filter(Boolean).sort()[0];
+    const venda = b.vendas.find((v) => v.id === credito.get(ids[0])?.vendaId);
+    const rodape = b.config.textoSair && m.texto?.includes(b.config.textoSair) ? `\n\n${b.config.textoSair}` : "";
+    m.texto = renderizar(textoVarios(b), c, m.loja, { valor: total, validade, vendedora: assinatura(b, m.loja, venda?.vendedoraCpf) }) + rodape;
+    n++;
+  }
+  return n;
 }
 
 /** Oferta da reativação pelo total gasto: vale a maior faixa atingida. */
@@ -81,6 +116,9 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   // Site não junta: cada crédito tem o seu cupom.
   const comAviso = new Set(b.mensagens.filter((m) => m.campanha === "cashback_creditado" && (m.status === "fila" || m.status === "enviando")).map((m) => m.clienteId));
   const paraAvisar = creditosParaAviso(b, hoje).sort((p, q) => q.diaDaCompra.localeCompare(p.diaDaCompra));
+  // Créditos de loja de cada cliente: com mais de um, a mensagem vai com o total
+  const daLoja = new Map<string, typeof paraAvisar>();
+  for (const x of paraAvisar) if (x.mov.loja !== "Site") (daLoja.get(x.cliente.id) ?? daLoja.set(x.cliente.id, []).get(x.cliente.id)!).push(x);
   for (const x of paraAvisar) {
     const { mov, cliente: c, venda, diaDaCompra, valor } = x;
     if (mov.loja !== "Site" && comAviso.has(c.id)) {
@@ -108,14 +146,20 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       tentar(campanha, res);
       continue;
     }
+    const grupo = daLoja.get(c.id) ?? [x];
+    const varios = grupo.length > 1;
     const res = enfileirar(b, {
       cliente: c,
       campanha: "cashback_creditado",
       loja: mov.loja,
-      variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
+      // Mais de uma compra: um aviso só, com o total e a validade que vence primeiro
+      texto: varios ? textoVarios(b) : undefined,
+      variaveis: varios
+        ? { valor: Math.round(grupo.reduce((t, g) => t + g.valor, 0) * 100) / 100, validade: grupo.map((g) => g.mov.validade ?? "").filter(Boolean).sort()[0] ?? mov.validade, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) }
+        : { valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
       chave: `cb-credito-${mov.id}`,
     });
-    if (res.mensagem && res.mensagem.status !== "simulada") comAviso.add(c.id);
+    if (res.mensagem) comAviso.add(c.id);
     tentar("cashback_creditado", res);
   }
 

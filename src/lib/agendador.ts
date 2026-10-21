@@ -13,10 +13,10 @@ import { recuperarConversas } from "./crm/recuperar";
 import { ligarPortaoWhats } from "./acesso/portaoWhats";
 import { shopifyConfigured, sincronizarShopifyDiaria } from "./crm/shopify";
 import { totvsConfigured } from "./connectors/totvs";
-import { rodarAutomacoes } from "./crm/automacoes";
+import { reagruparAvisos, rodarAutomacoes } from "./crm/automacoes";
 import { processarFila, processarFilaOficial } from "./crm/fila";
 import { conferirEcommerce } from "./crm/ecommerce";
-import { hojeSp, lerBase as lerBaseCrm } from "./crm/base";
+import { alterarBase as alterarBaseCrm, hojeSp, lerBase as lerBaseCrm } from "./crm/base";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
 const HORARIOS = [
@@ -180,6 +180,14 @@ export function iniciarAgendador(): void {
       })
       .catch((e) => console.error("[crm] fila falhou:", e instanceof Error ? e.message : e));
   }, 20_000);
+
+  // Uma vez: avisos de cashback de quem comprou mais de uma vez passam a levar o total
+  void alterarBaseCrm((b) => {
+    if (b.config.migracoes?.includes("reagrupar-avisos-v1")) return;
+    const n = reagruparAvisos(b);
+    (b.config.migracoes ??= []).push("reagrupar-avisos-v1");
+    if (n) console.log(`[crm] avisos de cashback com o total: ${n}`);
+  }).catch(() => {});
 
   // Número oficial do site: fila a cada 30 s; carrinho e Pix na Shopify a cada 10 min
   setInterval(() => {
