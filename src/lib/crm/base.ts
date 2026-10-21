@@ -412,6 +412,22 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Gerente: "quando quiser" dá a opção de não vir. Fecho com um convite
+    // concreto (dia, foto de peça nova) nos modelos e no que está na fila.
+    id: "fechamento-com-convite",
+    aplicar: (b) => {
+      const trocas: [string, string][] = [
+        ["Quando quiser vir, me avisa que eu te recebo.", "Me fala qual dia você vem que eu já separo umas peças pra você!"],
+        ["Quando chegar peça nova eu te mando foto, pode ser?", "Não deixa vencer, hein! Chegou peça nova, quer que eu te mande foto?"],
+        ["Se quiser provar as peças, passa aqui que eu te atendo!", "Passa aqui pra provar as novidades, que eu te atendo!"],
+        ["Me avisa quando puder vir.", "Me fala qual dia fica bom pra você vir."],
+      ];
+      const trocar = (t: string) => trocas.reduce((x, [de, para]) => x.split(de).join(para), t);
+      for (const m of b.modelos) m.variacoes = m.variacoes.map(trocar);
+      for (const m of b.mensagens) if (m.status === "fila") m.texto = trocar(m.texto);
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

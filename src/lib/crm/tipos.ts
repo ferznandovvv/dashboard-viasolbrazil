@@ -589,8 +589,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "cashback_creditado",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, tudo bem? Aqui é a {vendedora}, da Via Sol {loja} ☀️ Sua compra {daCompra} rendeu {valor} de cashback, que fica guardado no seu nome até {validade}. Pra usar, a compra precisa ser pelo menos {compraMinima}. Quando quiser vir, me avisa que eu te recebo.",
-      "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Quando chegar peça nova eu te mando foto, pode ser?",
+      "Oi {primeiro}, tudo bem? Aqui é a {vendedora}, da Via Sol {loja} ☀️ Sua compra {daCompra} rendeu {valor} de cashback, que fica guardado no seu nome até {validade}. Pra usar, a compra precisa ser pelo menos {compraMinima}. Me fala qual dia você vem que eu já separo umas peças pra você!",
+      "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Não deixa vencer, hein! Chegou peça nova, quer que eu te mande foto?",
       "Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Entrou {valor} de cashback pra você, válido até {validade} (vale em compra a partir de {compraMinima}). Adorei te atender, volta logo.",
     ],
   },
@@ -599,7 +599,7 @@ export const MODELOS_PADRAO: Modelo[] = [
     ativo: true,
     // Sai pelo número da loja da cidade dela: assina a vendedora, pra loja virar o contato dela
     variacoes: [
-      "Oi {primeiro}! Aqui é a {vendedora}, da Via Sol {lojaProxima} ☀️ Vi que você comprou no nosso site, e a compra rendeu {valor} de cashback, válido até {validade}. Pra usar no site é só colocar o código {codigo} no checkout, e ele vale aqui na loja também{endereco}. Vale em compras a partir de {compraMinima}. Se quiser provar as peças, passa aqui que eu te atendo!",
+      "Oi {primeiro}! Aqui é a {vendedora}, da Via Sol {lojaProxima} ☀️ Vi que você comprou no nosso site, e a compra rendeu {valor} de cashback, válido até {validade}. Pra usar no site é só colocar o código {codigo} no checkout, e ele vale aqui na loja também{endereco}. Vale em compras a partir de {compraMinima}. Passa aqui pra provar as novidades, que eu te atendo!",
       "{primeiro}, tudo bem? Aqui é a {vendedora}, da loja da Via Sol em {cidade}{endereco} 🧡 Sua compra no site rendeu {valor} de cashback, com o código {codigo}. Dá pra usar no checkout do site ou aqui na loja, até {validade}, em compras a partir de {compraMinima}. Qualquer coisa, me chama por aqui!",
     ],
   },
@@ -646,7 +646,7 @@ export const MODELOS_PADRAO: Modelo[] = [
     ativo: false,
     variacoes: [
       "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Faz um tempinho que você não aparece e eu lembrei de você porque chegou coleção nova. Como você é cliente nossa de verdade, separei {oferta} pra sua próxima compra (código {codigo}). Quer que eu mande fotos ou prefere passar aqui?",
-      "{primeiro}, saudades! 🧡 {vendedora}, da Via Sol {loja}. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando, é só falar o código {codigo} no caixa. Me avisa quando puder vir.",
+      "{primeiro}, saudades! 🧡 {vendedora}, da Via Sol {loja}. Chegaram modelos novos que têm muito a sua cara. Pra te ver de novo por aqui, você tem {oferta} esperando, é só falar o código {codigo} no caixa. Me fala qual dia fica bom pra você vir.",
     ],
   },
   { campanha: "avulsa", ativo: true, variacoes: [] },
