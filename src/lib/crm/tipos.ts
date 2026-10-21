@@ -581,9 +581,10 @@ export const MODELOS_PADRAO: Modelo[] = [
   {
     campanha: "cashback_site_perto",
     ativo: true,
+    // Sai pelo número da loja da cidade dela: assina a vendedora, pra loja virar o contato dela
     variacoes: [
-      "Oi {primeiro}! Aqui é da Via Sol ☀️ Sua compra no nosso site rendeu {valor} de cashback, válido até {validade}. Pra usar no site, é só colocar o código {codigo} no checkout. E lembrando: temos loja física aí em {cidade}{endereco}, e o código vale lá também. Vale em compras a partir de {compraMinima}.",
-      "{primeiro}, sua compra no site da Via Sol rendeu {valor} de cashback 🧡 Seu código é {codigo}: use no checkout do site ou na nossa loja de {cidade}{endereco}, até {validade}, em compras a partir de {compraMinima}.",
+      "Oi {primeiro}! Aqui é a {vendedora}, da Via Sol {lojaProxima} ☀️ Vi que você comprou no nosso site, e a compra rendeu {valor} de cashback, válido até {validade}. Pra usar no site é só colocar o código {codigo} no checkout, e ele vale aqui na loja também{endereco}. Vale em compras a partir de {compraMinima}. Se quiser provar as peças, passa aqui que eu te atendo!",
+      "{primeiro}, tudo bem? Aqui é a {vendedora}, da loja da Via Sol em {cidade}{endereco} 🧡 Sua compra no site rendeu {valor} de cashback, com o código {codigo}. Dá pra usar no checkout do site ou aqui na loja, até {validade}, em compras a partir de {compraMinima}. Qualquer coisa, me chama por aqui!",
     ],
   },
   {

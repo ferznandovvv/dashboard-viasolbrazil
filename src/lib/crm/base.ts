@@ -333,6 +333,15 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Cashback do site pra quem tem loja perto: assina a vendedora da loja (mais intimidade)
+    id: "site-perto-vendedora",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "cashback_site_perto");
+      const padrao = MODELOS_PADRAO.find((x) => x.campanha === "cashback_site_perto")!;
+      if (m && !m.variacoes.some((v) => v.includes("{vendedora}"))) m.variacoes = [...padrao.variacoes];
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
