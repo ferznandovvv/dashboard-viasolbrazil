@@ -268,6 +268,26 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Lojas: o Fernando estendeu o retroativo para outubro inteiro (antes era
+    // desde 16/10). Pelo valor que ficou (devolução descontada).
+    id: "cashback-lojas-retroativo-2026-10-01",
+    aplicar: (b) => {
+      const pct = b.config.cashbackPct;
+      if (!(pct > 0)) return;
+      const creditadas = new Set(b.cashback.filter((m) => m.tipo === "credito").map((m) => m.vendaId));
+      const agora = new Date().toISOString();
+      for (const v of b.vendas) {
+        if (v.loja === "Site" || !v.clienteId || v.data.slice(0, 10) < "2026-10-01" || creditadas.has(v.id)) continue;
+        const liquido = v.valor - (v.devolvido ?? 0);
+        if (liquido <= 0 || liquido < b.config.cashbackCompraMinima) continue;
+        const valor = Math.round(liquido * pct) / 100;
+        if (valor < 0.01) continue;
+        b.cashback.push({ id: novoId(), clienteId: v.clienteId, tipo: "credito", valor, vendaId: v.id, validade: somarDias(v.data.slice(0, 10), b.config.cashbackValidadeDias), loja: v.loja, criadoEm: agora, por: "sistema" });
+        creditadas.add(v.id);
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
