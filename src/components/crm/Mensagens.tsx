@@ -18,6 +18,7 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
   const [filtro, setFiltro] = useState<StatusMensagem | "todas">("todas");
   const [d, setD] = useState<Dados | null>(null);
   const [aviso, setAviso] = useState("");
+  const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(async () => setD(await api(`/api/crm/mensagens?status=${filtro}`)), [filtro]);
   useEffect(() => {
@@ -27,7 +28,9 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
   }, [carregar]);
 
   const acao = async (corpo: object) => {
-    setAviso("");
+    const ehAutomacao = (corpo as { acao?: string }).acao === "automacoes";
+    setAviso(ehAutomacao ? "Rodando as automações… com cupom do site pra criar na Shopify, pode levar alguns minutos. Pode sair da tela que continua." : "Processando…");
+    setOcupado(true);
     try {
       const r = await api<Record<string, unknown>>("/api/crm/mensagens", { method: "POST", body: JSON.stringify(corpo) });
       setAviso(
@@ -43,6 +46,8 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
       await recarregar();
     } catch (e) {
       setAviso(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setOcupado(false);
     }
   };
 
@@ -60,8 +65,8 @@ export function Mensagens({ recarregar }: { recarregar: () => Promise<void> }) {
           </select>
         )}
         <span style={{ flex: 1 }} />
-        <button className="mini ghost" onClick={() => acao({ acao: "automacoes" })}>Rodar automações agora</button>
-        <button className="mini ghost" onClick={() => acao({ acao: "processar" })}>Processar fila agora</button>
+        <button className="mini ghost" disabled={ocupado} onClick={() => acao({ acao: "automacoes" })}>{ocupado ? "Rodando…" : "Rodar automações agora"}</button>
+        <button className="mini ghost" disabled={ocupado} onClick={() => acao({ acao: "processar" })}>Processar fila agora</button>
         {(d?.porStatus.simulada ?? 0) > 0 && (
           <button className="mini ghost" onClick={() => confirm(`Apagar as ${d?.porStatus.simulada} mensagens simuladas?`) && acao({ acao: "limpar-simuladas" })}>
             Limpar simuladas
