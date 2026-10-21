@@ -447,6 +447,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // "Chegou peça nova" promete o que pode não ter chegado: volta a ser condicional
+    id: "foto-quando-chegar",
+    aplicar: (b) => {
+      const de = "Não deixa vencer, hein! Chegou peça nova, quer que eu te mande foto?";
+      const para = "Não deixa vencer, hein! Quando chegar novidade, posso te mandar foto?";
+      for (const m of b.modelos) m.variacoes = m.variacoes.map((v) => v.split(de).join(para));
+      for (const m of b.mensagens) if (m.status === "fila") m.texto = m.texto.split(de).join(para);
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

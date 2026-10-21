@@ -591,7 +591,7 @@ export const MODELOS_PADRAO: Modelo[] = [
     variacoes: [
       // Texto da gerente da Fiusa
       "Oi {primeiro}, tudo bem?\nAqui é a {vendedora}, da Via Sol {loja} ☀️\nSua compra {daCompra} rendeu {valor} de cashback, que fica guardado no seu nome até {validade}. O valor mínimo da compra para usar é de {compraMinima}. Quando vier, me avisa, vou adorar te receber 🧡",
-      "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Não deixa vencer, hein! Chegou peça nova, quer que eu te mande foto?",
+      "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Não deixa vencer, hein! Quando chegar novidade, posso te mandar foto?",
       "Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Entrou {valor} de cashback pra você, válido até {validade} (vale em compra a partir de {compraMinima}). Adorei te atender, volta logo.",
     ],
   },
