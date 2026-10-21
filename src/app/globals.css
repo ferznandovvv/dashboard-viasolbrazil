@@ -1684,3 +1684,18 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .comparativo b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .comparativo small { flex-basis: 100%; font-size: 12px; color: var(--text-muted); }
 .ano-passado { display: block; margin-top: 2px; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* CRM: tela principal */
+.pg-status { display: flex; flex-wrap: wrap; gap: 8px; }
+.env-barra { height: 8px; border-radius: 4px; background: var(--grid); overflow: hidden; margin: 2px 0 3px; min-width: 80px; }
+.env-barra i { display: block; height: 100%; background: var(--good); }
+.env-barra.medio i { background: var(--aviso); }
+.env-barra.ruim i { background: var(--critical); }
+.env-tbl tr.off td { opacity: 0.55; }
+.cap-resumo { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 2px; }
+.cap-resumo-l { display: grid; grid-template-columns: minmax(0, 9rem) minmax(60px, 1fr) 3rem 2.5rem; align-items: center; gap: 10px; width: 100%; padding: 6px 4px; background: none; border: 0; border-radius: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cap-resumo-l:hover { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.cap-resumo-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap-resumo-l b { text-align: right; }
+.cfg-dias { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 12px; }
+.cfg-check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }

@@ -8,6 +8,11 @@ import { nomearPendentes } from "@/lib/crm/contatos";
 import { linkDaWaakg } from "@/lib/crm/tipos";
 import { aprenderVendedoras } from "@/lib/crm/vendasLoja";
 import { vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
+import { envioPorNumero } from "@/lib/crm/envioPainel";
+import { resumoEcommerce } from "@/lib/crm/ecommerce";
+import { cashbackDoMes, voltaramPorLoja } from "@/lib/crm/resumoMes";
+import { listarCampanhas } from "@/lib/crm/campanhas";
+import { oficialDe } from "@/lib/crm/tipos";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +77,19 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.data.localeCompare(a.data))
       .slice(0, 60)
       .map((d) => ({ ...d, nome: base.clientes.find((c) => c.id === d.clienteId)?.nome ?? d.nomeNaNota })),
+    envioNumeros: envioPorNumero(base).map((n) => ({ ...n, conectado: n.provedor === "oficial" ? null : (lojas.find((l) => l.loja === n.loja)?.conectado ?? null) })),
+    ecommerce: resumoEcommerce(base, 7),
+    cashbackMes: cashbackDoMes(base),
+    voltaram: voltaramPorLoja(base),
+    // Retorno de cada campanha nos últimos 30 dias (só as que mandaram ou simularam algo)
+    retorno: (() => {
+      const c = listarCampanhas(base);
+      return [
+        ...c.automaticas.map((a) => ({ id: a.id, nome: a.nome, manual: false, r: a.resultado })),
+        ...c.manuais.filter((m) => m.criadaEm >= new Date(Date.now() - 30 * 86400000).toISOString()).map((m) => ({ id: m.id, nome: m.nome, manual: true, r: m.resultado })),
+      ].filter((x) => x.r.total > 0);
+    })(),
+    siteSombra: oficialDe(cfg).sombra,
     envio: {
       modoSombra: cfg.modoSombra,
       pausado: cfg.pausado,

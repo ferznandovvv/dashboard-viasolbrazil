@@ -7,8 +7,9 @@
  */
 
 import { adaptadorDe } from "./envio/adaptador";
+import { CloudApi } from "./envio/cloudApi";
 import { alterarBase, hojeSp, lerBase } from "./base";
-import type { Atendimento, BaseCrm, Mensagem } from "./tipos";
+import { LOJA_OFICIAL, oficialDe, type Atendimento, type BaseCrm, type Mensagem } from "./tipos";
 
 /** Quando cada número pode mandar de novo (ms). Em memória: reiniciar zera, e tudo bem. */
 const proximoEnvio = new Map<string, number>();
@@ -75,7 +76,7 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
       if ((proximoEnvio.get(n.loja) ?? 0) > agora) continue;
       if (enviadasHoje(base, n.loja, hoje) >= (n.tetoDia ?? cfg.tetoDiaPorNumero)) continue;
       const m = base.mensagens
-        .filter((x) => x.loja === n.loja && x.status === "fila" && x.naoAntesDe <= agoraIso)
+        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso)
         .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];
       if (m) escolhidas.push(m);
     }
@@ -128,6 +129,88 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
     return { enviadas, erros };
   } finally {
     processando = false;
+  }
+}
+
+/** Adaptador do número oficial (site), quando configurado. */
+export function adaptadorOficial(base: BaseCrm): { api: CloudApi; numero: string } | null {
+  const of = oficialDe(base.config);
+  return of.token && of.phoneNumberId ? { api: new CloudApi(of.token), numero: of.phoneNumberId } : null;
+}
+
+/** Dentro da janela do número oficial (o site vende todo dia, até mais tarde)? */
+export function dentroDaJanelaOficial(base: BaseCrm): boolean {
+  const { dia, hora } = agoraSp();
+  const of = oficialDe(base.config);
+  return of.dias.includes(dia) && hora >= of.inicio && hora < of.fim;
+}
+
+let processandoOficial = false;
+
+/**
+ * Fila do número oficial: manda como modelo aprovado, várias por passo (a Meta
+ * não precisa do intervalo que protege os números comuns), até o teto do dia.
+ */
+export async function processarFilaOficial(ignorarJanela = false): Promise<ResultadoTick> {
+  if (processandoOficial) return { enviadas: 0, erros: 0, motivo: "já processando" };
+  processandoOficial = true;
+  try {
+    const base = await lerBase();
+    const of = oficialDe(base.config);
+    if (base.config.pausado) return { enviadas: 0, erros: 0, motivo: "pausado" };
+    if (of.sombra) return { enviadas: 0, erros: 0, motivo: "modo sombra do site: nada sai" };
+    const ad = adaptadorOficial(base);
+    if (!ad) return { enviadas: 0, erros: 0, motivo: "WhatsApp oficial não configurado" };
+    if (!ignorarJanela && !dentroDaJanelaOficial(base)) return { enviadas: 0, erros: 0, motivo: "fora do horário do site" };
+    const hoje = hojeSp();
+    const jaHoje = base.mensagens.filter((m) => m.provedor === "oficial" && m.enviadoEm?.startsWith(hoje) && ["enviada", "entregue", "lida", "respondida"].includes(m.status)).length;
+    const cabe = Math.max(0, Math.min(20, of.tetoDia - jaHoje));
+    if (!cabe) return { enviadas: 0, erros: 0, motivo: "teto do dia do site" };
+    const agoraIso = new Date().toISOString();
+    const escolhidas = base.mensagens
+      .filter((m) => m.provedor === "oficial" && m.status === "fila" && m.naoAntesDe <= agoraIso)
+      .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe))
+      .slice(0, cabe);
+    if (!escolhidas.length) return { enviadas: 0, erros: 0 };
+    await alterarBase((b) => {
+      for (const m of escolhidas) {
+        const x = b.mensagens.find((y) => y.id === m.id);
+        if (x) x.status = "enviando";
+      }
+    });
+    const resultados: { m: Mensagem; r: { ok: boolean; idExterno?: string; erro?: string } }[] = [];
+    for (const m of escolhidas) {
+      const r = m.template ? await ad.api.enviarTemplate(ad.numero, m.telefone, m.template) : { ok: false, erro: "sem modelo da Meta" };
+      resultados.push({ m, r });
+    }
+    let enviadas = 0;
+    let erros = 0;
+    await alterarBase((b) => {
+      for (const { m, r } of resultados) {
+        const x = b.mensagens.find((y) => y.id === m.id);
+        if (!x) continue;
+        x.tentativas += 1;
+        if (r.ok) {
+          x.status = "enviada";
+          x.enviadoEm = new Date().toISOString();
+          x.idExterno = r.idExterno;
+          x.erro = undefined;
+          enviadas++;
+        } else {
+          erros++;
+          x.erro = r.erro;
+          // Erro de modelo/número não melhora sozinho: tenta mais 2 vezes e para
+          if (x.tentativas >= 3) x.status = "erro";
+          else {
+            x.status = "fila";
+            x.naoAntesDe = new Date(Date.now() + 10 * 60000).toISOString();
+          }
+        }
+      }
+    });
+    return { enviadas, erros };
+  } finally {
+    processandoOficial = false;
   }
 }
 
@@ -187,7 +270,9 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
   const base = await lerBase();
   // O evento traz o código interno da sessão; a configuração pode ter o nome. Casamos pelos dois.
   const acharLoja = (chave?: string) => (chave ? base.config.numeros.find((n) => n.sessao.toLowerCase() === chave.toLowerCase())?.loja : undefined);
-  let loja = acharLoja(ev.sessao) ?? acharLoja(ev.sessaoNome);
+  const of = oficialDe(base.config);
+  const doOficial = Boolean(of.phoneNumberId && ev.sessao === of.phoneNumberId);
+  let loja = doOficial ? LOJA_OFICIAL : (acharLoja(ev.sessao) ?? acharLoja(ev.sessaoNome));
   if (!loja) {
     const nome = await adaptadorDe(base.config)?.nomeDaSessao?.(ev.sessao);
     loja = acharLoja(nome);
@@ -195,6 +280,17 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
 
   if (ev.tipo === "status" && ev.idExterno) {
     const mapa: Record<string, Mensagem["status"]> = { DELIVERED: "entregue", READ: "lida", PLAYED: "lida" };
+    // Meta recusou depois de aceitar (número sem WhatsApp, modelo pausado, limite): vira erro
+    if ((ev.status ?? "").toUpperCase() === "FAILED") {
+      await alterarBase((b) => {
+        const m = b.mensagens.find((x) => x.idExterno === ev.idExterno);
+        if (m && m.status !== "respondida") {
+          m.status = "erro";
+          m.erro = ev.texto ? `Meta: ${ev.texto}` : "Meta não entregou";
+        }
+      });
+      return "status erro";
+    }
     const novo = mapa[(ev.status ?? "").toUpperCase()];
     if (!novo) return "status ignorado";
     await alterarBase((b) => {
@@ -270,9 +366,12 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
   // Em modo sombra ou pausado, nem isso sai.
   // Mensagem recuperada de horas atrás: marca o opt-out, mas não responde fora de hora
   const recente = !ev.recuperada || !ev.em || Date.now() - new Date(ev.em).getTime() < 3 * 3600000;
-  if (feito === "opt-out" && recente && !base.config.modoSombra && !base.config.pausado) {
-    const adaptador = adaptadorDe(base.config);
-    if (adaptador) void adaptador.enviarTexto(ev.sessao, ev.telefone, "Tudo bem, não mandamos mais mensagens por aqui. Se mudar de ideia, é só chamar a gente.");
+  const sombra = doOficial ? of.sombra : base.config.modoSombra;
+  if (feito === "opt-out" && recente && !sombra && !base.config.pausado) {
+    const confirmacao = "Tudo bem, não mandamos mais mensagens por aqui. Se mudar de ideia, é só chamar a gente.";
+    // Pelo oficial é resposta dentro das 24h que ela abriu: texto livre vale
+    const adaptador = doOficial ? adaptadorOficial(base)?.api : adaptadorDe(base.config);
+    if (adaptador) void adaptador.enviarTexto(ev.sessao, ev.telefone, confirmacao);
   }
   return feito;
 }

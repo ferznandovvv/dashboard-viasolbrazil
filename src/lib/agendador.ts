@@ -14,7 +14,8 @@ import { ligarPortaoWhats } from "./acesso/portaoWhats";
 import { shopifyConfigured, sincronizarShopifyDiaria } from "./crm/shopify";
 import { totvsConfigured } from "./connectors/totvs";
 import { rodarAutomacoes } from "./crm/automacoes";
-import { processarFila } from "./crm/fila";
+import { processarFila, processarFilaOficial } from "./crm/fila";
+import { conferirEcommerce } from "./crm/ecommerce";
 import { hojeSp, lerBase as lerBaseCrm } from "./crm/base";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
@@ -179,6 +180,24 @@ export function iniciarAgendador(): void {
       })
       .catch((e) => console.error("[crm] fila falhou:", e instanceof Error ? e.message : e));
   }, 20_000);
+
+  // Número oficial do site: fila a cada 30 s; carrinho e Pix na Shopify a cada 10 min
+  setInterval(() => {
+    processarFilaOficial()
+      .then((r) => {
+        if (r.enviadas || r.erros) console.log(`[crm] fila do site: ${r.enviadas} enviadas, ${r.erros} erros`);
+      })
+      .catch((e) => console.error("[crm] fila do site falhou:", e instanceof Error ? e.message : e));
+  }, 30_000);
+  const ecommerce = () =>
+    conferirEcommerce()
+      .then((r) => {
+        if (r?.erro) console.error("[crm] e-commerce:", r.erro);
+        else if (r && (r.enfileiradas || r.canceladas || r.recuperadas)) console.log(`[crm] e-commerce: ${r.enfileiradas} novas, ${r.canceladas} canceladas, ${r.recuperadas} compraram`);
+      })
+      .catch((e) => console.error("[crm] e-commerce falhou:", e instanceof Error ? e.message : e));
+  setTimeout(ecommerce, 3 * 60_000);
+  setInterval(ecommerce, 10 * 60_000);
 
   // Vendas para o CRM: confere a cada 5 minutos se está na hora (ler a base a cada 30 s pesaria)
   setTimeout(() => conferirSincronizacoesCrm(horaSp().hora), 2 * 60_000);

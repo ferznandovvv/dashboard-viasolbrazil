@@ -5,14 +5,16 @@ import type { ConfigCrm, Modelo, NumeroWhatsapp } from "@/lib/crm/tipos";
 import { type DadosConfig, type Resumo, api, brl } from "./comum";
 import { Fontes } from "./Fontes";
 import { Importar } from "./Importar";
+import { WhatsAppSite } from "./WhatsAppSite";
 
-type Secao = "cashback" | "campanhas" | "envio" | "numeros" | "modelos" | "dados" | "backup";
+type Secao = "cashback" | "campanhas" | "envio" | "numeros" | "site" | "modelos" | "dados" | "backup";
 
 const SECOES: [Secao, string, string][] = [
   ["cashback", "Cashback", "Percentual, validade e a regra de uso"],
   ["campanhas", "Automações", "Lembretes, aniversário, reativação"],
   ["envio", "Envio", "Provedor, modo sombra, horário e ritmo"],
   ["numeros", "Números", "Um WhatsApp por loja"],
+  ["site", "WhatsApp do site", "Número oficial, carrinho e Pix"],
   ["modelos", "Textos", "O que as mensagens dizem"],
   ["dados", "Dados", "TOTVS, Shopify e planilhas"],
   ["backup", "Backup", "Cópia da base"],
@@ -303,6 +305,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
           </>
         )}
 
+        {secao === "site" && <WhatsAppSite d={d} aoMudar={async () => { await carregar(); await recarregar(); }} />}
         {secao === "numeros" && <Numeros lojas={d.lojas} numeros={cfg.numeros} provedor={cfg.provedor} salvar={(numeros) => salvar({ numeros }, "Números salvos.")} />}
 
         {secao === "modelos" && <Modelos d={d} aoMudar={carregar} />}
@@ -340,7 +343,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
   );
 }
 
-function Copiavel({ rotulo, valor }: { rotulo: string; valor: string }) {
+export function Copiavel({ rotulo, valor }: { rotulo: string; valor: string }) {
   const [ok, setOk] = useState(false);
   return (
     <div className="cfg-copiavel">
@@ -366,7 +369,7 @@ function Copiavel({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
-function Campo({ rotulo, valor, onChange, prefixo, sufixo, dica, texto, placeholder }: { rotulo: string; valor: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; prefixo?: string; sufixo?: string; dica?: string; texto?: boolean; placeholder?: string }) {
+export function Campo({ rotulo, valor, onChange, prefixo, sufixo, dica, texto, placeholder }: { rotulo: string; valor: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; prefixo?: string; sufixo?: string; dica?: string; texto?: boolean; placeholder?: string }) {
   return (
     <label className="cfg-campo">
       <span>{rotulo}</span>

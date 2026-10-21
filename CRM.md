@@ -333,6 +333,25 @@ dos últimos 30 dias aparece na Visão geral.
 Os textos têm variações (sorteadas) e aceitam `{primeiro}`, `{nome}`,
 `{loja}`, `{valor}`, `{validade}`, `{codigo}`. Edite em Configurar → Textos.
 
+## Site: WhatsApp oficial, carrinho e Pix
+
+O e-commerce manda pelo número oficial (Cloud API da Meta), configurado em
+Configurações › CRM › WhatsApp do site; as lojas continuam na WA-AKG. Fila,
+limite por cliente e SAIR valem pros dois, mas cada um tem o seu modo sombra.
+
+- `src/lib/crm/ecommerce.ts`: a cada 10 min lê na Shopify os checkouts
+  abandonados (26 h) e os pedidos (4 dias). Carrinho parado há 60 min com
+  telefone e sem pedido depois: uma mensagem (no máximo uma a cada 7 dias por
+  pessoa). Pix pendente há 30 min: um lembrete. O que já foi pago/comprado sai
+  da fila, e compra até 3 dias depois fica anotada na mensagem (`resultado`).
+- Pela Meta só sai modelo aprovado: `via_sol_carrinho` (marketing) e
+  `via_sol_pix_pendente` (utilidade), em `src/lib/crm/modelosMeta.ts`; o
+  painel manda pra aprovação com um botão. O texto em Textos é só espelho.
+- Webhook da Meta: a mesma rota `/api/crm/webhook?t=…`, com o segredo como
+  token de verificação; confere a assinatura se o segredo do app estiver salvo.
+- Tela principal: envio por número (hoje x teto, fila, SAIR e erro em 7 dias),
+  cashback do mês, clientes que voltaram, retorno por campanha e o site.
+
 ## Arquivos
 
 - `src/lib/crm/tipos.ts` tipos, campanhas e textos padrão

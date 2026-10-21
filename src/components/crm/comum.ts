@@ -58,6 +58,9 @@ export interface DadosConfig {
   webhookUsado?: string;
   enderecoPublicoPadrao?: string;
   waakgLinkPadrao?: string;
+  temTokenOficial?: boolean;
+  temAppSecret?: boolean;
+  webhookOficial?: { url: string; verifyToken: string };
 }
 
 export type MensagemComCliente = Mensagem & { cliente: string };

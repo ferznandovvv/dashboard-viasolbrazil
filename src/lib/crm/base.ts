@@ -192,6 +192,13 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // E-commerce: carrinho abandonado e Pix não pago, pelo número oficial (em sombra)
+    id: "modelos-site-v1",
+    aplicar: (b) => {
+      for (const m of MODELOS_PADRAO) if (!b.modelos.some((x) => x.campanha === m.campanha)) b.modelos.push(structuredClone(m));
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

@@ -148,6 +148,8 @@ export type TipoCampanha =
   | "reativacao"
   | "pos_venda"
   | "boas_vindas"
+  | "carrinho_abandonado"
+  | "pix_pendente"
   | "avulsa";
 
 export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[] = [
@@ -160,8 +162,80 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta", marketing: true },
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
+  { id: "carrinho_abandonado", nome: "Carrinho abandonado (site)", dica: "Deixou o telefone no checkout e não fechou: uma mensagem, com o link do carrinho", marketing: false },
+  { id: "pix_pendente", nome: "Pix não pago (site)", dica: "Fez o pedido no Pix e não pagou: lembra, com o link do pedido", marketing: false },
   { id: "avulsa", nome: "Avulsa", dica: "Mandada à mão para um segmento", marketing: true },
 ];
+
+/** Campanhas do e-commerce: nascem de uma ação dela no site, não de compra na loja. */
+export const CAMPANHAS_SITE: TipoCampanha[] = ["carrinho_abandonado", "pix_pendente"];
+
+/** Configuração do número oficial com os padrões preenchidos. */
+export const oficialDe = (cfg: Pick<ConfigCrm, "oficial">): ConfigOficial => ({ ...OFICIAL_PADRAO, ...cfg.oficial });
+
+/** "Loja" do número oficial (WhatsApp Cloud API) nas mensagens e no atendimento. */
+export const LOJA_OFICIAL = "Site";
+
+/**
+ * Modelo aprovado na Meta para mandar pela API oficial. Fora da janela de 24h
+ * a Meta só aceita modelo: o texto é dela, aqui vão só os valores das variáveis.
+ */
+export interface TemplateMeta {
+  nome: string;
+  /** pt_BR */
+  idioma: string;
+  /** O que vai em {{1}}, {{2}}... do corpo: primeiro, nome, valor, itens, link, pedido, loja */
+  parametros: string[];
+  /** O modelo tem botão de link com final variável: vai o link sem o começo (urlBase) */
+  botaoLink?: boolean;
+}
+
+/** WhatsApp oficial (Cloud API da Meta), usado pelo número do site. */
+export interface ConfigOficial {
+  /** Token permanente (usuário do sistema no Gerenciador de Negócios) */
+  token?: string;
+  phoneNumberId?: string;
+  /** Conta do WhatsApp Business: pra listar e criar os modelos */
+  wabaId?: string;
+  /** Segredo do app: confere a assinatura do webhook da Meta (opcional) */
+  appSecret?: string;
+  /** Sombra própria: o site pode ficar simulando enquanto as lojas já mandam */
+  sombra: boolean;
+  /** Campanhas que saem por este número */
+  campanhas: TipoCampanha[];
+  /** Janela de envio (hora cheia, SP) e dias (0 = domingo); site vende todo dia */
+  inicio: number;
+  fim: number;
+  dias: number[];
+  tetoDia: number;
+  /** Carrinho: minutos parado antes da mensagem, valor mínimo, e se só manda pra quem marcou aceite no checkout */
+  carrinhoMinutos: number;
+  carrinhoMinimo: number;
+  carrinhoSoComAceite: boolean;
+  /** Não manda outro carrinho pra mesma pessoa antes disso */
+  carrinhoIntervaloDias: number;
+  /** Pix: minutos depois do pedido; `pagamentoTodos` inclui boleto e outros pendentes */
+  pixMinutos: number;
+  pagamentoTodos: boolean;
+  /** Começo do link do botão nos modelos (o resto vai como variável) */
+  urlBase: string;
+}
+
+export const OFICIAL_PADRAO: ConfigOficial = {
+  sombra: true,
+  campanhas: ["carrinho_abandonado", "pix_pendente"],
+  inicio: 8,
+  fim: 21,
+  dias: [0, 1, 2, 3, 4, 5, 6],
+  tetoDia: 250,
+  carrinhoMinutos: 60,
+  carrinhoMinimo: 0,
+  carrinhoSoComAceite: false,
+  carrinhoIntervaloDias: 7,
+  pixMinutos: 30,
+  pagamentoTodos: false,
+  urlBase: "https://viasolbrazil.com.br/",
+};
 
 /** "simulada": gerada em modo sombra; nunca sai, nem quando o modo sombra é desligado. */
 export type StatusMensagem = "fila" | "enviando" | "enviada" | "entregue" | "lida" | "respondida" | "erro" | "cancelada" | "simulada";
@@ -192,6 +266,12 @@ export interface Mensagem {
   avaliada?: boolean;
   /** Campanha manual (aba Campanhas) que gerou a mensagem */
   campanhaId?: string;
+  /** Sai pela API oficial (número do site), não pela WA-AKG */
+  provedor?: "oficial";
+  /** API oficial: modelo aprovado e os valores das variáveis, já prontos */
+  template?: { nome: string; idioma: string; parametros: string[]; botao?: string };
+  /** Compra que veio depois (carrinho/Pix): pedido, valor e quando */
+  resultado?: { pedido: string; valor: number; em: string };
 }
 
 /** Faixas de cliente pelo histórico de compra (ver perfil.ts). */
@@ -274,6 +354,8 @@ export interface Modelo {
   campanha: TipoCampanha;
   ativo: boolean;
   variacoes: string[];
+  /** Pela API oficial: o modelo aprovado na Meta (o texto acima fica de espelho) */
+  template?: TemplateMeta;
 }
 
 export interface NumeroWhatsapp {
@@ -333,6 +415,8 @@ export interface ConfigCrm {
   waakgLink?: string;
   waakgApiKey?: string;
   cloudApiToken?: string;
+  /** WhatsApp oficial do site (Cloud API), ao lado da WA-AKG das lojas */
+  oficial?: ConfigOficial;
   /** Segredo que o webhook precisa trazer na URL (?t=) */
   webhookSegredo: string;
   /**
@@ -441,6 +525,23 @@ export const LOJA_CIDADE: Record<string, string> = {
 };
 
 export const MODELOS_PADRAO: Modelo[] = [
+  {
+    campanha: "carrinho_abandonado",
+    ativo: true,
+    // Espelho do modelo via_sol_carrinho (o texto que vale é o aprovado na Meta)
+    variacoes: [
+      "Oi {primeiro}! Vimos que você deixou {itens} no carrinho da Via Sol ☀️ Ele continua guardado pra você, é só tocar no botão pra finalizar. Se ficou alguma dúvida de tamanho ou modelo, responde aqui que a gente te ajuda. {link}",
+    ],
+    template: { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["primeiro", "itens"], botaoLink: true },
+  },
+  {
+    campanha: "pix_pendente",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}, seu pedido {pedido} na Via Sol está reservado, mas o Pix de {valor} ainda não foi pago. Pra garantir as peças, é só abrir o pedido no botão abaixo e pagar. Se teve algum problema com o pagamento, responde aqui que a gente resolve. {link}",
+    ],
+    template: { nome: "via_sol_pix_pendente", idioma: "pt_BR", parametros: ["primeiro", "pedido", "valor"], botaoLink: true },
+  },
   {
     campanha: "boas_vindas",
     ativo: false,

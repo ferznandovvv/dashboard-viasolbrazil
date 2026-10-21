@@ -4,8 +4,10 @@ import { lerFaixa } from "@/lib/crm/atendimento";
 import { configurarWebhooks, urlDoWebhook, webhookQueVale } from "@/lib/crm/webhookAuto";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
-import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, type ConfigCrm, type Modelo } from "@/lib/crm/tipos";
+import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type ConfigCrm, type ConfigOficial, type Modelo, type TemplateMeta } from "@/lib/crm/tipos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
+import { CloudApi } from "@/lib/crm/envio/cloudApi";
+import { MODELOS_SUGERIDOS, payloadDoModelo } from "@/lib/crm/modelosMeta";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +18,16 @@ export async function GET(req: NextRequest) {
   const base = await lerBase();
   const origem = `${req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "")}://${req.headers.get("x-forwarded-host") ?? req.headers.get("host")}`;
   return NextResponse.json({
-    config: { ...base.config, waakgApiKey: mascarar(base.config.waakgApiKey), cloudApiToken: mascarar(base.config.cloudApiToken) },
+    config: {
+      ...base.config,
+      waakgApiKey: mascarar(base.config.waakgApiKey),
+      cloudApiToken: mascarar(base.config.cloudApiToken),
+      oficial: { ...oficialDe(base.config), token: mascarar(base.config.oficial?.token), appSecret: mascarar(base.config.oficial?.appSecret) },
+    },
+    temTokenOficial: Boolean(base.config.oficial?.token),
+    temAppSecret: Boolean(base.config.oficial?.appSecret),
+    // Na Meta: URL de retorno do webhook e o token de verificação (o mesmo segredo)
+    webhookOficial: { url: `${base.config.enderecoPublico ?? ENDERECO_PUBLICO_PADRAO}/api/crm/webhook?t=${base.config.webhookSegredo}`, verifyToken: base.config.webhookSegredo },
     temWaakgApiKey: Boolean(base.config.waakgApiKey),
     temCloudApiToken: Boolean(base.config.cloudApiToken),
     modelos: base.modelos,
@@ -35,7 +46,11 @@ type Pedido =
   | { tipo: "testar-numero"; loja: string }
   | { tipo: "backup" }
   | { tipo: "limpar-atendimento"; loja: string }
-  | { tipo: "reiniciar-waakg" };
+  | { tipo: "reiniciar-waakg" }
+  | { tipo: "oficial"; oficial: Partial<ConfigOficial> }
+  | { tipo: "testar-oficial" }
+  | { tipo: "modelos-meta" }
+  | { tipo: "criar-modelos-meta" };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
   const n = Number(v);
@@ -72,6 +87,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe, vale.aviso].filter(Boolean).join(" · ") });
     }
     if (p.tipo === "reiniciar-waakg") return NextResponse.json(await reiniciarWaakg());
+    if (p.tipo === "testar-oficial" || p.tipo === "modelos-meta" || p.tipo === "criar-modelos-meta") {
+      const of = oficialDe((await lerBase()).config);
+      if (!of.token) return NextResponse.json({ erro: "Falta o token da Meta." }, { status: 400 });
+      const api = new CloudApi(of.token);
+      if (p.tipo === "testar-oficial") {
+        if (!of.phoneNumberId) return NextResponse.json({ erro: "Falta o ID do número (phone number ID)." }, { status: 400 });
+        return NextResponse.json(await api.situacao(of.phoneNumberId));
+      }
+      if (!of.wabaId) return NextResponse.json({ erro: "Falta o ID da conta do WhatsApp Business (WABA)." }, { status: 400 });
+      if (p.tipo === "modelos-meta") return NextResponse.json({ modelos: await api.modelos(of.wabaId) });
+      const existentes = new Set((await api.modelos(of.wabaId)).map((m) => m.name));
+      const feitos = [];
+      for (const m of MODELOS_SUGERIDOS) {
+        if (existentes.has(m.nome)) feitos.push({ nome: m.nome, ok: true, detalhe: "já existe" });
+        else feitos.push({ nome: m.nome, ...(await api.criarModelo(of.wabaId, payloadDoModelo(m, of))) });
+      }
+      return NextResponse.json({ feitos });
+    }
     if (p.tipo === "limpar-atendimento") {
       // Apaga as conversas registradas de uma loja (ex.: o número de teste)
       const n = await alterarBase((b) => {
@@ -154,14 +187,55 @@ export async function POST(req: NextRequest) {
         if (nova.intervaloMaxSeg < nova.intervaloMinSeg) nova.intervaloMaxSeg = nova.intervaloMinSeg;
         if (nova.envioFim <= nova.envioInicio) throw new Error("O fim do horário de envio precisa ser depois do início.");
         b.config = nova;
+      } else if (p.tipo === "oficial") {
+        const o = p.oficial;
+        const atual = oficialDe(b.config);
+        // Chave mascarada (ou vazia) volta como veio: não troca o que já estava salvo
+        const segredo = (novo: string | undefined, velho: string | undefined) => (novo === undefined || novo.includes("…") ? velho : novo.trim() || undefined);
+        const nova: ConfigOficial = {
+          ...atual,
+          token: segredo(o.token, b.config.oficial?.token),
+          appSecret: segredo(o.appSecret, b.config.oficial?.appSecret),
+          phoneNumberId: o.phoneNumberId !== undefined ? o.phoneNumberId.replace(/\D/g, "") || undefined : atual.phoneNumberId,
+          wabaId: o.wabaId !== undefined ? o.wabaId.replace(/\D/g, "") || undefined : atual.wabaId,
+          sombra: o.sombra !== undefined ? Boolean(o.sombra) : atual.sombra,
+          campanhas: Array.isArray(o.campanhas) ? o.campanhas.filter((c) => CAMPANHAS.some((x) => x.id === c)) : atual.campanhas,
+          inicio: num(o.inicio, atual.inicio, 0, 23),
+          fim: num(o.fim, atual.fim, 1, 24),
+          dias: Array.isArray(o.dias) ? o.dias.map(Number).filter((d) => d >= 0 && d <= 6) : atual.dias,
+          tetoDia: num(o.tetoDia, atual.tetoDia, 1, 100000),
+          carrinhoMinutos: num(o.carrinhoMinutos, atual.carrinhoMinutos, 15, 1380),
+          carrinhoMinimo: num(o.carrinhoMinimo, atual.carrinhoMinimo),
+          carrinhoSoComAceite: o.carrinhoSoComAceite !== undefined ? Boolean(o.carrinhoSoComAceite) : atual.carrinhoSoComAceite,
+          carrinhoIntervaloDias: num(o.carrinhoIntervaloDias, atual.carrinhoIntervaloDias, 0, 90),
+          pixMinutos: num(o.pixMinutos, atual.pixMinutos, 10, 1380),
+          pagamentoTodos: o.pagamentoTodos !== undefined ? Boolean(o.pagamentoTodos) : atual.pagamentoTodos,
+          urlBase: typeof o.urlBase === "string" && /^https:\/\/[^\s]+$/.test(o.urlBase.trim()) ? o.urlBase.trim() : atual.urlBase,
+        };
+        if (nova.fim <= nova.inicio) throw new Error("O fim do horário do site precisa ser depois do início.");
+        b.config.oficial = nova;
       } else if (p.tipo === "modelo") {
         if (!CAMPANHAS.some((c) => c.id === p.modelo.campanha)) throw new Error("Campanha desconhecida.");
         const variacoes = (p.modelo.variacoes ?? []).map((v) => String(v).trim()).filter(Boolean).slice(0, 10);
         const existente = b.modelos.find((m) => m.campanha === p.modelo.campanha);
+        // Modelo da Meta (pela API oficial): nome, idioma e o que vai em cada variável
+        const t = p.modelo.template;
+        const template: TemplateMeta | undefined =
+          t === undefined
+            ? existente?.template
+            : t && String(t.nome ?? "").trim()
+              ? {
+                  nome: String(t.nome).trim(),
+                  idioma: String(t.idioma ?? "pt_BR").trim() || "pt_BR",
+                  parametros: (t.parametros ?? []).map((x) => String(x).trim()).filter(Boolean).slice(0, 10),
+                  botaoLink: Boolean(t.botaoLink),
+                }
+              : undefined;
         if (existente) {
           existente.ativo = Boolean(p.modelo.ativo);
           existente.variacoes = variacoes;
-        } else b.modelos.push({ campanha: p.modelo.campanha, ativo: Boolean(p.modelo.ativo), variacoes });
+          existente.template = template;
+        } else b.modelos.push({ campanha: p.modelo.campanha, ativo: Boolean(p.modelo.ativo), variacoes, template });
       } else throw new Error("Pedido desconhecido.");
     });
     // Número salvo: garante o webhook de cada um em segundo plano

@@ -6,6 +6,10 @@ import { Janela } from "./Clientes";
 import { formatarTelefone } from "@/lib/crm/telefone";
 import type { CardLoja } from "@/lib/crm/painel";
 import type { Devolucao } from "@/lib/crm/tipos";
+import type { LinhaEnvio } from "@/lib/crm/envioPainel";
+import type { ResumoEcommerce } from "@/lib/crm/ecommerce";
+import type { CashbackMes, VoltaramLoja } from "@/lib/crm/resumoMes";
+import type { ResultadoCampanha } from "@/lib/crm/campanhas";
 
 type Loja = CardLoja & { conectado: boolean | null; detalheNumero?: string; peloWhats: { vendas: number; valor: number; pctVendas: number | null } };
 
@@ -38,6 +42,12 @@ interface Painel {
   pendentes: Pendente[];
   sairam?: { telefone: string; nome?: string; em: string; loja?: string; texto?: string }[];
   devolucoes?: (Devolucao & { nome?: string })[];
+  envioNumeros?: (LinhaEnvio & { conectado: boolean | null })[];
+  ecommerce?: ResumoEcommerce;
+  cashbackMes?: CashbackMes;
+  voltaram?: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> };
+  retorno?: { id: string; nome: string; manual: boolean; r: ResultadoCampanha }[];
+  siteSombra?: boolean;
   envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number };
   gatewayUrl?: string;
 }
@@ -235,12 +245,13 @@ function MiniBarras({ dias }: { dias: { dia: string; conversas: number }[] }) {
   );
 }
 
-/** Visão geral do CRM: envio, celular no caixa por loja e conferência do cashback. */
+/** Visão geral do CRM: envio por número, dinheiro do cashback, clientes que voltaram, retorno das mensagens, site, celular no caixa. */
 export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: number; saldoTotal: number } } }) {
   const { p, erro } = usePainel();
   if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
   const g = p.geral;
   const pctCel = g.vendas30 ? Math.round((g.comCelular30 / g.vendas30) * 100) : null;
+  const pctBase = r.base.clientes ? Math.round((r.base.comTelefone / r.base.clientes) * 100) : 0;
   const e = p.envio;
   const situacaoEnvio = e.modoSombra
     ? { txt: "Modo sombra: nenhuma mensagem automática sai", cls: "aviso" }
@@ -251,34 +262,20 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
         : e.dentroDaJanela
           ? { txt: `Mandando · ${e.naFila} na fila`, cls: "ok" }
           : { txt: `Fora do horário de envio (${e.inicio}h às ${e.fim}h) · ${e.naFila} na fila`, cls: "" };
-  const lojas = [...p.lojas].filter((l) => l.cadastro.vendas30 > 0).sort((a, b) => (b.cadastro.pct30 ?? 0) - (a.cadastro.pct30 ?? 0));
-  const pctBase = r.base.clientes ? Math.round((r.base.comTelefone / r.base.clientes) * 100) : 0;
-
   return (
     <div>
-      <div className={`pg-envio ${situacaoEnvio.cls}`}>{situacaoEnvio.txt}</div>
-
-      <div className="tiles pg-kpis">
-        <div className="tile">
-          <div className="label">Clientes na base</div>
-          <div className="value">{r.base.clientes.toLocaleString("pt-BR")}</div>
-          <div className="muted">{pctBase}% com celular</div>
-        </div>
-        <div className="tile">
-          <div className="label">Vendas com celular</div>
-          <div className="value">{pctCel === null ? "–" : `${pctCel}%`}</div>
-          <div className="muted">
-            {g.comCelular30} de {g.vendas30} vendas · 30 dias
-          </div>
-        </div>
-        <div className="tile">
-          <div className="label">Cashback em aberto</div>
-          <div className="value">{reais(r.base.saldoTotal)}</div>
-          <div className="muted">no nome das clientes</div>
-        </div>
+      <div className="pg-status">
+        <div className={`pg-envio ${situacaoEnvio.cls}`}>Lojas: {situacaoEnvio.txt}</div>
+        {p.ecommerce && <div className={`pg-envio ${p.ecommerce.sombra ? "aviso" : "ok"}`}>Site: {p.ecommerce.sombra ? "modo sombra" : p.ecommerce.configurado ? "mandando pelo número oficial" : "número oficial não configurado"}</div>}
       </div>
 
-      <CapturaCelular />
+      {p.envioNumeros && p.envioNumeros.length > 0 && <EnvioNumeros linhas={p.envioNumeros} />}
+      {p.cashbackMes && <CashbackDoMes c={p.cashbackMes} emAberto={r.base.saldoTotal} />}
+      {p.voltaram && p.voltaram.lojas.length > 0 && <Voltaram v={p.voltaram} />}
+      {p.retorno && p.retorno.length > 0 && <Retorno linhas={p.retorno} />}
+      {p.ecommerce && <Ecommerce e={p.ecommerce} />}
+
+      <CapturaCelular resumo={{ clientes: r.base.clientes, pctBase, pctCel, vendas30: g.vendas30, comCelular30: g.comCelular30 }} />
 
       {p.sairam && p.sairam.length > 0 && (
         <section className="card">
@@ -604,10 +601,11 @@ function BarraCaptura({ l }: { l: LinhaCap }) {
 const PERIODOS = [7, 30] as const;
 
 /** Celular no caixa por loja, separando cadastro sem celular de venda sem cadastro. */
-function CapturaCelular() {
+function CapturaCelular({ resumo }: { resumo: { clientes: number; pctBase: number; pctCel: number | null; vendas30: number; comCelular30: number } }) {
   const [dias, setDias] = useState<number>(30);
   const [d, setD] = useState<Captura | null>(null);
   const [aberta, setAberta] = useState<string | null>(null);
+  const [tabela, setTabela] = useState(false);
   useEffect(() => {
     api<Captura>(`/api/crm/captura?dias=${dias}`).then(setD).catch(() => setD(null));
   }, [dias]);
@@ -624,8 +622,28 @@ function CapturaCelular() {
         </div>
       </div>
       <p className="muted pg-nota">
-        Cada venda do caixa nos últimos {dias} dias cai em um de três jeitos. Clique na loja para ver por vendedora e a lista das vendas sem celular.
+        {resumo.pctCel ?? 0}% das vendas dos últimos 30 dias saíram com o celular da cliente ({resumo.comCelular30} de {resumo.vendas30}). A base tem {resumo.clientes.toLocaleString("pt-BR")} clientes, {resumo.pctBase}% com celular. Clique na loja para ver por vendedora e as vendas sem celular.
       </p>
+      {d && !tabela && (
+        <ul className="cap-resumo">
+          {d.lojas.map((l) => {
+            const delta = l.pct !== null && l.pctAnterior !== null ? l.pct - l.pctAnterior : null;
+            return (
+              <li key={l.loja}>
+                <button className="cap-resumo-l" onClick={() => setAberta(l.loja)}>
+                  <span className="cap-resumo-nome">{l.loja}</span>
+                  <BarraCaptura l={l} />
+                  <b>{l.pct ?? 0}%</b>
+                  {delta ? <small className={delta < 0 ? "cap-pior" : "cap-melhor"}>{delta > 0 ? "▲" : "▼"}{Math.abs(delta)}</small> : <small />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <button className="link" onClick={() => setTabela(!tabela)}>{tabela ? "ver resumo" : "ver tabela completa"}</button>
+      {tabela && (
+      <>
       <div className="cap-legenda">
         <span><i className="com" /> com celular</span>
         <span><i className="semcel" /> cliente cadastrada, mas sem celular</span>
@@ -675,6 +693,8 @@ function CapturaCelular() {
           </table>
           <p className="muted pg-nota cap-rodape">▲▼ = pontos a mais ou a menos que nos {dias} dias anteriores.</p>
         </div>
+      )}
+      </>
       )}
       {aberta && <CapturaDaLoja loja={aberta} dias={dias} fechar={() => setAberta(null)} />}
     </section>
@@ -771,5 +791,223 @@ function CapturaDaLoja({ loja, dias, fechar }: { loja: string; dias: number; fec
         </>
       )}
     </Janela>
+  );
+}
+
+const pctTxt = (n: number | null | undefined) => (n === null || n === undefined ? "–" : `${n}%`);
+const nivelUso = (usado: number, teto: number) => (teto <= 0 ? "" : usado / teto >= 0.9 ? "ruim" : usado / teto >= 0.7 ? "medio" : "bom");
+
+/** Quanto cada número já mandou hoje perto do teto, a fila e os sinais de risco. */
+function EnvioNumeros({ linhas }: { linhas: (LinhaEnvio & { conectado: boolean | null })[] }) {
+  return (
+    <section className="card">
+      <h2>Envio por número</h2>
+      <p className="muted pg-nota">
+        Hoje = mensagens que já saíram de quantas o número pode mandar no dia. Em modo sombra, &quot;sairiam hoje&quot; mostra quantas teriam saído: se passar do teto, a fila vai acumular quando ligar. SAIR e erro altos nos últimos 7 dias são o sinal de risco de bloqueio.
+      </p>
+      <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Envio por número">
+        <table className="prod-tbl fin-tbl env-tbl">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th style={{ width: "28%" }}>Hoje</th>
+              <th className="n">Na fila</th>
+              <th className="n">Enviadas 7d</th>
+              <th className="n">Responderam</th>
+              <th className="n">SAIR 7d</th>
+              <th className="n">Erros 7d</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l) => {
+              const usado = Math.max(l.hoje, l.simuladasHoje);
+              const pct = l.teto ? Math.min(100, Math.round((usado / l.teto) * 100)) : 0;
+              return (
+                <tr key={`${l.provedor}-${l.loja}`} className={l.ativo ? "" : "off"}>
+                  <td className="fin-desc">
+                    <b>{l.loja}</b>
+                    <small className="muted">
+                      {" "}
+                      {l.provedor === "oficial" ? "oficial" : "WA-AKG"}
+                      {!l.ativo ? " · desligado" : l.conectado === false ? " · desconectado" : ""}
+                    </small>
+                  </td>
+                  <td>
+                    <div className={`env-barra ${nivelUso(usado, l.teto)}`} title={`${usado} de ${l.teto}`}>
+                      <i style={{ width: `${pct}%` }} />
+                    </div>
+                    <small>
+                      {l.hoje} de {l.teto}
+                      {l.simuladasHoje > 0 ? ` · ${l.simuladasHoje} sairiam hoje` : ""}
+                    </small>
+                  </td>
+                  <td className="n">
+                    {l.naFila}
+                    {l.filaDias > 0 && <small className="cap-pior"> · {l.filaDias}d</small>}
+                  </td>
+                  <td className="n">{l.enviadas7d}</td>
+                  <td className="n">{pctTxt(l.pctResposta)}</td>
+                  <td className={`n ${l.sair7d >= 3 ? "cap-semcad" : ""}`}>{l.sair7d}</td>
+                  <td className={`n ${l.erros7d >= 3 ? "cap-semcad" : ""}`}>{l.erros7d}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** Dinheiro do cashback no mês. */
+function CashbackDoMes({ c, emAberto }: { c: CashbackMes; emAberto: number }) {
+  const mes = new Date(`${c.mes}T12:00:00`).toLocaleDateString("pt-BR", { month: "long" });
+  return (
+    <section className="card">
+      <h2>Cashback em {mes}</h2>
+      <div className="tiles pg-kpis">
+        <div className="tile">
+          <div className="label">Creditado</div>
+          <div className="value">{reais(c.creditado)}</div>
+          <div className="muted">{c.creditos} compras</div>
+        </div>
+        <div className="tile">
+          <div className="label">Usado em compra</div>
+          <div className="value">{reais(c.usado)}</div>
+          <div className="muted">
+            {c.resgates} {c.resgates === 1 ? "vez" : "vezes"}
+            {c.comprasComCashback > 0 ? ` · compras de ${reais(c.comprasComCashback)}` : ""}
+          </div>
+        </div>
+        <div className={`tile ${c.vencendo10d > 0 ? "alerta" : ""}`}>
+          <div className="label">Vence em 10 dias</div>
+          <div className="value">{reais(c.vencendo10d)}</div>
+          <div className="muted">{c.clientesVencendo} clientes · os lembretes saem sozinhos</div>
+        </div>
+        <div className="tile">
+          <div className="label">Em aberto</div>
+          <div className="value">{reais(emAberto)}</div>
+          <div className="muted">{c.expirado > 0 ? `${reais(c.expirado)} venceram no mês` : "no nome das clientes"}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Clientes que voltaram a comprar no mês, por loja. */
+function Voltaram({ v }: { v: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> } }) {
+  const delta = (a: number | null, b: number | null) => (a !== null && b !== null && a !== b ? a - b : null);
+  const d = delta(v.total.pct, v.total.pctAnterior);
+  return (
+    <section className="card">
+      <h2>Clientes que voltaram</h2>
+      <p className="muted pg-nota">
+        Das clientes identificadas que compraram neste mês, quantas já tinham comprado antes (em qualquer loja ou no site). É o número que mostra se o CRM está trazendo gente de volta. No total: <b>{pctTxt(v.total.pct)}</b> ({v.total.voltaram} de {v.total.compradoras})
+        {d ? <span className={d < 0 ? "cap-pior" : "cap-melhor"}> {d > 0 ? "▲" : "▼"}{Math.abs(d)} pontos que no mês passado até hoje</span> : null}.
+      </p>
+      <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Clientes que voltaram por loja">
+        <table className="prod-tbl fin-tbl">
+          <thead>
+            <tr>
+              <th>Loja</th>
+              <th className="n">Compraram</th>
+              <th className="n">Voltaram</th>
+              <th className="n">Novas</th>
+              <th className="n">Mês passado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {v.lojas.map((l) => (
+              <tr key={l.loja}>
+                <td className="fin-desc">{l.loja}</td>
+                <td className="n">{l.compradoras}</td>
+                <td className="n">
+                  <b>{pctTxt(l.pct)}</b> <small className="muted">({l.voltaram})</small>
+                </td>
+                <td className="n">{l.novas}</td>
+                <td className="n muted">{pctTxt(l.pctAnterior)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** Retorno de cada campanha nos últimos 30 dias. */
+function Retorno({ linhas }: { linhas: { id: string; nome: string; manual: boolean; r: ResultadoCampanha }[] }) {
+  return (
+    <section className="card">
+      <h2>Retorno das mensagens</h2>
+      <p className="muted pg-nota">
+        Últimos 30 dias, por campanha. &quot;Compraram&quot; = compra em até 14 dias depois da mensagem (em qualquer loja ou no site); não prova que foi a mensagem, mas comparando campanhas dá pra ver qual puxa mais. Simuladas = modo sombra.
+      </p>
+      <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Retorno das mensagens">
+        <table className="prod-tbl fin-tbl">
+          <thead>
+            <tr>
+              <th>Campanha</th>
+              <th className="n">Saíram</th>
+              <th className="n">Responderam</th>
+              <th className="n">SAIR</th>
+              <th className="n">Compraram</th>
+              <th className="n">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map(({ id, nome, manual, r }) => (
+              <tr key={id}>
+                <td className="fin-desc">
+                  {nome}
+                  {manual && <small className="muted"> · campanha</small>}
+                  {r.simuladas > 0 && <small className="muted"> · {r.simuladas} simuladas</small>}
+                  {r.fila > 0 && <small className="muted"> · {r.fila} na fila</small>}
+                </td>
+                <td className="n">{r.enviadas}</td>
+                <td className="n">
+                  {r.respondidas} <small className="muted">{r.enviadas ? `${Math.round((r.respondidas / r.enviadas) * 100)}%` : ""}</small>
+                </td>
+                <td className={`n ${r.enviadas && r.sair / r.enviadas > 0.03 ? "cap-semcad" : ""}`}>{r.sair}</td>
+                <td className="n">
+                  {r.compraram} <small className="muted">{r.enviadas ? `${Math.round((r.compraram / r.enviadas) * 100)}%` : ""}</small>
+                </td>
+                <td className="n">{r.receita ? reais(r.receita) : "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** Site: carrinho abandonado e Pix não pago nos últimos 7 dias. */
+function Ecommerce({ e }: { e: ResumoEcommerce }) {
+  const u = e.ultimo;
+  const linha = (nome: string, x: { mensagens: number; simuladas: number; n: number; valor: number }, verbo: string) => (
+    <div className="tile">
+      <div className="label">{nome}</div>
+      <div className="value">{x.n}</div>
+      <div className="muted">
+        {verbo} depois de {e.sombra ? `${x.simuladas} mensagens simuladas` : `${x.mensagens} mensagens`}
+        {x.valor ? ` · ${reais(x.valor)}` : ""}
+      </div>
+    </div>
+  );
+  return (
+    <section className="card">
+      <h2>Site: carrinho e Pix (7 dias)</h2>
+      <p className="muted pg-nota">
+        {e.sombra
+          ? "Modo sombra: as mensagens são só simuladas. Quem comprou depois de uma simulada comprou sozinha; esse é o número a bater quando ligar de verdade."
+          : "Quem comprou ou pagou em até 3 dias depois da mensagem."}
+        {u && ` Última leitura da Shopify: ${dataHora(u.em)}${u.erro ? ` (erro: ${u.erro})` : ` · ${u.carrinhos} carrinhos e ${u.pixPendentes} Pix pendentes no momento`}.`}
+      </p>
+      <div className="tiles tiles-2">
+        {linha("Carrinhos recuperados", { ...e.carrinho, n: e.carrinho.compraram }, "compraram")}
+        {linha("Pix pagos", { ...e.pix, n: e.pix.pagaram }, "pagaram")}
+      </div>
+    </section>
   );
 }

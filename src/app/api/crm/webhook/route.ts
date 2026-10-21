@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { lerBase } from "@/lib/crm/base";
 import { type EventoRecebido, receberEvento } from "@/lib/crm/fila";
+import { normalizarTelefone } from "@/lib/crm/telefone";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,23 @@ export async function POST(req: NextRequest) {
   if (!t || t.length !== esperado.length || !timingSafeEqual(Buffer.from(t), Buffer.from(esperado))) {
     return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
   }
-  const corpo = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  const bruto = await req.text();
+  let corpo: Record<string, unknown> | null = null;
+  try {
+    corpo = JSON.parse(bruto) as Record<string, unknown>;
+  } catch {
+    /* abaixo */
+  }
   if (!corpo) return NextResponse.json({ erro: "JSON inválido" }, { status: 400 });
+  // Meta: com o segredo do app configurado, confere também a assinatura
+  const segredoApp = base.config.oficial?.appSecret;
+  if (corpo.entry && segredoApp) {
+    const assinatura = req.headers.get("x-hub-signature-256") ?? "";
+    const certo = `sha256=${createHmac("sha256", segredoApp).update(bruto).digest("hex")}`;
+    if (assinatura.length !== certo.length || !timingSafeEqual(Buffer.from(assinatura), Buffer.from(certo))) {
+      return NextResponse.json({ erro: "Assinatura inválida" }, { status: 401 });
+    }
+  }
 
   const eventos = extrair(corpo);
   const feitos: string[] = [];
@@ -92,18 +108,39 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
     return out;
   }
 
-  // Cloud API
-  const entries = c.entry as { changes?: { value?: Record<string, unknown> }[] }[] | undefined;
+  // Cloud API (número oficial do site). O telefone da Meta pode vir sem o nono dígito: normaliza
+  const tel = (x: unknown) => normalizarTelefone(String(x ?? "")) ?? String(x ?? "").replace(/\D/g, "");
+  const textoDe = (m: Record<string, unknown>) => {
+    const t = ((m.text ?? {}) as { body?: string }).body;
+    const botao = ((m.button ?? {}) as { text?: string }).text;
+    const inter = (m.interactive ?? {}) as { button_reply?: { title?: string }; list_reply?: { title?: string } };
+    const legenda = ((m[String(m.type)] ?? {}) as { caption?: string }).caption;
+    return t ?? botao ?? inter.button_reply?.title ?? inter.list_reply?.title ?? legenda ?? `[${String(m.type ?? "mídia")}]`;
+  };
+  const entries = c.entry as { changes?: { field?: string; value?: Record<string, unknown> }[] }[] | undefined;
   for (const e of entries ?? []) {
     for (const ch of e.changes ?? []) {
       const v = ch.value ?? {};
       const sessao = String(((v.metadata ?? {}) as Record<string, unknown>).phone_number_id ?? "");
+      const nomes = new Map(((v.contacts ?? []) as { wa_id?: string; profile?: { name?: string } }[]).map((x) => [String(x.wa_id ?? ""), x.profile?.name]));
       for (const m of (v.messages ?? []) as Record<string, unknown>[]) {
-        const texto = ((m.text ?? {}) as { body?: string }).body ?? `[${String(m.type ?? "mídia")}]`;
-        out.push({ tipo: "mensagem", sessao, telefone: String(m.from ?? "").replace(/\D/g, ""), texto, idExterno: String(m.id ?? ""), em: quando(m.timestamp) });
+        if (m.type === "reaction" || m.type === "unsupported") continue;
+        out.push({ tipo: "mensagem", sessao, telefone: tel(m.from), texto: textoDe(m), idExterno: String(m.id ?? ""), em: quando(m.timestamp), nome: nomes.get(String(m.from ?? ""))?.slice(0, 60) });
+      }
+      // Coexistência: o que a equipe respondeu pelo app WhatsApp Business no celular
+      for (const m of (v.message_echoes ?? []) as Record<string, unknown>[]) {
+        out.push({ tipo: "mensagem", sessao, telefone: tel(m.to), texto: textoDe(m), idExterno: String(m.id ?? ""), em: quando(m.timestamp), fromMe: true });
       }
       for (const s of (v.statuses ?? []) as Record<string, unknown>[]) {
-        out.push({ tipo: "status", sessao, telefone: String(s.recipient_id ?? ""), idExterno: String(s.id ?? ""), status: String(s.status ?? "").toUpperCase() });
+        const erro = ((s.errors ?? []) as { title?: string; error_data?: { details?: string } }[])[0];
+        out.push({
+          tipo: "status",
+          sessao,
+          telefone: tel(s.recipient_id),
+          idExterno: String(s.id ?? ""),
+          status: String(s.status ?? "").toUpperCase(),
+          texto: erro ? (erro.error_data?.details ?? erro.title) : undefined,
+        });
       }
     }
   }

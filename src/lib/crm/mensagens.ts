@@ -5,7 +5,7 @@
 
 import { brl, dataBr, novoId, primeiroNome, somarDias, hojeSp } from "./base";
 import { gerarCodigo } from "./cashback";
-import { CAMPANHAS, type BaseCrm, type Cliente, type Mensagem, type TipoCampanha } from "./tipos";
+import { CAMPANHAS, CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem, type TipoCampanha } from "./tipos";
 
 export interface Variaveis {
   valor?: number;
@@ -26,6 +26,45 @@ export interface Variaveis {
   endereco?: string;
   /** Dia da compra (AAAA-MM-DD): vira {quando} = "ontem" / "no dia 16/10" e {daCompra} = "de ontem" / "do dia 16/10" */
   dataCompra?: string;
+  /** Site: o que ficou no carrinho ("Biquíni Ana e mais 1 peça"), link do carrinho/pedido e número do pedido */
+  itens?: string;
+  link?: string;
+  pedido?: string;
+}
+
+/** Valor de uma variável, pra preencher {{1}}, {{2}}... do modelo da Meta. */
+export function valorDaVariavel(chave: string, cliente: Cliente, v: Variaveis): string {
+  switch (chave) {
+    case "primeiro":
+      return primeiroNome(cliente.nome) || "tudo bem";
+    case "nome":
+      return cliente.nome.trim() || "cliente";
+    case "valor":
+      return v.valor !== undefined ? brl(v.valor) : "";
+    case "validade":
+      return v.validade ? dataBr(v.validade) : "";
+    case "itens":
+      return v.itens ?? "suas peças";
+    case "link":
+      return v.link ?? "";
+    case "pedido":
+      return v.pedido ?? "";
+    case "loja":
+      return v.loja ?? "";
+    default:
+      return "";
+  }
+}
+
+/** Final do link para o botão do modelo (a parte depois do domínio): o modelo tem o começo fixo. */
+export function sufixoDoLink(link: string | undefined): string | undefined {
+  if (!link) return undefined;
+  try {
+    const u = new URL(link);
+    return `${u.pathname.replace(/^\//, "")}${u.search}`;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Compra mínima para usar `valor` de cashback, pela regra do múltiplo. */
@@ -72,6 +111,9 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{endereco\}/g, v.endereco?.trim() ? ` (${v.endereco.trim()})` : "")
     .replace(/\{quando\}/g, quandoFoi(v.dataCompra, "ontem", "no dia"))
     .replace(/\{daCompra\}/g, quandoFoi(v.dataCompra, "de ontem", "do dia"))
+    .replace(/\{itens\}/g, v.itens ?? "suas peças")
+    .replace(/\{link\}/g, v.link ?? "")
+    .replace(/\{pedido\}/g, v.pedido ?? "")
     // Sem vendedora: "aqui é a equipe, da Via Sol Centro" vira "aqui é da Via Sol Centro"
     .replace(/(^|[\s,])([EeÉé]) a equipe,? da /g, "$1$2 da ")
     .replace(/(^|[\s,])([EeÉé]) a equipe\b/g, "$1$2 da equipe")
@@ -135,7 +177,7 @@ export interface PedidoFila {
 }
 
 /** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
-const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas"];
+const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas", "carrinho_abandonado", "pix_pendente"];
 
 /**
  * A mensagem conta para limite e repetição? Cancelada e erro não. Simulada
@@ -143,7 +185,10 @@ const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_per
  * desligado, ela some das contas e a cliente pode receber a de verdade.
  */
 export const conta = (base: BaseCrm, m: Mensagem) =>
-  m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || base.config.modoSombra);
+  m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || sombraDe(base, m));
+
+/** O modo sombra que vale para a mensagem: o do número oficial ou o das lojas. */
+const sombraDe = (base: BaseCrm, m: Pick<Mensagem, "provedor">) => (m.provedor === "oficial" ? oficialDe(base.config).sombra : base.config.modoSombra);
 
 /** Mensagens mandadas (ou na fila) para a cliente nos últimos 30 dias, de campanhas que contam. */
 export function mensagensNoMes(base: BaseCrm, clienteId: string): number {
@@ -158,7 +203,11 @@ export function motivoBloqueio(base: BaseCrm, c: Cliente, campanha: TipoCampanha
   if (!c.telefone) return "sem telefone";
   if (forcar) return undefined;
   if (c.optOut || base.naoContatar?.[c.telefone]) return "pediu para não receber";
-  if (!c.optIn) return "sem aceite";
+  // Carrinho e Pix nascem do que ela acabou de fazer no site (deixou o telefone no checkout):
+  // não dependem do aceite de marketing, a não ser que a configuração peça
+  const doSite = CAMPANHAS_SITE.includes(campanha);
+  const exigeAceite = !doSite || (campanha === "carrinho_abandonado" && oficialDe(base.config).carrinhoSoComAceite);
+  if (exigeAceite && !c.optIn) return "sem aceite";
   if (ehMarketing(campanha) && c.semResposta >= base.config.maxSemResposta) return "sem resposta nas últimas campanhas";
   if (!FORA_DO_LIMITE.includes(campanha) && mensagensNoMes(base, c.id) >= base.config.maxMensagensMes) return "já recebeu o máximo do mês";
   return undefined;
@@ -169,7 +218,9 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   const c = p.cliente;
   const bloqueio = motivoBloqueio(base, c, p.campanha, p.forcar);
   if (bloqueio) return { motivo: bloqueio };
-  if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada" && (m.status !== "simulada" || base.config.modoSombra))) return { motivo: "já enviada" };
+  if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada" && (m.status !== "simulada" || sombraDe(base, m)))) return { motivo: "já enviada" };
+  const of = oficialDe(base.config);
+  if (of.campanhas.includes(p.campanha)) return enfileirarOficial(base, p);
   const lojaRef = p.loja ?? c.lojaOrigem;
   const loja = lojaDeEnvio(base, lojaRef);
   if (!loja) return { motivo: base.config.numeros.some((n) => n.ativo && n.sessao) ? `loja ${lojaRef} ainda sem número` : "nenhum número de WhatsApp configurado" };
@@ -204,6 +255,50 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
     tentativas: 0,
     chave: p.chave,
     campanhaId: p.campanhaId,
+  };
+  base.mensagens.push(m);
+  return { mensagem: m };
+}
+
+/**
+ * Pela API oficial (número do site): sai como modelo aprovado na Meta, com as
+ * variáveis já preenchidas. Em sombra entra como simulada mesmo sem a Meta
+ * configurada, pra ver o volume antes de ligar.
+ */
+function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem; motivo?: string } {
+  const c = p.cliente;
+  const of = oficialDe(base.config);
+  const modelo = base.modelos.find((m) => m.campanha === p.campanha);
+  if (!modelo?.ativo) return { motivo: "campanha desligada" };
+  if (!of.sombra) {
+    if (!of.token || !of.phoneNumberId) return { motivo: "WhatsApp oficial não configurado" };
+    if (!modelo.template?.nome) return { motivo: "campanha sem modelo aprovado na Meta" };
+  }
+  const v: Variaveis = { loja: LOJA_OFICIAL, ...p.variaveis };
+  const texto = renderizar(modelo.variacoes.find((t) => t.trim()) ?? "", c, LOJA_OFICIAL, v);
+  const t = modelo.template;
+  const m: Mensagem = {
+    id: novoId(),
+    clienteId: c.id,
+    telefone: c.telefone!,
+    campanha: p.campanha,
+    loja: LOJA_OFICIAL,
+    texto,
+    status: of.sombra ? "simulada" : "fila",
+    naoAntesDe: p.naoAntesDe ?? new Date().toISOString(),
+    criadoEm: new Date().toISOString(),
+    tentativas: 0,
+    chave: p.chave,
+    campanhaId: p.campanhaId,
+    provedor: "oficial",
+    template: t
+      ? {
+          nome: t.nome,
+          idioma: t.idioma || "pt_BR",
+          parametros: t.parametros.map((k) => valorDaVariavel(k, c, v)),
+          botao: t.botaoLink ? sufixoDoLink(v.link) : undefined,
+        }
+      : undefined,
   };
   base.mensagens.push(m);
   return { mensagem: m };
