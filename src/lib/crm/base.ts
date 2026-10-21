@@ -342,6 +342,23 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Pix da PagBrasil vence em 30 min: o lembrete sai com 10 e leva o código
+    // copia e cola; o que venceu sem lembrete vira "Pix vencido" com o carrinho
+    // montado de novo.
+    id: "pix-copia-e-cola-v1",
+    aplicar: (b) => {
+      const pix = b.modelos.find((x) => x.campanha === "pix_pendente");
+      const padrao = MODELOS_PADRAO.find((x) => x.campanha === "pix_pendente")!;
+      if (pix && !pix.variacoes.some((v) => v.includes("{expira}"))) pix.variacoes = [...padrao.variacoes];
+      if (!b.modelos.some((x) => x.campanha === "pix_expirado")) b.modelos.push(structuredClone(MODELOS_PADRAO.find((x) => x.campanha === "pix_expirado")!));
+      const of = b.config.oficial;
+      if (of) {
+        if (of.pixMinutos === undefined || of.pixMinutos >= 30) of.pixMinutos = 10;
+        if (of.campanhas?.includes("pix_pendente") && !of.campanhas.includes("pix_expirado")) of.campanhas.push("pix_expirado");
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

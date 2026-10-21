@@ -156,6 +156,7 @@ export type TipoCampanha =
   | "boas_vindas"
   | "carrinho_abandonado"
   | "pix_pendente"
+  | "pix_expirado"
   | "avulsa";
 
 export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[] = [
@@ -169,12 +170,13 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
   { id: "carrinho_abandonado", nome: "Carrinho abandonado (site)", dica: "Deixou o telefone no checkout e não fechou: uma mensagem, com o link do carrinho", marketing: false },
-  { id: "pix_pendente", nome: "Pix não pago (site)", dica: "Fez o pedido no Pix e não pagou: lembra, com o link do pedido", marketing: false },
+  { id: "pix_pendente", nome: "Pix não pago (site)", dica: "Fez o pedido no Pix e não pagou: manda o código copia e cola, antes de o Pix vencer", marketing: false },
+  { id: "pix_expirado", nome: "Pix vencido (site)", dica: "O Pix venceu sem pagar e ela não comprou de novo: manda o carrinho montado pra refazer o pedido", marketing: false },
   { id: "avulsa", nome: "Avulsa", dica: "Mandada à mão para um segmento", marketing: true },
 ];
 
 /** Campanhas do e-commerce: nascem de uma ação dela no site, não de compra na loja. */
-export const CAMPANHAS_SITE: TipoCampanha[] = ["carrinho_abandonado", "pix_pendente"];
+export const CAMPANHAS_SITE: TipoCampanha[] = ["carrinho_abandonado", "pix_pendente", "pix_expirado"];
 
 /** Teto do dia de um número: o dele (ou o geral), limitado pelo teto temporário enquanto valer. */
 export function tetoDoNumero(cfg: Pick<ConfigCrm, "tetoDiaPorNumero" | "tetoTemporario">, n: { tetoDia?: number } | undefined, hoje: string): number {
@@ -227,7 +229,7 @@ export interface ConfigOficial {
   carrinhoSoComAceite: boolean;
   /** Não manda outro carrinho pra mesma pessoa antes disso */
   carrinhoIntervaloDias: number;
-  /** Pix: minutos depois do pedido; `pagamentoTodos` inclui boleto e outros pendentes */
+  /** Pix: minutos depois do pedido (o Pix da PagBrasil vence em 30); `pagamentoTodos` inclui boleto e outros pendentes */
   pixMinutos: number;
   pagamentoTodos: boolean;
   /** Começo do link do botão nos modelos (o resto vai como variável) */
@@ -236,7 +238,7 @@ export interface ConfigOficial {
 
 export const OFICIAL_PADRAO: ConfigOficial = {
   sombra: true,
-  campanhas: ["carrinho_abandonado", "pix_pendente"],
+  campanhas: ["carrinho_abandonado", "pix_pendente", "pix_expirado"],
   inicio: 8,
   fim: 22,
   dias: [0, 1, 2, 3, 4, 5, 6],
@@ -245,7 +247,7 @@ export const OFICIAL_PADRAO: ConfigOficial = {
   carrinhoMinimo: 0,
   carrinhoSoComAceite: false,
   carrinhoIntervaloDias: 7,
-  pixMinutos: 30,
+  pixMinutos: 10,
   pagamentoTodos: false,
   urlBase: "https://viasolbrazil.com.br/",
 };
@@ -285,6 +287,8 @@ export interface Mensagem {
   template?: { nome: string; idioma: string; parametros: string[]; botao?: string };
   /** Compra que veio depois (carrinho/Pix): pedido, valor e quando */
   resultado?: { pedido: string; valor: number; em: string };
+  /** Segunda mensagem, logo depois desta (o código Pix sozinho, pra copiar fácil) */
+  complemento?: string;
 }
 
 /** Faixas de cliente pelo histórico de compra (ver perfil.ts). */
@@ -557,10 +561,18 @@ export const MODELOS_PADRAO: Modelo[] = [
   {
     campanha: "pix_pendente",
     ativo: true,
+    // A mensagem seguinte é o código Pix sozinho (copia e cola)
     variacoes: [
-      "Oi {primeiro}, seu pedido {pedido} na Via Sol está reservado, mas o Pix de {valor} ainda não foi pago. Pra garantir as peças, é só abrir o pedido e pagar: {link} Se teve algum problema com o pagamento, responde aqui que a gente resolve.",
+      "Oi {primeiro}! Seu pedido {pedido} na Via Sol ficou reservado, só falta o Pix de {valor} ☀️ O código vale até as {expira}: é só copiar a próxima mensagem e colar no app do banco, em Pix Copia e Cola. Se der qualquer problema, responde aqui que a gente te ajuda.",
     ],
     template: { nome: "via_sol_pix_pendente", idioma: "pt_BR", parametros: ["primeiro", "pedido", "valor"], botaoLink: true },
+  },
+  {
+    campanha: "pix_expirado",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}! O Pix do seu pedido {pedido} na Via Sol venceu antes do pagamento ☀️ Se ainda quiser {itens}, montei o carrinho de novo pra você, é só abrir e finalizar: {link} Qualquer dúvida de tamanho ou pagamento, responde aqui que a gente te ajuda.",
+    ],
   },
   {
     campanha: "boas_vindas",

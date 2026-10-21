@@ -182,14 +182,15 @@ export function iniciarAgendador(): void {
   }, 20_000);
 
   // Uma vez: avisos de cashback de quem comprou mais de uma vez passam a levar o total
+  // (v2: regra em % só quando a compra mínima passa de R$ 500)
   void alterarBaseCrm((b) => {
-    if (b.config.migracoes?.includes("reagrupar-avisos-v1")) return;
+    if (b.config.migracoes?.includes("reagrupar-avisos-v2")) return;
     const n = reagruparAvisos(b);
-    (b.config.migracoes ??= []).push("reagrupar-avisos-v1");
+    (b.config.migracoes ??= []).push("reagrupar-avisos-v2");
     if (n) console.log(`[crm] avisos de cashback com o total: ${n}`);
   }).catch(() => {});
 
-  // Número oficial do site: fila a cada 30 s; carrinho e Pix na Shopify a cada 10 min
+  // Número oficial do site: fila a cada 30 s; carrinho e Pix na Shopify a cada 5 min
   setInterval(() => {
     processarFilaOficial()
       .then((r) => {
@@ -205,7 +206,8 @@ export function iniciarAgendador(): void {
       })
       .catch((e) => console.error("[crm] e-commerce falhou:", e instanceof Error ? e.message : e));
   setTimeout(ecommerce, 3 * 60_000);
-  setInterval(ecommerce, 10 * 60_000);
+  // A cada 5 min: o Pix da PagBrasil vence em 30, o lembrete precisa sair rápido
+  setInterval(ecommerce, 5 * 60_000);
 
   // Vendas para o CRM: confere a cada 5 minutos se está na hora (ler a base a cada 30 s pesaria)
   setTimeout(() => conferirSincronizacoesCrm(horaSp().hora), 2 * 60_000);

@@ -78,10 +78,15 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
 
     for (const n of cfg.numeros.filter((x) => x.ativo && x.sessao)) {
       if ((proximoEnvio.get(n.loja) ?? 0) > agora) continue;
-      if (enviadasHoje(base, n.loja, hoje) >= tetoDoNumero(cfg, n, hoje)) continue;
+      // Carrinho e Pix passam na frente e não esperam o teto do lançamento (só o normal do número):
+      // é a cliente que acabou de estar no site, e o Pix vence em minutos
+      const jaHoje = enviadasHoje(base, n.loja, hoje);
+      if (jaHoje >= (n.tetoDia ?? cfg.tetoDiaPorNumero)) continue;
+      const cabeComum = jaHoje < tetoDoNumero(cfg, n, hoje);
+      const doSite = (x: Mensagem) => CAMPANHAS_SITE.includes(x.campanha);
       const m = base.mensagens
-        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso && podeAgora(x))
-        .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];
+        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso && podeAgora(x) && (cabeComum || doSite(x)))
+        .sort((a, b) => Number(doSite(b)) - Number(doSite(a)) || a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];
       if (m) escolhidas.push(m);
     }
     if (!escolhidas.length) return { enviadas: 0, erros: 0 };
@@ -100,6 +105,12 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
       escolhidas.map(async (m) => {
         const numero = cfg.numeros.find((n) => n.loja === m.loja)!;
         const r = await adaptador.enviarTexto(numero.sessao, m.telefone, m.texto);
+        // Pix: o código vai sozinho logo depois, pra ela copiar com um toque
+        if (r.ok && m.complemento) {
+          await new Promise((ok) => setTimeout(ok, 2000));
+          const r2 = await adaptador.enviarTexto(numero.sessao, m.telefone, m.complemento);
+          if (!r2.ok) console.error(`[crm] código Pix não saiu pra ${m.telefone}: ${r2.erro}`);
+        }
         // Campanha já vem espaçada pelo horário de cada mensagem; aqui só garante o intervalo mínimo
         const espera = m.campanhaId ? cfg.intervaloMinSeg : aleatorio(cfg.intervaloMinSeg, cfg.intervaloMaxSeg);
         proximoEnvio.set(m.loja, Date.now() + espera * 1000);

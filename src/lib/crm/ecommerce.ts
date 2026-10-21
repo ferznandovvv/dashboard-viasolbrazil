@@ -6,8 +6,12 @@
  * - checkout parado há `carrinhoMinutos`, com telefone, sem pedido depois:
  *   uma mensagem com o link do carrinho (uma por checkout, e no máximo uma
  *   a cada `carrinhoIntervaloDias` pra mesma pessoa);
- * - pedido no Pix ainda pendente há `pixMinutos`: um lembrete com o link do
- *   pedido (uma por pedido);
+ * - pedido no Pix ainda pendente há `pixMinutos`: um lembrete com o código Pix
+ *   copia e cola (mandado logo depois, sozinho), enquanto ele vale (o da
+ *   PagBrasil vence em 30 min);
+ * - Pix que venceu sem lembrete (de noite, por exemplo) e ela não comprou de
+ *   novo: uma mensagem com o carrinho montado pra refazer o pedido. Uma
+ *   mensagem por pedido, nunca as duas;
  * - o que estava na fila e a cliente já comprou/pagou é cancelado;
  * - compra que veio depois da mensagem fica anotada nela (o resultado). Em
  *   modo sombra isso mostra quantas comprariam de qualquer jeito.
@@ -105,6 +109,8 @@ interface Pedido {
   customer: Pessoa | null;
   shippingAddress: Endereco | null;
   billingAddress: Endereco | null;
+  customAttributes?: { key: string; value: string | null }[];
+  lineItems?: { nodes: { title: string | null; quantity: number; variant: { id: string } | null }[] };
 }
 
 const PESSOA_NOVA = "id displayName firstName email phone defaultPhoneNumber { marketingState whatsAppMarketingConsent { state } }";
@@ -132,6 +138,8 @@ const Q_PEDIDOS = `query Pedidos($query: String!, $cursor: String) {
     nodes {
       id name createdAt cancelledAt displayFinancialStatus statusPageUrl paymentGatewayNames email phone discountCodes
       totalPriceSet { shopMoney { amount } }
+      customAttributes { key value }
+      lineItems(first: 20) { nodes { title quantity variant { id } } }
       customer { ${PESSOA} }
       shippingAddress { ${ENDERECO} }
       billingAddress { ${ENDERECO} }
@@ -167,6 +175,27 @@ async function todasNa<T>(query: string, chave: string, filtro: string, paginas:
 }
 
 const idCurto = (gid: string) => gid.split("/").pop()!.split("?")[0];
+
+const atributo = (p: Pedido, chave: string) => p.customAttributes?.find((a) => a.key === chave)?.value?.trim() || undefined;
+
+/** Código Pix copia e cola e quando vence (a PagBrasil grava no pedido, hora de Brasília). */
+export function pixDoPedido(p: Pedido): { codigo?: string; expira?: number; hora?: string } {
+  const codigo = atributo(p, "payment_additional_pix_code");
+  const data = atributo(p, "payment_additional_pix_expiration_date")?.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const hora = atributo(p, "payment_additional_pix_expiration_time")?.match(/^(\d{2}):(\d{2})/);
+  const expira = data && hora ? Date.parse(`${data[3]}-${data[2]}-${data[1]}T${hora[1]}:${hora[2]}:00-03:00`) : NaN;
+  return { codigo, expira: Number.isNaN(expira) ? undefined : expira, hora: hora ? `${hora[1]}:${hora[2]}` : undefined };
+}
+
+/** Link que monta o carrinho de novo com as peças do pedido (variante:quantidade). */
+export function linkRefazer(urlBase: string, p: Pedido): string | undefined {
+  const itens = (p.lineItems?.nodes ?? []).filter((i) => i.variant?.id && i.quantity > 0);
+  if (!itens.length) return undefined;
+  return `${urlBase.replace(/\/+$/, "")}/cart/${itens.map((i) => `${idCurto(i.variant!.id)}:${i.quantity}`).join(",")}`;
+}
+
+/** Folga antes de o Pix vencer: menos que isso não adianta mandar o código. */
+const FOLGA_PIX_MIN = 4;
 const PAGO = new Set(["PAID", "PARTIALLY_REFUNDED", "PARTIALLY_PAID", "AUTHORIZED"]);
 
 function telefoneDe(x: { customer: Pessoa | null; shippingAddress: Endereco | null; billingAddress: Endereco | null; phone?: string | null }): string | undefined {
@@ -272,15 +301,23 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
   }
 
   // 2. Pix (ou outro pagamento) pendente
+  const pagou = (x: Pedido) => !x.cancelledAt && PAGO.has(x.displayFinancialStatus ?? "");
+  /** Ela fez outro pedido pago depois deste (refez com cartão, por exemplo) */
+  const comprouDeNovo = (p: Pedido) =>
+    [telefoneDe(p), emailDe(p)].flatMap((k) => (k ? (pedidosDe.get(k) ?? []) : [])).some((x) => x.id !== p.id && pagou(x) && x.createdAt > p.createdAt);
+  const venceu = (p: Pedido, folgaMin: number) => {
+    const { expira } = pixDoPedido(p);
+    return expira ? agora >= expira - folgaMin * 60000 : minutos(p.createdAt) >= 30;
+  };
   for (const p of pedidos) {
-    if (p.cancelledAt || p.displayFinancialStatus !== "PENDING") continue;
+    if (p.cancelledAt || !["PENDING", "EXPIRED"].includes(p.displayFinancialStatus ?? "")) continue;
     const ehPix = p.paymentGatewayNames.some((g) => /pix/i.test(g));
     if (!ehPix && !of.pagamentoTodos) continue;
     const idade = minutos(p.createdAt);
     if (idade > 24 * 60) continue;
     r.pixPendentes++;
-    if (idade < of.pixMinutos) {
-      motivo("Pix esperando o tempo");
+    if (comprouDeNovo(p)) {
+      motivo("Pix: comprou de novo");
       continue;
     }
     const tel = telefoneDe(p);
@@ -288,16 +325,53 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
       motivo("Pix sem telefone");
       continue;
     }
-    const chave = `pix-${idCurto(p.id)}`;
+    const id = idCurto(p.id);
+    const pix = pixDoPedido(p);
+    const valor = parseFloat(p.totalPriceSet.shopMoney.amount);
+    if (!venceu(p, FOLGA_PIX_MIN) && pix.codigo) {
+      // Ainda vale: lembrete com o código copia e cola
+      if (idade < of.pixMinutos) {
+        motivo("Pix esperando o tempo");
+        continue;
+      }
+      const chave = `pix-${id}`;
+      if (b.mensagens.some((m) => m.chave === chave)) continue;
+      const e = enfileirar(b, {
+        cliente: clienteDo(b, p, tel),
+        campanha: "pix_pendente",
+        chave,
+        variaveis: { valor, pedido: p.name, link: p.statusPageUrl, expira: pix.hora },
+        complemento: pix.codigo,
+      });
+      if (e.mensagem) r.enfileiradas++;
+      else motivo(`Pix: ${e.motivo}`);
+      continue;
+    }
+    if (!venceu(p, 0)) {
+      motivo("Pix perto de vencer");
+      continue;
+    }
+    // Venceu. Se o lembrete com o código saiu, ela já foi lembrada: não manda outra
+    if (b.mensagens.some((m) => m.chave === `pix-${id}` && m.status !== "cancelada" && m.status !== "erro")) continue;
+    if (idade < of.carrinhoMinutos) {
+      motivo("Pix vencido esperando o tempo");
+      continue;
+    }
+    const link = linkRefazer(of.urlBase, p);
+    if (!link) {
+      motivo("Pix vencido sem peças pra montar o carrinho");
+      continue;
+    }
+    const chave = `pixexp-${id}`;
     if (b.mensagens.some((m) => m.chave === chave)) continue;
     const e = enfileirar(b, {
       cliente: clienteDo(b, p, tel),
-      campanha: "pix_pendente",
+      campanha: "pix_expirado",
       chave,
-      variaveis: { valor: parseFloat(p.totalPriceSet.shopMoney.amount), pedido: p.name, link: p.statusPageUrl },
+      variaveis: { valor, pedido: p.name, link, itens: resumoItens(p.lineItems?.nodes ?? []) },
     });
     if (e.mensagem) r.enfileiradas++;
-    else motivo(`Pix: ${e.motivo}`);
+    else motivo(`Pix vencido: ${e.motivo}`);
   }
 
   // 3. Na fila e já resolvido: não manda
@@ -305,11 +379,21 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
   const porCheckout = new Map(checkouts.map((c) => [idCurto(c.id), c]));
   for (const m of b.mensagens) {
     if (m.status !== "fila" || !m.chave) continue;
-    if (m.chave.startsWith("pix-")) {
-      const p = porId.get(m.chave.slice(4));
-      if (p && (p.cancelledAt || PAGO.has(p.displayFinancialStatus ?? ""))) {
+    if (m.chave.startsWith("pix-") || m.chave.startsWith("pixexp-")) {
+      const p = porId.get(m.chave.slice(m.chave.indexOf("-") + 1));
+      if (!p) continue;
+      const erro = p.cancelledAt
+        ? "Pedido cancelado"
+        : PAGO.has(p.displayFinancialStatus ?? "")
+          ? "Já pagou"
+          : comprouDeNovo(p)
+            ? "Comprou de novo"
+            : m.chave.startsWith("pix-") && venceu(p, 1)
+              ? "Pix venceu antes de sair"
+              : undefined;
+      if (erro) {
         m.status = "cancelada";
-        m.erro = p.cancelledAt ? "Pedido cancelado" : "Já pagou";
+        m.erro = erro;
         r.canceladas++;
       }
     } else if (m.chave.startsWith("carrinho-")) {
@@ -413,7 +497,7 @@ export function resumoEcommerce(b: BaseCrm, dias = 7): ResumoEcommerce {
   for (const m of b.mensagens) {
     if (m.criadoEm < desde || !CAMPANHAS_SITE.includes(m.campanha)) continue;
     if (m.campanha === "carrinho_abandonado") conta(car, m);
-    if (m.campanha === "pix_pendente") conta(pix, m);
+    if (m.campanha === "pix_pendente" || m.campanha === "pix_expirado") conta(pix, m);
   }
   return {
     dias,

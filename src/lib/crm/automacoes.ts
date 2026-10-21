@@ -7,7 +7,7 @@ import { alterarBase, diasEntre, hojeSp, lerBase, novoId, somarDias } from "./ba
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
 import { JUNTO, campanhaDoCredito, creditosParaAviso, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
 import { resumir } from "./clientes";
-import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar, renderizar } from "./mensagens";
+import { assinatura, compraMinimaPara, conta as contaNoLimite, ehMarketing, enfileirar, renderizar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -21,10 +21,14 @@ export function lojaNaCidade(c: Cliente): string | undefined {
   return undefined;
 }
 
-/** Aviso de cashback de quem tem mais de uma compra pra avisar: o total, numa mensagem só. */
-export function textoVarios(b: BaseCrm): string {
+/**
+ * Aviso de cashback de quem tem mais de uma compra pra avisar: o total, numa
+ * mensagem só. Se a compra mínima pra usar tudo passa de R$ 500, a regra vai
+ * em porcentagem ("até 20% de cada compra"), que assusta menos.
+ */
+export function textoVarios(b: BaseCrm, valor = 0): string {
   const m = b.config.cashbackMultiploCompra;
-  const regra = m > 0 ? ` (em cada compra dá pra usar até ${Math.round(100 / m)}% do valor)` : "";
+  const regra = !(m > 0) ? "" : valor * m > 500 ? ` (em cada compra dá pra usar até ${Math.round(100 / m)}% do valor)` : " (vale em compra a partir de {compraMinima})";
   return `Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Suas últimas compras com a gente renderam {valor} de cashback, que fica guardado no seu nome até {validade} pra usar em qualquer loja nossa${regra}. Adorei te atender, volta logo.`;
 }
 
@@ -50,7 +54,7 @@ export function reagruparAvisos(b: BaseCrm): number {
     const validade = movs.map((x) => x.validade ?? "").filter(Boolean).sort()[0];
     const venda = b.vendas.find((v) => v.id === credito.get(ids[0])?.vendaId);
     const rodape = b.config.textoSair && m.texto?.includes(b.config.textoSair) ? `\n\n${b.config.textoSair}` : "";
-    m.texto = renderizar(textoVarios(b), c, m.loja, { valor: total, validade, vendedora: assinatura(b, m.loja, venda?.vendedoraCpf) }) + rodape;
+    m.texto = renderizar(textoVarios(b, total), c, m.loja, { valor: total, validade, vendedora: assinatura(b, m.loja, venda?.vendedoraCpf), compraMinima: compraMinimaPara(b, total) }) + rodape;
     n++;
   }
   return n;
@@ -153,7 +157,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       campanha: "cashback_creditado",
       loja: mov.loja,
       // Mais de uma compra: um aviso só, com o total e a validade que vence primeiro
-      texto: varios ? textoVarios(b) : undefined,
+      texto: varios ? textoVarios(b, grupo.reduce((t, g) => t + g.valor, 0)) : undefined,
       variaveis: varios
         ? { valor: Math.round(grupo.reduce((t, g) => t + g.valor, 0) * 100) / 100, validade: grupo.map((g) => g.mov.validade ?? "").filter(Boolean).sort()[0] ?? mov.validade, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) }
         : { valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },

@@ -30,6 +30,8 @@ export interface Variaveis {
   itens?: string;
   link?: string;
   pedido?: string;
+  /** Pix: hora em que o código vence ("15:54") */
+  expira?: string;
 }
 
 /** Valor de uma variável, pra preencher {{1}}, {{2}}... do modelo da Meta. */
@@ -49,6 +51,8 @@ export function valorDaVariavel(chave: string, cliente: Cliente, v: Variaveis): 
       return v.link ?? "";
     case "pedido":
       return v.pedido ?? "";
+    case "expira":
+      return v.expira ?? "";
     case "loja":
       return v.loja ?? "";
     default:
@@ -114,6 +118,7 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{itens\}/g, v.itens ?? "suas peças")
     .replace(/\{link\}/g, v.link ?? "")
     .replace(/\{pedido\}/g, v.pedido ?? "")
+    .replace(/\{expira\}/g, v.expira ?? "")
     // Sem vendedora: "aqui é a equipe, da Via Sol Centro" vira "aqui é da Via Sol Centro"
     .replace(/(^|[\s,])([EeÉé]) a equipe,? da /g, "$1$2 da ")
     .replace(/(^|[\s,])([EeÉé]) a equipe\b/g, "$1$2 da equipe")
@@ -174,10 +179,12 @@ export interface PedidoFila {
   oferta?: string;
   /** Campanha manual que gerou */
   campanhaId?: string;
+  /** Segunda mensagem, mandada logo depois (só pela WA-AKG): o código Pix sozinho */
+  complemento?: string;
 }
 
 /** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
-const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas", "carrinho_abandonado", "pix_pendente"];
+const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas", "carrinho_abandonado", "pix_pendente", "pix_expirado"];
 
 /**
  * A mensagem conta para limite e repetição? Cancelada e erro não. Simulada
@@ -268,6 +275,7 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
     tentativas: 0,
     chave: p.chave,
     campanhaId: p.campanhaId,
+    complemento: p.complemento,
   };
   base.mensagens.push(m);
   return { mensagem: m };
