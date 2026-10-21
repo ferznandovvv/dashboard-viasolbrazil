@@ -9,7 +9,7 @@
 import { adaptadorDe } from "./envio/adaptador";
 import { CloudApi } from "./envio/cloudApi";
 import { alterarBase, hojeSp, lerBase } from "./base";
-import { LOJA_OFICIAL, oficialDe, type Atendimento, type BaseCrm, type Mensagem } from "./tipos";
+import { LOJA_OFICIAL, oficialDe, tetoDoNumero, type Atendimento, type BaseCrm, type Mensagem } from "./tipos";
 
 /** Quando cada número pode mandar de novo (ms). Em memória: reiniciar zera, e tudo bem. */
 const proximoEnvio = new Map<string, number>();
@@ -74,7 +74,7 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
 
     for (const n of cfg.numeros.filter((x) => x.ativo && x.sessao)) {
       if ((proximoEnvio.get(n.loja) ?? 0) > agora) continue;
-      if (enviadasHoje(base, n.loja, hoje) >= (n.tetoDia ?? cfg.tetoDiaPorNumero)) continue;
+      if (enviadasHoje(base, n.loja, hoje) >= tetoDoNumero(cfg, n, hoje)) continue;
       const m = base.mensagens
         .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso)
         .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];

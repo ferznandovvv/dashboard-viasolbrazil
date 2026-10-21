@@ -264,6 +264,23 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
               <h2>Ritmo (é isso que protege os números)</h2>
               <div className="cfg-grid">
                 <Campo rotulo="Teto por número por dia" sufixo="mensagens" valor={cfg.tetoDiaPorNumero} onChange={n("tetoDiaPorNumero")} dica="Comece em 20 e suba aos poucos" />
+                <label className="cfg-campo">
+                  <span>Teto do lançamento (vale pra todos os números, até a data)</span>
+                  <div className="cfg-input">
+                    <input
+                      value={cfg.tetoTemporario?.valor ?? ""}
+                      inputMode="numeric"
+                      placeholder="sem"
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "");
+                        setCfg({ ...cfg, tetoTemporario: v ? { valor: Number(v), ate: cfg.tetoTemporario?.ate ?? new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10) } : (null as unknown as undefined) });
+                      }}
+                    />
+                    <em>por dia até</em>
+                    <input type="date" value={cfg.tetoTemporario?.ate ?? ""} disabled={!cfg.tetoTemporario} onChange={(e) => cfg.tetoTemporario && setCfg({ ...cfg, tetoTemporario: { ...cfg.tetoTemporario, ate: e.target.value } })} />
+                  </div>
+                  <small>Pro acumulado sair aos poucos, sem pico. Vazio = sem teto temporário</small>
+                </label>
                 <Campo rotulo="Máximo por cliente em 30 dias" sufixo="mensagens" valor={cfg.maxMensagensMes} onChange={n("maxMensagensMes")} dica="De qualquer campanha. O aviso de cashback da própria compra não conta" />
                 <Campo rotulo="Intervalo mínimo entre mensagens" sufixo="seg" valor={cfg.intervaloMinSeg} onChange={n("intervaloMinSeg")} />
                 <Campo rotulo="Intervalo máximo" sufixo="seg" valor={cfg.intervaloMaxSeg} onChange={n("intervaloMaxSeg")} />

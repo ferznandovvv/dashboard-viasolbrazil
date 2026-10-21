@@ -288,6 +288,14 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Lançamento com o acumulado de outubro: no máximo 30 por número por dia,
+    // pra não ter pico (o Fernando prefere demorar e não arriscar o número)
+    id: "teto-lancamento-30",
+    aplicar: (b) => {
+      b.config.tetoTemporario ??= { valor: 30, ate: "2026-11-15" };
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

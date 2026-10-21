@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { LOJAS, totvsConfigured } from "@/lib/connectors/totvs";
 import { rodandoLocal } from "@/lib/credenciais";
 import { hojeSp, lerBase, somarDias } from "@/lib/crm/base";
+import { tetoDoNumero } from "@/lib/crm/tipos";
 import { SEGMENTOS, listarSegmento } from "@/lib/crm/clientes";
 import { dentroDaJanela, enviadasHoje } from "@/lib/crm/fila";
 import { progresso } from "@/lib/crm/totvs";
@@ -35,7 +36,7 @@ export async function GET() {
       ...n,
       sessao: n.sessao,
       hoje: enviadasHoje(base, n.loja, hoje),
-      teto: n.tetoDia ?? base.config.tetoDiaPorNumero,
+      teto: tetoDoNumero(base.config, n, hojeSp()),
       situacao: adaptador && n.ativo && n.sessao ? await adaptador.situacao(n.sessao) : null,
     }))
   );

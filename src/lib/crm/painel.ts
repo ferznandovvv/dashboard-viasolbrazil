@@ -10,7 +10,7 @@ import { type ResumoAtendimento, resumoAtendimento } from "./atendimento";
 import { enviadasHoje } from "./fila";
 import { perfis } from "./perfil";
 import type { BaseCrm } from "./tipos";
-import { linkDaWaakg } from "./tipos";
+import { linkDaWaakg, tetoDoNumero } from "./tipos";
 
 export type Nivel = "ok" | "atencao" | "critico" | "inativo";
 
@@ -130,7 +130,7 @@ export function painel(base: BaseCrm): { lojas: CardLoja[]; hoje: ResumoAtendime
         configurado,
         ativo,
         hoje: enviadasHoje(base, loja, hoje),
-        teto: n?.tetoDia ?? base.config.tetoDiaPorNumero,
+        teto: tetoDoNumero(base.config, n, hoje),
         naFila: base.mensagens.filter((m) => m.loja === loja && m.status === "fila").length,
       },
       atend: {

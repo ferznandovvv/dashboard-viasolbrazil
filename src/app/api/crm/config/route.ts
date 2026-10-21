@@ -185,6 +185,12 @@ export async function POST(req: NextRequest) {
           envioFim: num(c.envioFim, atual.envioFim, 1, 24),
           envioDias: Array.isArray(c.envioDias) ? c.envioDias.map(Number).filter((d) => d >= 0 && d <= 6) : atual.envioDias,
           tetoDiaPorNumero: num(c.tetoDiaPorNumero, atual.tetoDiaPorNumero, 1, 500),
+          tetoTemporario:
+            c.tetoTemporario === undefined
+              ? atual.tetoTemporario
+              : c.tetoTemporario && /^\d{4}-\d{2}-\d{2}$/.test(String(c.tetoTemporario.ate))
+                ? { valor: num(c.tetoTemporario.valor, 30, 1, 500), ate: String(c.tetoTemporario.ate) }
+                : undefined,
           intervaloMinSeg: num(c.intervaloMinSeg, atual.intervaloMinSeg, 10, 3600),
           intervaloMaxSeg: num(c.intervaloMaxSeg, atual.intervaloMaxSeg, 10, 7200),
           maxSemResposta: num(c.maxSemResposta, atual.maxSemResposta, 1, 20),

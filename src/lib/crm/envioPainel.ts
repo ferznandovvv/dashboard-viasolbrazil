@@ -6,7 +6,7 @@
 
 import { hojeSp } from "./base";
 import { enviadasHoje } from "./fila";
-import { LOJA_OFICIAL, type BaseCrm, type Mensagem } from "./tipos";
+import { LOJA_OFICIAL, tetoDoNumero, type BaseCrm, type Mensagem } from "./tipos";
 
 export interface LinhaEnvio {
   loja: string;
@@ -35,7 +35,7 @@ export function envioPorNumero(base: BaseCrm): LinhaEnvio[] {
   const hoje = hojeSp();
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
   const lojas = [
-    ...cfg.numeros.filter((n) => n.sessao).map((n) => ({ loja: n.loja, provedor: "waakg" as const, ativo: n.ativo, teto: n.tetoDia ?? cfg.tetoDiaPorNumero })),
+    ...cfg.numeros.filter((n) => n.sessao).map((n) => ({ loja: n.loja, provedor: "waakg" as const, ativo: n.ativo, teto: tetoDoNumero(cfg, n, hoje) })),
     ...(cfg.oficial?.phoneNumberId || cfg.oficial?.campanhas?.length
       ? [{ loja: LOJA_OFICIAL, provedor: "oficial" as const, ativo: Boolean(cfg.oficial?.phoneNumberId && cfg.oficial?.token), teto: cfg.oficial?.tetoDia ?? 250 }]
       : []),

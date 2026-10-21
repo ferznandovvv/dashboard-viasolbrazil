@@ -9,7 +9,7 @@ import { saldoDe, creditosAbertos } from "./cashback";
 import { enviadasHoje } from "./fila";
 import { assinatura, compraMinimaPara, enfileirar, lojaDeEnvio, motivoBloqueio, renderizar } from "./mensagens";
 import { type Perfil, perfis } from "./perfil";
-import { CAMPANHAS, contaComoCompra, valorLiquido, type BaseCrm, type CampanhaManual, type Cliente, type FaixaCliente, type FiltroCampanha, type Mensagem } from "./tipos";
+import { CAMPANHAS, contaComoCompra, tetoDoNumero, valorLiquido, type BaseCrm, type CampanhaManual, type Cliente, type FaixaCliente, type FiltroCampanha, type Mensagem } from "./tipos";
 
 export interface Previa {
   /** Clientes no filtro (antes das regras de envio) */
@@ -123,7 +123,7 @@ export function previa(base: BaseCrm, f: FiltroCampanha, variacoes: string[] = [
       return {
         loja,
         n,
-        teto: num?.tetoDia ?? base.config.tetoDiaPorNumero,
+        teto: tetoDoNumero(base.config, num, hojeSp()),
         jaHoje: enviadasHoje(base, loja, hoje),
         naFila: base.mensagens.filter((m) => m.loja === loja && m.status === "fila" && m.naoAntesDe.startsWith(hoje)).length,
       };

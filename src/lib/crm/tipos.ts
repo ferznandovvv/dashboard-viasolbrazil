@@ -176,6 +176,13 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
 /** Campanhas do e-commerce: nascem de uma ação dela no site, não de compra na loja. */
 export const CAMPANHAS_SITE: TipoCampanha[] = ["carrinho_abandonado", "pix_pendente"];
 
+/** Teto do dia de um número: o dele (ou o geral), limitado pelo teto temporário enquanto valer. */
+export function tetoDoNumero(cfg: Pick<ConfigCrm, "tetoDiaPorNumero" | "tetoTemporario">, n: { tetoDia?: number } | undefined, hoje: string): number {
+  const teto = n?.tetoDia ?? cfg.tetoDiaPorNumero;
+  const t = cfg.tetoTemporario;
+  return t && hoje <= t.ate ? Math.min(teto, t.valor) : teto;
+}
+
 /** Configuração do número oficial com os padrões preenchidos. */
 export const oficialDe = (cfg: Pick<ConfigCrm, "oficial">): ConfigOficial => ({ ...OFICIAL_PADRAO, ...cfg.oficial });
 
@@ -443,6 +450,8 @@ export interface ConfigCrm {
   envioDias: number[];
   /** Teto diário por número */
   tetoDiaPorNumero: number;
+  /** Teto temporário (lançamento): nenhum número manda mais que `valor` por dia até `ate` (AAAA-MM-DD) */
+  tetoTemporario?: { valor: number; ate: string };
   /** Intervalo entre mensagens do mesmo número, em segundos */
   intervaloMinSeg: number;
   intervaloMaxSeg: number;
