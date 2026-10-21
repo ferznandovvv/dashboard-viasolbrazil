@@ -83,6 +83,8 @@ export function compraMinimaPara(base: BaseCrm, valor?: number): string {
 
 /** Quem assina: a vendedora da venda, senão a configurada para a loja, senão a equipe. */
 export function assinatura(base: BaseCrm, loja?: string, vendedoraCpf?: string): string {
+  const apelido = vendedoraCpf ? base.config.apelidos?.[vendedoraCpf]?.trim() : undefined;
+  if (apelido) return apelido;
   const nome = vendedoraCpf ? base.vendedoras?.[vendedoraCpf] : undefined;
   const configurada = base.config.numeros.find((n) => n.loja === loja)?.vendedora;
   const escolhido = (nome || configurada || "").trim();

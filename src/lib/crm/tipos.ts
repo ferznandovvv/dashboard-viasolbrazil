@@ -458,6 +458,8 @@ export interface ConfigCrm {
   tetoDiaPorNumero: number;
   /** Teto temporário (lançamento): nenhum número manda mais que `valor` por dia até `ate` (AAAA-MM-DD) */
   tetoTemporario?: { valor: number; ate: string };
+  /** Como a vendedora gosta de ser chamada na assinatura, por CPF (ex.: MARIA VALESKA assina "Valeska") */
+  apelidos?: Record<string, string>;
   /** Intervalo entre mensagens do mesmo número, em segundos */
   intervaloMinSeg: number;
   intervaloMaxSeg: number;

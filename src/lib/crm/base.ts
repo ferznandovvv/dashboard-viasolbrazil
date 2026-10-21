@@ -384,6 +384,22 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     aplicar: (b) => encurtarValidades(b, "Loja de Fábrica"),
   },
   {
+    // Maria Valeska (Fiusa) gosta de ser chamada de Valeska: assina assim, e os
+    // avisos dela que ainda estão na fila trocam o nome
+    id: "apelido-valeska",
+    aplicar: (b) => {
+      const cpf = Object.keys(b.vendedoras ?? {}).find((k) => /^MARIA VALES[KC]A\b/i.test(b.vendedoras[k].trim()));
+      if (!cpf) return;
+      (b.config.apelidos ??= {})[cpf] = "Valeska";
+      const vendas = new Set(b.vendas.filter((v) => v.vendedoraCpf === cpf).map((v) => v.id));
+      const creditos = new Set(b.cashback.filter((m) => m.vendaId && vendas.has(m.vendaId)).map((m) => m.id));
+      for (const m of b.mensagens) {
+        if (m.status !== "fila" || !m.chave?.startsWith("cb-credito-") || !creditos.has(m.chave.slice(11))) continue;
+        m.texto = m.texto.replace(/([Aa]qui é a )Maria\b/g, "$1Valeska").replace(/(^|[\s!.])Maria aqui\b/g, "$1Valeska aqui");
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
