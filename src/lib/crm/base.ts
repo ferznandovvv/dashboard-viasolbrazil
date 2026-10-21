@@ -217,6 +217,17 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Carrinho e Pix também pela WA-AKG (número do site): texto com o link no corpo, sem "botão"
+    id: "textos-site-waakg",
+    aplicar: (b) => {
+      for (const campanha of ["carrinho_abandonado", "pix_pendente"] as const) {
+        const m = b.modelos.find((x) => x.campanha === campanha);
+        const padrao = MODELOS_PADRAO.find((x) => x.campanha === campanha)!;
+        if (m && m.variacoes.some((v) => /botão/.test(v))) m.variacoes = [...padrao.variacoes];
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

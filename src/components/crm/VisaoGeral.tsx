@@ -266,7 +266,7 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
     <div>
       <div className="pg-status">
         <div className={`pg-envio ${situacaoEnvio.cls}`}>Lojas: {situacaoEnvio.txt}</div>
-        {p.ecommerce && <div className={`pg-envio ${p.ecommerce.sombra ? "aviso" : "ok"}`}>Site: {p.ecommerce.sombra ? "modo sombra" : p.ecommerce.configurado ? "mandando pelo número oficial" : "número oficial não configurado"}</div>}
+        {p.ecommerce && <div className={`pg-envio ${p.ecommerce.sombra ? "aviso" : "ok"}`}>Site: {p.ecommerce.sombra ? "modo sombra" : p.ecommerce.configurado ? "mandando" : "número do site não configurado"}</div>}
       </div>
 
       {p.envioNumeros && p.envioNumeros.length > 0 && <EnvioNumeros linhas={p.envioNumeros} />}

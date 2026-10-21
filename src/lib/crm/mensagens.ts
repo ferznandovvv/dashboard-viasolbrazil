@@ -187,6 +187,18 @@ const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_per
 export const conta = (base: BaseCrm, m: Mensagem) =>
   m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || sombraDe(base, m));
 
+/**
+ * A campanha sai pela API oficial? Se ela está marcada pro oficial e ele está
+ * configurado, sim. Marcada mas sem a Meta pronta: sai pelo número do site na
+ * WA-AKG, se ele estiver ligado (tapa-buraco); senão simula no oficial.
+ */
+export function viaOficial(base: BaseCrm, campanha: TipoCampanha): boolean {
+  const of = oficialDe(base.config);
+  if (!of.campanhas.includes(campanha)) return false;
+  if (of.token && of.phoneNumberId) return true;
+  return !base.config.numeros.some((n) => n.loja === LOJA_OFICIAL && n.ativo && n.sessao);
+}
+
 /** O modo sombra que vale para a mensagem: o do número oficial ou o das lojas. */
 const sombraDe = (base: BaseCrm, m: Pick<Mensagem, "provedor">) => (m.provedor === "oficial" ? oficialDe(base.config).sombra : base.config.modoSombra);
 
@@ -219,9 +231,10 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   const bloqueio = motivoBloqueio(base, c, p.campanha, p.forcar);
   if (bloqueio) return { motivo: bloqueio };
   if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada" && (m.status !== "simulada" || sombraDe(base, m)))) return { motivo: "já enviada" };
-  const of = oficialDe(base.config);
-  if (of.campanhas.includes(p.campanha)) return enfileirarOficial(base, p);
-  const lojaRef = p.loja ?? c.lojaOrigem;
+  if (viaOficial(base, p.campanha)) return enfileirarOficial(base, p);
+  // Carrinho e Pix fora da API oficial: só pelo número do site na WA-AKG, nunca pelo de uma loja
+  if (CAMPANHAS_SITE.includes(p.campanha) && !base.config.numeros.some((n) => n.loja === LOJA_OFICIAL && n.ativo && n.sessao)) return { motivo: "número do site não ligado (Números › Site)" };
+  const lojaRef = CAMPANHAS_SITE.includes(p.campanha) ? LOJA_OFICIAL : (p.loja ?? c.lojaOrigem);
   const loja = lojaDeEnvio(base, lojaRef);
   if (!loja) return { motivo: base.config.numeros.some((n) => n.ativo && n.sessao) ? `loja ${lojaRef} ainda sem número` : "nenhum número de WhatsApp configurado" };
   const id = novoId();

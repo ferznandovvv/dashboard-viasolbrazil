@@ -140,7 +140,8 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
             </label>
           ))}
         </div>
-        <h3 className="crm-h3">Campanhas que saem pelo número do site</h3>
+        <h3 className="crm-h3">Campanhas que saem pelo número oficial</h3>
+        <p className="muted pg-nota">Enquanto a Meta não estiver configurada (token e ID do número), o que está marcado aqui sai pelo número do site na WA-AKG, se ele estiver ligado em Números › Site, com o texto de Textos e o modo sombra das lojas. Desmarcado também sai por ele. Carrinho e Pix nunca saem pelo número de uma loja.</p>
         <div className="cfg-dias">
           {d.campanhas
             .filter((c) => c.id !== "avulsa")

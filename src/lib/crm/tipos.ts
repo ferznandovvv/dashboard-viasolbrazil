@@ -540,7 +540,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     ativo: true,
     // Espelho do modelo via_sol_carrinho (o texto que vale é o aprovado na Meta)
     variacoes: [
-      "Oi {primeiro}! Vimos que você deixou {itens} no carrinho da Via Sol ☀️ Ele continua guardado pra você, é só tocar no botão pra finalizar. Se ficou alguma dúvida de tamanho ou modelo, responde aqui que a gente te ajuda. {link}",
+      "Oi {primeiro}! Vimos que você deixou {itens} no carrinho da Via Sol ☀️ Ele continua guardado pra você, é só abrir o link pra finalizar: {link} Se ficou alguma dúvida de tamanho ou modelo, responde aqui que a gente te ajuda.",
+      "{primeiro}, aqui é da Via Sol ☀️ Seu carrinho com {itens} ficou guardado. Pra finalizar a compra é só abrir: {link} Qualquer dúvida de tamanho, é só me chamar por aqui.",
     ],
     template: { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["primeiro", "itens"], botaoLink: true },
   },
@@ -548,7 +549,7 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "pix_pendente",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, seu pedido {pedido} na Via Sol está reservado, mas o Pix de {valor} ainda não foi pago. Pra garantir as peças, é só abrir o pedido no botão abaixo e pagar. Se teve algum problema com o pagamento, responde aqui que a gente resolve. {link}",
+      "Oi {primeiro}, seu pedido {pedido} na Via Sol está reservado, mas o Pix de {valor} ainda não foi pago. Pra garantir as peças, é só abrir o pedido e pagar: {link} Se teve algum problema com o pagamento, responde aqui que a gente resolve.",
     ],
     template: { nome: "via_sol_pix_pendente", idioma: "pt_BR", parametros: ["primeiro", "pedido", "valor"], botaoLink: true },
   },

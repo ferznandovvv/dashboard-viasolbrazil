@@ -17,7 +17,7 @@ import { env } from "../env";
 import "../credenciais";
 import { alterarBase } from "./base";
 import { salvarCliente } from "./clientes";
-import { enfileirar } from "./mensagens";
+import { enfileirar, viaOficial } from "./mensagens";
 import { conferirCupons, desativarCupons, escoposShopify } from "./cupomShopify";
 
 /** Confere uma vez por processo as permissões do app da Shopify e guarda na base. */
@@ -35,7 +35,7 @@ async function conferirEscopos() {
     console.error("[crm] Shopify: não consegui ler as permissões:", e instanceof Error ? e.message : e);
   }
 }
-import { LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem } from "./tipos";
+import { CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
 /**
@@ -327,7 +327,7 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
   const pagos = pedidos.filter((p) => !p.cancelledAt && PAGO.has(p.displayFinancialStatus ?? ""));
   const desde = new Date(agora - 3 * 86400000).toISOString();
   for (const m of b.mensagens) {
-    if (m.resultado || m.provedor !== "oficial" || m.criadoEm < desde) continue;
+    if (m.resultado || !CAMPANHAS_SITE.includes(m.campanha) || m.criadoEm < desde) continue;
     if (m.status === "cancelada" || m.status === "erro" || m.status === "fila") continue;
     const cli = b.clientes.find((c) => c.id === m.clienteId);
     const quando = m.enviadoEm ?? m.criadoEm;
@@ -411,7 +411,7 @@ export function resumoEcommerce(b: BaseCrm, dias = 7): ResumoEcommerce {
     }
   };
   for (const m of b.mensagens) {
-    if (m.criadoEm < desde || m.provedor !== "oficial") continue;
+    if (m.criadoEm < desde || !CAMPANHAS_SITE.includes(m.campanha)) continue;
     if (m.campanha === "carrinho_abandonado") conta(car, m);
     if (m.campanha === "pix_pendente") conta(pix, m);
   }
@@ -420,8 +420,9 @@ export function resumoEcommerce(b: BaseCrm, dias = 7): ResumoEcommerce {
     carrinho: { ...car, valor: Math.round(car.valor) },
     pix: { mensagens: pix.mensagens, simuladas: pix.simuladas, pagaram: pix.compraram, valor: Math.round(pix.valor) },
     ultimo: memoria.__ultimoEcommerce ?? null,
-    sombra: of.sombra,
-    configurado: Boolean(of.token && of.phoneNumberId),
+    // Pelo oficial ou, enquanto a Meta não está pronta, pelo número do site na WA-AKG
+    sombra: viaOficial(b, "carrinho_abandonado") ? of.sombra : b.config.modoSombra,
+    configurado: Boolean(of.token && of.phoneNumberId) || b.config.numeros.some((n) => n.loja === LOJA_OFICIAL && n.ativo && n.sessao),
   };
 }
 

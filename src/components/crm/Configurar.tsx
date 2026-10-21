@@ -386,7 +386,8 @@ export function Campo({ rotulo, valor, onChange, prefixo, sufixo, dica, texto, p
 }
 
 function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numeros: NumeroWhatsapp[]; provedor: string; salvar: (n: NumeroWhatsapp[]) => Promise<void> }) {
-  const [lista, setLista] = useState<NumeroWhatsapp[]>(() => lojas.filter((l) => l !== "Site").map((l) => numeros.find((n) => n.loja === l) ?? { loja: l, sessao: "", ativo: false }));
+  // As lojas e, no fim, o número do site na WA-AKG (carrinho e Pix enquanto a API oficial não está pronta)
+  const [lista, setLista] = useState<NumeroWhatsapp[]>(() => [...lojas.filter((l) => l !== "Site"), "Site"].map((l) => numeros.find((n) => n.loja === l) ?? { loja: l, sessao: "", ativo: false }));
   const [teste, setTeste] = useState<Record<string, string>>({});
   const [telTeste, setTelTeste] = useState("");
   const muda = (i: number, p: Partial<NumeroWhatsapp>) => setLista(lista.map((n, j) => (j === i ? { ...n, ...p } : n)));
@@ -441,7 +442,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
           {lista.map((n, i) => (
             <tbody key={n.loja}>
               <tr>
-                <td className="fin-desc">{n.loja}</td>
+                <td className="fin-desc">{n.loja === "Site" ? "Site (e-commerce)" : n.loja}</td>
                 <td data-rotulo="Sessão / id"><input className="crm-input" aria-label={`Sessão da ${n.loja}`} value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
                 <td data-rotulo="Vendedora que assina"><input className="crm-input" aria-label={`Vendedora que assina pela ${n.loja}`} value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
                 <td data-rotulo="Endereço" className="cfg-numeros-end"><input className="crm-input" aria-label={`Endereço da ${n.loja}`} value={n.endereco ?? ""} onChange={(e) => muda(i, { endereco: e.target.value })} placeholder="ex.: Rua do Comércio, 1200" /></td>

@@ -16,6 +16,7 @@
 import { env } from "../env";
 import "../credenciais";
 import { alterarBase, hojeSp, lerBase, novoId, somarDias } from "./base";
+import { viaOficial } from "./mensagens";
 import { creditosAbertos, gerarCodigo } from "./cashback";
 import { creditoLiquidoDaVenda } from "./devolucoes";
 import { oficialDe, type BaseCrm, type Cliente, type MovimentoCashback, type TipoCampanha, type Venda } from "./tipos";
@@ -102,8 +103,7 @@ export function campanhaDoCredito(mov: MovimentoCashback, c: Cliente, lojaNaCida
 
 /** A campanha está em modo sombra (o das lojas ou o do número oficial)? */
 export function sombraDaCampanha(b: BaseCrm, campanha: TipoCampanha): boolean {
-  const of = oficialDe(b.config);
-  return of.campanhas.includes(campanha) ? of.sombra : b.config.modoSombra;
+  return viaOficial(b, campanha) ? oficialDe(b.config).sombra : b.config.modoSombra;
 }
 
 export interface CreditoParaAviso {
