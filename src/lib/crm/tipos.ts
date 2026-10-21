@@ -388,6 +388,8 @@ export interface NumeroWhatsapp {
   endereco?: string;
   /** Horário de atendimento ("10:00-22:00"; vazio = fechado). Sem isso, vale o horário de envio, seg a sáb */
   horario?: { semana?: string; sabado?: string; domingo?: string };
+  /** Loja sem número ligado: as mensagens das clientes dela saem pelo número desta outra loja (ex.: Loja de Fábrica pelo Centro) */
+  mandarPor?: string;
 }
 
 export interface ConfigCrm {

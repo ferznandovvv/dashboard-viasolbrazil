@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
           numeros: Array.isArray(c.numeros)
             ? c.numeros
                 .filter((n) => n && typeof n.loja === "string")
-                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined, endereco: String(n.endereco ?? "").trim().slice(0, 120) || undefined, horario: horarioLimpo(n.horario) }))
+                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined, endereco: String(n.endereco ?? "").trim().slice(0, 120) || undefined, horario: horarioLimpo(n.horario), mandarPor: String(n.mandarPor ?? "").trim() || undefined }))
             : atual.numeros,
           envioInicio: num(c.envioInicio, atual.envioInicio, 0, 23),
           envioFim: num(c.envioFim, atual.envioFim, 1, 24),

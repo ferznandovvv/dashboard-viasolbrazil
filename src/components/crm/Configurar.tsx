@@ -470,6 +470,15 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
                 <td />
                 <td colSpan={5}>
                   <div className="cfg-numeros-botoes">
+                    {n.loja !== "Site" && !(n.ativo && n.sessao) && (
+                      <label className="cfg-check-inline">
+                        Sem número próprio, manda pelo da
+                        <select className="crm-input" aria-label={`Número que manda pela ${n.loja}`} value={n.mandarPor ?? ""} onChange={(e) => muda(i, { mandarPor: e.target.value || undefined })} style={{ width: "auto", marginLeft: 6 }}>
+                          <option value="">ninguém (clientes esperam)</option>
+                          {lista.filter((x) => x.loja !== n.loja && x.loja !== "Site" && x.sessao).map((x) => <option key={x.loja} value={x.loja}>{x.loja}</option>)}
+                        </select>
+                      </label>
+                    )}
                     <button className="link" disabled={!n.sessao} onClick={() => testar(n.loja)}>situação</button>
                     <button className="link" disabled={!n.sessao || !telTeste} title={telTeste ? undefined : "Preencha seu celular acima"} onClick={() => mandarTeste(n.loja)}>mandar teste</button>
                     <button

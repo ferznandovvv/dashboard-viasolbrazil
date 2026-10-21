@@ -157,8 +157,21 @@ export function lojaDeEnvio(base: BaseCrm, preferida?: string): string | undefin
   const ativos = base.config.numeros.filter((n) => n.ativo && n.sessao);
   const propria = ativos.find((n) => n.loja === preferida);
   if (propria) return propria.loja;
+  const emprestada = emprestimoDe(base, preferida);
+  if (emprestada) return emprestada;
   if (preferida && preferida !== "Site") return undefined;
   return ativos[0]?.loja;
+}
+
+/**
+ * Loja sem número ligado que manda pelo número de outra (Configurar › Números):
+ * devolve a loja dona do número, se ele estiver ligado.
+ */
+export function emprestimoDe(base: BaseCrm, loja?: string): string | undefined {
+  if (!loja) return undefined;
+  const n = base.config.numeros.find((x) => x.loja === loja);
+  if (!n?.mandarPor || (n.ativo && n.sessao)) return undefined;
+  return base.config.numeros.some((x) => x.loja === n.mandarPor && x.ativo && x.sessao) ? n.mandarPor : undefined;
 }
 
 export interface PedidoFila {
@@ -241,7 +254,14 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   if (viaOficial(base, p.campanha)) return enfileirarOficial(base, p);
   // Carrinho e Pix fora da API oficial: só pelo número do site na WA-AKG, nunca pelo de uma loja
   if (CAMPANHAS_SITE.includes(p.campanha) && !base.config.numeros.some((n) => n.loja === LOJA_OFICIAL && n.ativo && n.sessao)) return { motivo: "número do site não ligado (Números › Site)" };
-  const lojaRef = CAMPANHAS_SITE.includes(p.campanha) ? LOJA_OFICIAL : (p.loja ?? c.lojaOrigem);
+  let lojaRef = CAMPANHAS_SITE.includes(p.campanha) ? LOJA_OFICIAL : (p.loja ?? c.lojaOrigem);
+  // Loja que manda pelo número de outra: a mensagem fala e assina como a dona do número
+  // (quem responde é a equipe de lá)
+  const dona = emprestimoDe(base, lojaRef);
+  if (dona) {
+    lojaRef = dona;
+    p = { ...p, loja: dona, variaveis: { ...p.variaveis, vendedora: assinatura(base, dona), loja: undefined } };
+  }
   const loja = lojaDeEnvio(base, lojaRef);
   if (!loja) return { motivo: base.config.numeros.some((n) => n.ativo && n.sessao) ? `loja ${lojaRef} ainda sem número` : "nenhum número de WhatsApp configurado" };
   const id = novoId();

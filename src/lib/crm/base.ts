@@ -359,6 +359,15 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Loja de Fábrica não tem número: as clientes dela recebem pelo do Centro
+    // (as duas em Franca). Fica em Configurar › Números.
+    id: "loja-fabrica-pelo-centro",
+    aplicar: (b) => {
+      const n = b.config.numeros.find((x) => x.loja === "Loja de Fábrica");
+      if (n && !n.mandarPor && !(n.ativo && n.sessao)) n.mandarPor = "Centro";
+    },
+  },
+  {
     // 21/10: cashback passa a valer 33 dias da compra (30 depois do aviso), pra
     // dar urgência de voltar. O que já foi avisado à cliente mantém a data
     // prometida. O que ainda não foi avisado (e a loja tem número) passa a valer
@@ -366,28 +375,13 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     id: "validade-33-dias-2026-10-21",
     aplicar: (b) => {
       b.config.cashbackValidadeDias = 33;
-      const nova = somarDias(hojeSp(), 33);
-      const saiu = new Set(["enviada", "entregue", "lida", "respondida", "enviando"]);
-      const doAviso = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe"];
-      const avisados = new Set<string>();
-      const clienteAvisado = new Set<string>();
-      for (const m of b.mensagens) {
-        if (!doAviso.includes(m.campanha) || !saiu.has(m.status)) continue;
-        clienteAvisado.add(m.clienteId);
-        if (m.chave?.startsWith("cb-credito-")) avisados.add(m.chave.slice(11));
-      }
-      // Créditos que foram "junto" de um aviso que já saiu também foram avisados
-      for (const m of b.mensagens) if (m.status === "cancelada" && m.erro === "Junto com outro aviso de cashback" && m.chave?.startsWith("cb-credito-") && clienteAvisado.has(m.clienteId)) avisados.add(m.chave.slice(11));
-      const comNumero = new Set(b.config.numeros.filter((n) => n.ativo && n.sessao).map((n) => n.loja));
-      for (const mov of b.cashback) {
-        if (mov.tipo !== "credito" || avisados.has(mov.id) || !mov.validade || mov.validade <= nova) continue;
-        if (mov.loja !== "Site" && !comNumero.has(mov.loja ?? "")) continue;
-        const antiga = mov.validade;
-        mov.validade = nova;
-        for (const k of b.codigos ?? []) if (k.movimentoId === mov.id) k.validade = nova;
-        for (const m of b.mensagens) if (m.status === "fila" && m.chave === `cb-credito-${mov.id}`) m.texto = m.texto.split(dataBr(antiga)).join(dataBr(nova));
-      }
+      encurtarValidades(b);
     },
+  },
+  {
+    // A Loja de Fábrica ficou de fora do de cima (não tinha número); agora manda pelo Centro
+    id: "validade-33-dias-fabrica",
+    aplicar: (b) => encurtarValidades(b, "Loja de Fábrica"),
   },
   {
     // Campos de configuração que não existiam ganham o valor padrão
@@ -404,6 +398,38 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
 ];
+
+/**
+ * Crédito ainda não avisado passa a valer `cashbackValidadeDias` a partir de
+ * hoje (se vencia depois disso); o texto na fila ganha a data nova. O que já
+ * foi avisado mantém a data prometida. Só lojas com número (próprio ou
+ * emprestado): as outras nem sabem que têm o crédito.
+ */
+function encurtarValidades(b: BaseCrm, soDaLoja?: string) {
+  const nova = somarDias(hojeSp(), b.config.cashbackValidadeDias);
+  const saiu = new Set(["enviada", "entregue", "lida", "respondida", "enviando"]);
+  const doAviso = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe"];
+  const avisados = new Set<string>();
+  const clienteAvisado = new Set<string>();
+  for (const m of b.mensagens) {
+    if (!doAviso.includes(m.campanha) || !saiu.has(m.status)) continue;
+    clienteAvisado.add(m.clienteId);
+    if (m.chave?.startsWith("cb-credito-")) avisados.add(m.chave.slice(11));
+  }
+  // Créditos que foram "junto" de um aviso que já saiu também foram avisados
+  for (const m of b.mensagens) if (m.status === "cancelada" && m.erro === "Junto com outro aviso de cashback" && m.chave?.startsWith("cb-credito-") && clienteAvisado.has(m.clienteId)) avisados.add(m.chave.slice(11));
+  const ligada = (loja: string) => b.config.numeros.some((n) => n.loja === loja && n.ativo && n.sessao);
+  const temNumero = (loja: string) => loja === "Site" || ligada(loja) || ligada(b.config.numeros.find((n) => n.loja === loja)?.mandarPor ?? "");
+  for (const mov of b.cashback) {
+    if (mov.tipo !== "credito" || avisados.has(mov.id) || !mov.validade || mov.validade <= nova) continue;
+    if (soDaLoja ? mov.loja !== soDaLoja : !temNumero(mov.loja ?? "")) continue;
+    if (!temNumero(mov.loja ?? "")) continue;
+    const antiga = mov.validade;
+    mov.validade = nova;
+    for (const k of b.codigos ?? []) if (k.movimentoId === mov.id) k.validade = nova;
+    for (const m of b.mensagens) if (m.status === "fila" && m.chave === `cb-credito-${mov.id}`) m.texto = m.texto.split(dataBr(antiga)).join(dataBr(nova));
+  }
+}
 
 const precisaMigrar = (b: BaseCrm) => MIGRACOES.some((m) => !b.config.migracoes?.includes(m.id));
 
