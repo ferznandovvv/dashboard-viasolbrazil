@@ -428,6 +428,25 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Texto que a gerente da Fiusa escreveu vira a 1ª variação do aviso de
+    // cashback (com quebra de linha). As da fila com essa variação também.
+    id: "texto-gerente-fiusa",
+    aplicar: (b) => {
+      const novo = MODELOS_PADRAO.find((x) => x.campanha === "cashback_creditado")!.variacoes[0];
+      const m = b.modelos.find((x) => x.campanha === "cashback_creditado");
+      if (m) {
+        const i = m.variacoes.findIndex((v) => v.startsWith("Oi {primeiro}, tudo bem? Aqui é a {vendedora}, da Via Sol {loja} ☀️ Sua compra {daCompra}"));
+        if (i >= 0) m.variacoes[i] = novo;
+      }
+      const re = /^Oi (.+?), tudo bem\? (Aqui é a .+?, da|Aqui é da) Via Sol (.+?) ☀️ Sua compra (.+?) rendeu (.+?) de cashback, que fica guardado no seu nome até (\S+?)\. Pra usar, a compra precisa ser pelo menos (R\$\s[\d.,]+)\. (?:Me fala qual dia você vem que eu já separo umas peças pra você!|Quando quiser vir, me avisa que eu te recebo\.)/;
+      for (const x of b.mensagens) {
+        if (x.status !== "fila" || x.campanha !== "cashback_creditado") continue;
+        x.texto = x.texto.replace(re, (_t, nome, quem, loja, quando, valor, ate, minimo) =>
+          `Oi ${nome}, tudo bem?\n${quem} Via Sol ${loja} ☀️\nSua compra ${quando} rendeu ${valor} de cashback, que fica guardado no seu nome até ${ate}. O valor mínimo da compra para usar é de ${minimo}. Quando vier, me avisa, vou adorar te receber 🧡`);
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
