@@ -9,7 +9,7 @@
 
 import { LOJAS, fetchTotvsSales, fetchVendasPorProduto, totvsConfigured } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
-import { pedidosEm, spDateKey } from "@/lib/types";
+import { contaComoPedido, pedidosEm, spDateKey } from "@/lib/types";
 import { alterarBase, hojeSp, somarDias } from "./base";
 import type { BaseCrm } from "./tipos";
 
@@ -114,7 +114,7 @@ export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<
     const nome = base.vendedoras?.[cpf] ?? nomes.get(cpf) ?? o.seller ?? `CPF •••${cpf.slice(3, 9)}`;
     const a = porVend.get(cpf) ?? porVend.set(cpf, { nome, vendido: 0, vendas: 0, hoje: 0, cpf }).get(cpf)!;
     a.vendido += o.total;
-    if (!o.devolucao) a.vendas++;
+    if (contaComoPedido(o)) a.vendas++;
     if (spDateKey(o.createdAt) === hoje) a.hoje += o.total;
   }
 

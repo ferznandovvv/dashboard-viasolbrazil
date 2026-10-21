@@ -11,10 +11,13 @@ import {
   NormalizedOrder,
   Totals,
   addDays,
+  contaComoPedido,
+  devolucoesEm,
   spDateKey,
   spMidnight,
   pedidosEm,
   todaySpKey,
+  trocasEm,
 } from "@/lib/types";
 import { readConfig } from "@/lib/config";
 import { fetchMetaSpend } from "@/lib/connectors/meta";
@@ -38,7 +41,7 @@ function umAnoAntes(dia: string): string {
 function totalsOf(orders: NormalizedOrder[]): Totals {
   const revenue = orders.reduce((s, o) => s + o.total, 0);
   const pieces = orders.reduce((s, o) => s + (o.qty ?? 0), 0);
-  // Devolução desconta valor e peças, mas não é pedido
+  // Devolução desconta valor e peças, mas não é pedido; troca não é venda nova
   const n = pedidosEm(orders);
   return {
     revenue,
@@ -47,6 +50,8 @@ function totalsOf(orders: NormalizedOrder[]): Totals {
     pieces,
     avgPieces: n > 0 ? pieces / n : 0,
     discount: orders.reduce((s, o) => s + (o.discount ?? 0), 0),
+    trocas: trocasEm(orders),
+    devolucoes: devolucoesEm(orders),
   };
 }
 
@@ -299,7 +304,7 @@ export async function GET(req: NextRequest) {
     uf = uf ? uf.toUpperCase().slice(0, 20) : "Não informado";
     const e = stMap.get(uf) ?? { uf, revenue: 0, orders: 0 };
     e.revenue += o.total;
-    e.orders += o.devolucao ? 0 : 1;
+    e.orders += contaComoPedido(o) ? 1 : 0;
     stMap.set(uf, e);
   }
   const states = Array.from(stMap.values())
@@ -315,7 +320,9 @@ export async function GET(req: NextRequest) {
       lojaMap.get(o.store) ?? { name: o.store, revenue: 0, orders: 0, prevRevenue: 0 };
     if (inWindow(o, from, to)) {
       e.revenue += o.total;
-      e.orders += o.devolucao ? 0 : 1;
+      e.orders += contaComoPedido(o) ? 1 : 0;
+      if (o.troca && o.devolucao) e.trocas = (e.trocas ?? 0) + 1;
+      if (o.devolucao && !o.troca) e.devolucoes = (e.devolucoes ?? 0) + 1;
     }
     lojaMap.set(o.store, e);
   }
@@ -467,7 +474,7 @@ export async function GET(req: NextRequest) {
     const k = `${dow}-${hour}`;
     const e = horasMap.get(k) ?? { dow, hour, revenue: 0, orders: 0 };
     e.revenue += o.total;
-    e.orders += o.devolucao ? 0 : 1;
+    e.orders += contaComoPedido(o) ? 1 : 0;
     horasMap.set(k, e);
   }
   const hours = Array.from(horasMap.values());
@@ -478,7 +485,7 @@ export async function GET(req: NextRequest) {
     const nome = (o.payment ?? "Não informado").trim();
     const e = pagMap.get(nome) ?? { name: nome, revenue: 0, orders: 0 };
     e.revenue += o.total;
-    e.orders += o.devolucao ? 0 : 1;
+    e.orders += contaComoPedido(o) ? 1 : 0;
     pagMap.set(nome, e);
   }
   const payments = Array.from(pagMap.values())
@@ -502,7 +509,7 @@ export async function GET(req: NextRequest) {
       vendMap.get(nome) ?? { name: nome, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
     // Devolução sai de quem fez a venda original (o conector já trocou a vendedora)
     e.revenue += o.total;
-    e.orders += o.devolucao ? 0 : 1;
+    e.orders += contaComoPedido(o) ? 1 : 0;
     e.pieces += o.qty ?? 0;
     if (o.store) e.stores.add(o.store);
     vendMap.set(nome, e);

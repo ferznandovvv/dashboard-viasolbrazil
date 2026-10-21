@@ -494,8 +494,39 @@ async function vendasMenosDevolucoes(from: string, to: string, opts: OpcoesTotvs
   if (devs.error) console.warn("[totvs] devoluções:", devs.error);
   return {
     ...vendas,
-    orders: [...vendas.orders, ...devs.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    orders: marcarTrocas([...vendas.orders, ...devs.orders]).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   };
+}
+
+/**
+ * Troca na loja: a cliente devolve uma peça e leva outra, e saem duas notas —
+ * a devolução e a venda nova. O par é a devolução e a venda da mesma cliente,
+ * no mesmo dia e na mesma loja; sem cliente identificada na nota, a venda do
+ * mesmo valor. As duas ficam marcadas (`troca`), sem mexer nos valores.
+ */
+function marcarTrocas(orders: NormalizedOrder[]): NormalizedOrder[] {
+  const generico = (nome?: string) => !nome || /CONSUMIDOR|N[AÃ]O IDENTIFICAD/i.test(nome);
+  const chave = (o: NormalizedOrder) => `${o.store}|${o.createdAt.slice(0, 10)}`;
+  const vendasDoDia = new Map<string, NormalizedOrder[]>();
+  for (const o of orders) {
+    if (o.devolucao) continue;
+    const lista = vendasDoDia.get(chave(o)) ?? [];
+    lista.push(o);
+    vendasDoDia.set(chave(o), lista);
+  }
+  const trocas = new Set<string>();
+  for (const d of orders) {
+    if (!d.devolucao) continue;
+    const livres = (vendasDoDia.get(chave(d)) ?? []).filter((v) => !trocas.has(v.id));
+    const par = generico(d.customer)
+      ? livres.find((v) => generico(v.customer) && Math.abs(v.total + d.total) <= Math.max(1, Math.abs(d.total) * 0.01))
+      : livres.find((v) => v.customer === d.customer);
+    if (par) {
+      trocas.add(par.id);
+      trocas.add(d.id);
+    }
+  }
+  return trocas.size ? orders.map((o) => (trocas.has(o.id) ? { ...o, troca: true } : o)) : orders;
 }
 
 /** Identifica a variação da busca, para cache e nome de arquivo. */

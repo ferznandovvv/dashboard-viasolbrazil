@@ -43,6 +43,19 @@ function Delta({ now, before, estimado }: { now: number; before: number; estimad
   );
 }
 
+/**
+ * "1 troca · 2 devoluções": troca não é venda nova e devolução devolve o
+ * dinheiro, então ficam à parte da contagem de vendas, mas à vista.
+ */
+function textoTrocas(trocas = 0, devolucoes = 0): string {
+  return [
+    trocas ? `${trocas} ${trocas === 1 ? "troca" : "trocas"}` : "",
+    devolucoes ? `${devolucoes} ${devolucoes === 1 ? "devolução" : "devoluções"}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** Quanto foi no mesmo período do ano passado, em reais. */
 function NoAnoPassado({ valor, estimado }: { valor: number; estimado?: boolean }) {
   const { ano, rotulo } = useContext(Comparacao);
@@ -502,6 +515,9 @@ export default function Dashboard() {
               <div className="label">{soSite ? "Pedidos" : "Vendas"}</div>
               <div className="value">{data.totals.orders.toLocaleString("pt-BR")}</div>
               <Delta now={data.totals.orders} before={data.prevTotals.orders} />
+              {textoTrocas(data.totals.trocas, data.totals.devolucoes) && (
+                <span className="ano-passado">fora da conta: {textoTrocas(data.totals.trocas, data.totals.devolucoes)}</span>
+              )}
             </div>
             <div className="tile">
               <div className="label">Ticket médio</div>
@@ -648,7 +664,8 @@ export default function Dashboard() {
                 anterior: l.prevRevenue,
                 estimado: l.prevEstimado,
                 pedidos: l.orders,
-                rotulo: "vendas",
+                trocas: l.trocas,
+                devolucoes: l.devolucoes,
               }))
               .map((u) => {
               const ativo = sel.includes(u.nome);
@@ -674,7 +691,8 @@ export default function Dashboard() {
                   </div>
                   <NoAnoPassado valor={u.anterior} estimado={u.estimado} />
                   <div className="meta">
-                    {u.pedidos.toLocaleString("pt-BR")} {u.rotulo}
+                    {u.pedidos.toLocaleString("pt-BR")} {u.pedidos === 1 ? "venda" : "vendas"}
+                    {textoTrocas(u.trocas, u.devolucoes) && <> · {textoTrocas(u.trocas, u.devolucoes)}</>}
                     {u.pedidos > 0 && <> · ticket {brl.format(u.receita / u.pedidos)}</>}
                   </div>
                   <MetaMini feito={data.monthByUnit[u.nome] ?? 0} meta={metaDe(u.nome)} />
@@ -1198,7 +1216,10 @@ export default function Dashboard() {
                               />
                               {o.store ?? CHANNEL_META[o.channel].name}
                             </td>
-                            <td>{o.label}</td>
+                            <td>
+                              {o.label}
+                              {o.troca && <span className="tag-troca">{o.devolucao ? "troca · peça devolvida" : "troca · peça nova"}</span>}
+                            </td>
                             <td className="muted">
                               {new Date(o.createdAt).toLocaleString("pt-BR", {
                                 day: "2-digit",

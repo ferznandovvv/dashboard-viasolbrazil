@@ -3,7 +3,7 @@ import { fetchShopifyOrders } from "@/lib/connectors/shopify";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
 import { fetchShopeeOrders } from "@/lib/connectors/shopee";
 import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
-import { DailyPoint, addDays, spDateKey, spMidnight, todaySpKey } from "@/lib/types";
+import { DailyPoint, addDays, contaComoPedido, spDateKey, spMidnight, todaySpKey } from "@/lib/types";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 
 export const dynamic = "force-dynamic";
@@ -64,10 +64,10 @@ export async function GET() {
     if (k === today) {
       const l = lojas.get(nome) ?? { nome, total: 0, pedidos: 0 };
       l.total += o.total;
-      l.pedidos += o.devolucao ? 0 : 1;
+      l.pedidos += contaComoPedido(o) ? 1 : 0;
       lojas.set(nome, l);
       hoje.lojas += o.total;
-      hoje.lojasPedidos += o.devolucao ? 0 : 1;
+      hoje.lojasPedidos += contaComoPedido(o) ? 1 : 0;
     }
   }
 

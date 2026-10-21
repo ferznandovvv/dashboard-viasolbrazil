@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { lojasPermitidas } from "@/lib/acesso/lojas";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
-import { addDays, spDateKey, todaySpKey } from "@/lib/types";
+import { addDays, contaComoPedido, spDateKey, todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   // Vendedoras ativas: venderam nesta loja nos últimos 30 dias
   const ativas = new Set(
     daLoja
-      .filter((o) => o.seller && !o.devolucao && spDateKey(o.createdAt) >= inicio30)
+      .filter((o) => o.seller && contaComoPedido(o) && spDateKey(o.createdAt) >= inicio30)
       .map((o) => o.seller as string)
   );
 
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
         nome: v,
         vendidoMes,
         vendidoHoje,
-        vendasMes: dela.filter((o) => !o.devolucao).length,
+        vendasMes: dela.filter(contaComoPedido).length,
         meta: metaCada,
         pct: metaCada > 0 ? vendidoMes / metaCada : 0,
         falta,

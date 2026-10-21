@@ -37,13 +37,25 @@ export interface NormalizedOrder {
    * Não conta como pedido. A vendedora é a da venda original, quando dá para achar.
    */
   devolucao?: boolean;
+  /**
+   * Parte de uma troca: a devolução e a venda nova da mesma cliente, no mesmo
+   * dia e na mesma loja. A venda nova não conta como venda; o valor (a
+   * diferença entre as duas) continua no faturamento.
+   */
+  troca?: boolean;
 }
 
-/** Conta como pedido/venda (devolução só desconta valor e peças). */
-export const contaComoPedido = (o: NormalizedOrder) => !o.devolucao;
+/** Conta como pedido/venda (devolução só desconta valor e peças; troca não é venda nova). */
+export const contaComoPedido = (o: NormalizedOrder) => !o.devolucao && !o.troca;
 
-/** Quantos pedidos de verdade tem a lista (sem as devoluções). */
-export const pedidosEm = (lista: NormalizedOrder[]) => lista.reduce((n, o) => n + (o.devolucao ? 0 : 1), 0);
+/** Quantos pedidos de verdade tem a lista (sem as devoluções e as trocas). */
+export const pedidosEm = (lista: NormalizedOrder[]) => lista.reduce((n, o) => n + (contaComoPedido(o) ? 1 : 0), 0);
+
+/** Quantas trocas (cada uma é um par devolução + venda nova). */
+export const trocasEm = (lista: NormalizedOrder[]) => lista.filter((o) => o.troca && o.devolucao).length;
+
+/** Devoluções em que o dinheiro voltou para a cliente (sem levar outra peça). */
+export const devolucoesEm = (lista: NormalizedOrder[]) => lista.filter((o) => o.devolucao && !o.troca).length;
 
 export interface ChannelResult {
   channel: ChannelId;
@@ -74,6 +86,9 @@ export interface Totals {
   avgPieces: number;
   /** Desconto concedido no período */
   discount: number;
+  /** Trocas e devoluções (com o dinheiro de volta) no período */
+  trocas?: number;
+  devolucoes?: number;
 }
 
 export interface DashboardData {
@@ -115,7 +130,16 @@ export interface DashboardData {
   >;
   states: { uf: string; revenue: number; orders: number }[];
   /** Faturamento por loja física no período */
-  stores: { name: string; revenue: number; orders: number; prevRevenue: number; prevEstimado?: boolean }[];
+  stores: {
+    name: string;
+    revenue: number;
+    orders: number;
+    prevRevenue: number;
+    prevEstimado?: boolean;
+    /** Trocas e devoluções com dinheiro de volta, no período */
+    trocas?: number;
+    devolucoes?: number;
+  }[];
   /** TikTok Ads × vendas TikTok Shop */
   tiktokAds: {
     connected: boolean;
