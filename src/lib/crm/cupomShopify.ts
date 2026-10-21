@@ -16,7 +16,7 @@
 import { env } from "../env";
 import "../credenciais";
 import { alterarBase, hojeSp, lerBase, novoId, somarDias } from "./base";
-import { viaOficial } from "./mensagens";
+import { motivoBloqueio, viaOficial } from "./mensagens";
 import { creditosAbertos, gerarCodigo } from "./cashback";
 import { creditoLiquidoDaVenda } from "./devolucoes";
 import { oficialDe, type BaseCrm, type Cliente, type MovimentoCashback, type TipoCampanha, type Venda } from "./tipos";
@@ -106,6 +106,9 @@ export function sombraDaCampanha(b: BaseCrm, campanha: TipoCampanha): boolean {
   return viaOficial(b, campanha) ? oficialDe(b.config).sombra : b.config.modoSombra;
 }
 
+/** Crédito que foi avisado junto com outro da mesma cliente (ela recebe uma mensagem só). */
+export const JUNTO = "Junto com outro aviso de cashback";
+
 export interface CreditoParaAviso {
   mov: MovimentoCashback;
   cliente: Cliente;
@@ -128,7 +131,7 @@ export function creditosParaAviso(b: BaseCrm, hoje = hojeSp()): CreditoParaAviso
   const vendaPorId = new Map(b.vendas.map((v) => [v.id, v]));
   const avisados = new Set(
     b.mensagens
-      .filter((m) => m.chave?.startsWith("cb-credito-") && m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || sombraDaCampanha(b, m.campanha)))
+      .filter((m) => m.chave?.startsWith("cb-credito-") && ((m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || sombraDaCampanha(b, m.campanha))) || (m.status === "cancelada" && m.erro === JUNTO)))
       .map((m) => m.chave!.slice("cb-credito-".length))
   );
   const restante = new Map<string, number>();
@@ -155,13 +158,23 @@ export function creditosParaAviso(b: BaseCrm, hoje = hojeSp()): CreditoParaAviso
  * vai ser avisado hoje (fora do modo sombra). Devolve quantos criou e os erros.
  */
 export async function prepararCuponsSite(lojaNaCidade: (c: Cliente) => string | undefined): Promise<{ criados: number; erros: string[] }> {
+  // Uma rodada por vez (botão clicado duas vezes, agendador junto): senão sai cupom em dobro
+  const trava = globalThis as unknown as { __cuponsSite?: Promise<{ criados: number; erros: string[] }> };
+  if (trava.__cuponsSite) return trava.__cuponsSite;
+  trava.__cuponsSite = criarCuponsSite(lojaNaCidade).finally(() => (trava.__cuponsSite = undefined));
+  return trava.__cuponsSite;
+}
+
+async function criarCuponsSite(lojaNaCidade: (c: Cliente) => string | undefined): Promise<{ criados: number; erros: string[] }> {
   const r = { criados: 0, erros: [] as string[] };
   if (!env("SHOPIFY_ADMIN_TOKEN")) return r;
   const b = await lerBase();
   const pendentes = creditosParaAviso(b)
     .filter((x) => x.mov.loja === "Site")
     .filter((x) => !sombraDaCampanha(b, campanhaDoCredito(x.mov, x.cliente, lojaNaCidade)))
-    .filter((x) => !b.codigos.some((k) => k.movimentoId === x.mov.id && k.shopifyId));
+    .filter((x) => !b.codigos.some((k) => k.movimentoId === x.mov.id && k.shopifyId))
+    // Só cria cupom pra quem vai receber o aviso (com telefone, sem SAIR)
+    .filter((x) => !motivoBloqueio(b, x.cliente, campanhaDoCredito(x.mov, x.cliente, lojaNaCidade)));
   for (const x of pendentes) {
     const codigo = gerarCodigo(b);
     const validade = x.mov.validade ?? somarDias(x.diaDaCompra, b.config.cashbackValidadeDias);
@@ -170,10 +183,16 @@ export async function prepararCuponsSite(lojaNaCidade: (c: Cliente) => string | 
       r.erros.push(`${x.cliente.nome}: ${res.erro}`);
       continue;
     }
-    r.criados++;
-    await alterarBase((bb) => {
+    const repetido = await alterarBase((bb) => {
+      if (bb.codigos.some((k) => k.movimentoId === x.mov.id && k.shopifyId)) return true;
       bb.codigos.push({ codigo, clienteId: x.cliente.id, valor: x.valor, campanha: campanhaDoCredito(x.mov, x.cliente, lojaNaCidade), criadoEm: new Date().toISOString(), validade, movimentoId: x.mov.id, shopifyId: res.id });
+      return false;
     });
+    if (repetido) {
+      await desativarCupom(res.id);
+      continue;
+    }
+    r.criados++;
     b.codigos.push({ codigo, clienteId: x.cliente.id, valor: x.valor, criadoEm: "", validade }); // evita repetir o código no mesmo passo
   }
   if (r.erros.length) console.error("[crm] cupons do site:", r.erros.join(" | "));

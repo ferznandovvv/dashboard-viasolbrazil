@@ -296,6 +296,43 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // O botão de rodar automações clicado duas vezes criou cupom em dobro na
+    // Shopify. Fica o que foi na mensagem; o outro vira "usado" e a leitura do
+    // site (10 min) desativa na Shopify.
+    id: "cupons-duplicados-2026-10-21",
+    aplicar: (b) => {
+      const porCredito = new Map<string, typeof b.codigos>();
+      for (const k of b.codigos) if (k.shopifyId && k.movimentoId) (porCredito.get(k.movimentoId) ?? porCredito.set(k.movimentoId, []).get(k.movimentoId)!).push(k);
+      const agora = new Date().toISOString();
+      for (const lista of porCredito.values()) {
+        if (lista.length < 2) continue;
+        const fica = lista.find((k) => k.mensagemId) ?? lista[0];
+        for (const k of lista) if (k !== fica && !k.usadoEm) (k.usadoEm = agora), (k.usadoNaLoja = "duplicado");
+      }
+    },
+  },
+  {
+    // Quem comprou mais de uma vez em outubro ficou com 2 ou 3 avisos de cashback
+    // seguidos na fila. Fica o da compra mais recente; os outros saem da fila,
+    // marcados como avisados junto (não voltam amanhã).
+    id: "cashback-um-aviso-por-cliente",
+    aplicar: (b) => {
+      const vendaDe = new Map(b.vendas.map((v) => [v.id, v.data]));
+      const credito = new Map(b.cashback.map((m) => [m.id, m]));
+      const dia = (chave?: string) => {
+        const m = chave ? credito.get(chave.replace("cb-credito-", "")) : undefined;
+        return (m?.vendaId ? vendaDe.get(m.vendaId) : undefined) ?? m?.criadoEm ?? "";
+      };
+      const porCliente = new Map<string, typeof b.mensagens>();
+      for (const m of b.mensagens) if (m.campanha === "cashback_creditado" && m.status === "fila") (porCliente.get(m.clienteId) ?? porCliente.set(m.clienteId, []).get(m.clienteId)!).push(m);
+      for (const lista of porCliente.values()) {
+        if (lista.length < 2) continue;
+        lista.sort((p, q) => dia(q.chave).localeCompare(dia(p.chave)));
+        for (const m of lista.slice(1)) (m.status = "cancelada"), (m.erro = "Junto com outro aviso de cashback");
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

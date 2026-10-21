@@ -3,9 +3,9 @@
  * só põem mensagens na fila. Quem manda, e em que ritmo, é a fila.
  */
 
-import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
+import { alterarBase, diasEntre, hojeSp, lerBase, novoId, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
-import { campanhaDoCredito, creditosParaAviso, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
+import { JUNTO, campanhaDoCredito, creditosParaAviso, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
 import { resumir } from "./clientes";
 import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
@@ -76,8 +76,17 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   // Cashback creditado: o aviso sai `cashbackAvisoDias` depois da compra (padrão 3),
   // quando já deu tempo de trocar ou devolver; pega também os créditos que ainda
   // não foram avisados (até 30 dias). Vai o que sobrou do crédito.
-  for (const x of creditosParaAviso(b, hoje)) {
+  // Loja: uma mensagem só por cliente (quem comprou 3 vezes no mês não recebe 3 avisos
+  // seguidos). Vai a da compra mais recente; as outras ficam marcadas como avisadas junto.
+  // Site não junta: cada crédito tem o seu cupom.
+  const comAviso = new Set(b.mensagens.filter((m) => m.campanha === "cashback_creditado" && (m.status === "fila" || m.status === "enviando")).map((m) => m.clienteId));
+  const paraAvisar = creditosParaAviso(b, hoje).sort((p, q) => q.diaDaCompra.localeCompare(p.diaDaCompra));
+  for (const x of paraAvisar) {
     const { mov, cliente: c, venda, diaDaCompra, valor } = x;
+    if (mov.loja !== "Site" && comAviso.has(c.id)) {
+      b.mensagens.push({ id: novoId(), clienteId: c.id, telefone: c.telefone ?? "", campanha: "cashback_creditado", loja: mov.loja ?? "", texto: "", status: "cancelada", erro: JUNTO, naoAntesDe: new Date().toISOString(), criadoEm: new Date().toISOString(), tentativas: 0, chave: `cb-credito-${mov.id}` });
+      continue;
+    }
     if (mov.loja === "Site") {
       // Compra no site: cupom na Shopify com o mesmo código da loja; lembra a loja da cidade, se tiver
       const perto = lojaNaCidade(c);
@@ -99,16 +108,15 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       tentar(campanha, res);
       continue;
     }
-    tentar(
-      "cashback_creditado",
-      enfileirar(b, {
-        cliente: c,
-        campanha: "cashback_creditado",
-        loja: mov.loja,
-        variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
-        chave: `cb-credito-${mov.id}`,
-      })
-    );
+    const res = enfileirar(b, {
+      cliente: c,
+      campanha: "cashback_creditado",
+      loja: mov.loja,
+      variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, vendedora: assinatura(b, mov.loja, venda?.vendedoraCpf) },
+      chave: `cb-credito-${mov.id}`,
+    });
+    if (res.mensagem && res.mensagem.status !== "simulada") comAviso.add(c.id);
+    tentar("cashback_creditado", res);
   }
 
   // Cashback vencendo: um aviso com folga e um último, com urgência
