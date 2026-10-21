@@ -21,11 +21,17 @@ import { enfileirar } from "./mensagens";
 import { LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
-const API_VERSION = "2024-10";
+/**
+ * Versão nova primeiro (traz o aceite de WhatsApp marcado no checkout); se a
+ * loja recusar, a antiga, que só tem o aceite de SMS.
+ */
+const VERSAO_NOVA = "2026-10";
+const VERSAO_ANTIGA = "2024-10";
+let versaoQueFunciona: string | null = null;
 
-async function graphql(query: string, variables: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function graphql(query: string, variables: Record<string, unknown>, versao: string): Promise<Record<string, unknown>> {
   const domain = env("SHOPIFY_STORE_DOMAIN") || "totvs-ibirapuera-viasolbrazil-dc.myshopify.com";
-  const res = await fetch(`${process.env.SHOPIFY_GRAPHQL_URL ?? `https://${domain}/admin/api/${API_VERSION}/graphql.json`}`, {
+  const res = await fetch(`${process.env.SHOPIFY_GRAPHQL_URL ?? `https://${domain}/admin/api/${versao}/graphql.json`}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": env("SHOPIFY_ADMIN_TOKEN") },
     body: JSON.stringify({ query, variables }),
@@ -43,7 +49,8 @@ interface Pessoa {
   firstName: string | null;
   email: string | null;
   phone: string | null;
-  smsMarketingConsent: { marketingState: string } | null;
+  smsMarketingConsent?: { marketingState: string } | null;
+  defaultPhoneNumber?: { marketingState?: string | null; whatsAppMarketingConsent?: { state: string } | null } | null;
 }
 
 interface Endereco {
@@ -82,7 +89,9 @@ interface Pedido {
   billingAddress: Endereco | null;
 }
 
-const PESSOA = "id displayName firstName email phone smsMarketingConsent { marketingState }";
+const PESSOA_NOVA = "id displayName firstName email phone defaultPhoneNumber { marketingState whatsAppMarketingConsent { state } }";
+const PESSOA_ANTIGA = "id displayName firstName email phone smsMarketingConsent { marketingState }";
+const PESSOA = "__PESSOA__";
 const ENDERECO = "phone name city provinceCode";
 
 const Q_CHECKOUTS = `query Carrinhos($query: String!, $cursor: String) {
@@ -113,10 +122,24 @@ const Q_PEDIDOS = `query Pedidos($query: String!, $cursor: String) {
 }`;
 
 async function todas<T>(query: string, chave: string, filtro: string, paginas = 5): Promise<T[]> {
+  try {
+    if (versaoQueFunciona !== VERSAO_ANTIGA) {
+      const r = await todasNa<T>(query.replaceAll(PESSOA, PESSOA_NOVA), chave, filtro, paginas, VERSAO_NOVA);
+      versaoQueFunciona = VERSAO_NOVA;
+      return r;
+    }
+  } catch (e) {
+    if (versaoQueFunciona === VERSAO_NOVA) throw e;
+    versaoQueFunciona = VERSAO_ANTIGA;
+  }
+  return todasNa<T>(query.replaceAll(PESSOA, PESSOA_ANTIGA), chave, filtro, paginas, VERSAO_ANTIGA);
+}
+
+async function todasNa<T>(query: string, chave: string, filtro: string, paginas: number, versao: string): Promise<T[]> {
   const out: T[] = [];
   let cursor: string | null = null;
   for (let p = 0; p < paginas; p++) {
-    const data = await graphql(query, { query: filtro, cursor });
+    const data = await graphql(query, { query: filtro, cursor }, versao);
     const c = data[chave] as { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: T[] };
     out.push(...c.nodes);
     if (!c.pageInfo.hasNextPage) break;
@@ -156,7 +179,7 @@ function clienteDo(b: BaseCrm, x: { customer: Pessoa | null; shippingAddress: En
       codigoShopify: p ? idCurto(p.id) : undefined,
       lojaOrigem: LOJA_OFICIAL,
       // Aceite de mensagem marcado no checkout (o de SMS da Shopify é o que temos)
-      optIn: p?.smsMarketingConsent?.marketingState === "SUBSCRIBED",
+      optIn: [p?.defaultPhoneNumber?.whatsAppMarketingConsent?.state, p?.defaultPhoneNumber?.marketingState, p?.smsMarketingConsent?.marketingState].includes("SUBSCRIBED"),
       cidade: x.shippingAddress?.city ?? undefined,
       uf: x.shippingAddress?.provinceCode ?? undefined,
     },
