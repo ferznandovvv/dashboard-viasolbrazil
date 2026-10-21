@@ -400,6 +400,18 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Gerentes: "vale em qualquer loja" na mensagem da vendedora gera disputa
+    // entre lojas. A regra continua (vale em todas), só não é anunciada no aviso
+    // da loja. No do site continua, lá não tem vendedora disputando.
+    id: "sem-qualquer-loja-no-aviso",
+    aplicar: (b) => {
+      const tirar = (t: string) => t.replace(/ pra usar em qualquer loja nossa/g, "").replace(/ em qualquer loja nossa/g, "");
+      const site = ["cashback_site_perto", "cashback_site_longe"];
+      for (const m of b.modelos) if (!site.includes(m.campanha)) m.variacoes = m.variacoes.map(tirar);
+      for (const m of b.mensagens) if (m.status === "fila" && !site.includes(m.campanha)) m.texto = tirar(m.texto);
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

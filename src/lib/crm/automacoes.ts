@@ -29,7 +29,7 @@ export function lojaNaCidade(c: Cliente): string | undefined {
 export function textoVarios(b: BaseCrm, valor = 0): string {
   const m = b.config.cashbackMultiploCompra;
   const regra = !(m > 0) ? "" : valor * m > 500 ? ` (em cada compra dá pra usar até ${Math.round(100 / m)}% do valor)` : " (vale em compra a partir de {compraMinima})";
-  return `Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Suas últimas compras com a gente renderam {valor} de cashback, que fica guardado no seu nome até {validade} pra usar em qualquer loja nossa${regra}. Adorei te atender, volta logo.`;
+  return `Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Suas últimas compras com a gente renderam {valor} de cashback, que fica guardado no seu nome até {validade}${regra}. Adorei te atender, volta logo.`;
 }
 
 /**
