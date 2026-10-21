@@ -17,7 +17,7 @@ export const PAPEIS: Record<Papel, { nome: string; explica: string }> = {
   financeiro: { nome: "Financeiro", explica: "Lança e paga contas. Vê o DRE se você liberar." },
   loja: {
     nome: "Loja",
-    explica: "Usuário do computador da loja: tela da loja, caixa e cashback e estoque, só da própria loja.",
+    explica: "Usuário do computador da loja: tela da loja, caixa e cashback, só da própria loja.",
   },
 };
 
@@ -25,7 +25,8 @@ const AREAS: Record<Papel, Area[]> = {
   dono: ["vendas", "produtos", "estoque", "financeiro", "crm", "loja", "tv", "config"],
   socia: ["vendas", "produtos", "estoque", "financeiro", "crm", "loja", "tv"],
   financeiro: ["financeiro"],
-  loja: ["estoque", "loja"],
+  // Sem estoque por enquanto: o saldo da TOTVS ainda tem divergência (pedido do Fernando)
+  loja: ["loja"],
 };
 
 export const temArea = (papel: Papel, area: Area) => AREAS[papel].includes(area);
