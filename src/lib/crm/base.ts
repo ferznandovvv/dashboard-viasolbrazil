@@ -199,6 +199,24 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Cashback do site vira cupom na Shopify (vale no site e na loja): textos
+    // com o código e aviso também pra quem mora longe de loja. Aviso 3 dias
+    // depois da compra (dá tempo de trocar).
+    id: "cupom-site-v1",
+    aplicar: (b) => {
+      for (const campanha of ["cashback_site_perto", "cashback_site_longe"] as const) {
+        const padrao = MODELOS_PADRAO.find((m) => m.campanha === campanha)!;
+        const m = b.modelos.find((x) => x.campanha === campanha);
+        if (!m) b.modelos.push(structuredClone(padrao));
+        else if (!m.variacoes.some((v) => v.includes("{codigo}"))) {
+          m.variacoes = [...padrao.variacoes];
+          m.ativo = true;
+        }
+      }
+      b.config.cashbackAvisoDias ??= 3;
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

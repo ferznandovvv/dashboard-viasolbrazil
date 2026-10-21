@@ -233,8 +233,8 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   }
   const ref = lojaRef ?? loja;
   const texto = p.texto?.trim()
-    ? renderizar(p.texto, c, ref, { vendedora: assinatura(base, ref), compraMinima: compraMinimaPara(base, p.variaveis?.valor), ...p.variaveis, codigo })
-    : textoDaCampanha(base, p.campanha, c, ref, { ...p.variaveis, codigo });
+    ? renderizar(p.texto, c, ref, { vendedora: assinatura(base, ref), compraMinima: compraMinimaPara(base, p.variaveis?.valor), ...p.variaveis, codigo: codigo ?? p.variaveis?.codigo })
+    : textoDaCampanha(base, p.campanha, c, ref, { ...p.variaveis, codigo: codigo ?? p.variaveis?.codigo });
   if (!texto) {
     if (codigo) base.codigos.splice(base.codigos.findIndex((x) => x.codigo === codigo), 1);
     return { motivo: "campanha desligada ou sem texto" };

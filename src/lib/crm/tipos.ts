@@ -136,6 +136,12 @@ export interface CodigoResgate {
   usadoNaLoja?: string;
   /** Valor da compra em que foi usado, para medir o retorno */
   compraValor?: number;
+  /** Crédito de cashback que o código representa (cashback do site) */
+  movimentoId?: string;
+  /** Cupom criado na Shopify com o mesmo código (cashback do site vale no site e na loja) */
+  shopifyId?: string;
+  /** O cupom na Shopify foi desativado (usado na loja, devolvido, gasto de outro jeito) */
+  shopifyDesativado?: boolean;
 }
 
 export type TipoCampanha =
@@ -390,6 +396,10 @@ export interface ConfigCrm {
   cashbackMaxPctDaCompra: number;
   /** A compra precisa ser pelo menos N vezes o cashback usado (3 = cashback paga no máximo 1/3) */
   cashbackMultiploCompra: number;
+  /** Dias depois da compra para o aviso de cashback creditado (dá tempo de trocar ou devolver) */
+  cashbackAvisoDias?: number;
+  /** Permissões do app da Shopify do painel (conferidas sozinhas; cupom precisa de write_discounts) */
+  shopifyEscopos?: string[];
   /** Dias antes do vencimento para o primeiro aviso */
   avisoVencimentoDias: number;
   /** Dias antes do vencimento para o último aviso, com urgência */
@@ -562,15 +572,15 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "cashback_site_perto",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}! Aqui é da Via Sol ☀️ Sua compra no nosso site rendeu {valor} de cashback, válido até {validade}. E lembrando: temos loja física aí em {cidade}{endereco}, e o seu cashback vale lá também, em compras a partir de {compraMinima}.",
-      "{primeiro}, sua compra no site da Via Sol rendeu {valor} de cashback 🧡 Ele vale até {validade} e dá pra usar na nossa loja de {cidade}{endereco}, em compras a partir de {compraMinima}. Passa lá pra provar as peças ao vivo!",
+      "Oi {primeiro}! Aqui é da Via Sol ☀️ Sua compra no nosso site rendeu {valor} de cashback, válido até {validade}. Pra usar no site, é só colocar o código {codigo} no checkout. E lembrando: temos loja física aí em {cidade}{endereco}, e o código vale lá também. Vale em compras a partir de {compraMinima}.",
+      "{primeiro}, sua compra no site da Via Sol rendeu {valor} de cashback 🧡 Seu código é {codigo}: use no checkout do site ou na nossa loja de {cidade}{endereco}, até {validade}, em compras a partir de {compraMinima}.",
     ],
   },
   {
     campanha: "cashback_site_longe",
-    ativo: false,
+    ativo: true,
     variacoes: [
-      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol ☀️ Sua compra no site rendeu {valor} de cashback, válido até {validade} em qualquer loja nossa (Franca, Ribeirão Preto, São Paulo, Rio de Janeiro, Belo Horizonte e Praia Grande), em compra a partir de {compraMinima}. Se passar por alguma delas, me avisa que eu deixo tudo preparado.",
+      "Oi {primeiro}! Aqui é da Via Sol ☀️ Sua compra no nosso site rendeu {valor} de cashback, válido até {validade}. Pra usar, é só colocar o código {codigo} no checkout do site, em compras a partir de {compraMinima}. Ele também vale em qualquer loja física nossa.",
     ],
   },
   {

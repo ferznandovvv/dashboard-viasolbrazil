@@ -18,6 +18,23 @@ import "../credenciais";
 import { alterarBase } from "./base";
 import { salvarCliente } from "./clientes";
 import { enfileirar } from "./mensagens";
+import { conferirCupons, desativarCupons, escoposShopify } from "./cupomShopify";
+
+/** Confere uma vez por processo as permissões do app da Shopify e guarda na base. */
+let escoposConferidos = false;
+async function conferirEscopos() {
+  if (escoposConferidos) return;
+  escoposConferidos = true;
+  try {
+    const escopos = await escoposShopify();
+    await alterarBase((b) => {
+      b.config.shopifyEscopos = escopos;
+    });
+    if (!escopos.includes("write_discounts")) console.error("[crm] Shopify: falta write_discounts, o cupom de cashback do site não vai ser criado");
+  } catch (e) {
+    console.error("[crm] Shopify: não consegui ler as permissões:", e instanceof Error ? e.message : e);
+  }
+}
 import { LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
@@ -81,6 +98,7 @@ interface Pedido {
   displayFinancialStatus: string | null;
   statusPageUrl: string;
   paymentGatewayNames: string[];
+  discountCodes?: string[];
   email: string | null;
   phone: string | null;
   totalPriceSet: { shopMoney: { amount: string } };
@@ -112,7 +130,7 @@ const Q_PEDIDOS = `query Pedidos($query: String!, $cursor: String) {
   orders(first: 100, query: $query, after: $cursor, sortKey: CREATED_AT, reverse: true) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id name createdAt cancelledAt displayFinancialStatus statusPageUrl paymentGatewayNames email phone
+      id name createdAt cancelledAt displayFinancialStatus statusPageUrl paymentGatewayNames email phone discountCodes
       totalPriceSet { shopMoney { amount } }
       customer { ${PESSOA} }
       shippingAddress { ${ENDERECO} }
@@ -333,6 +351,7 @@ const guardar = (r: ResultadoEcommerce & { em: string }) => (memoria.__ultimoEco
 export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
   if (rodando || !env("SHOPIFY_ADMIN_TOKEN")) return null;
   rodando = true;
+  await conferirEscopos();
   try {
     const agora = Date.now();
     const desde = new Date(agora - 26 * 3600000).toISOString();
@@ -351,7 +370,14 @@ export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
     if (erro) {
       return guardar({ carrinhos: 0, pixPendentes: 0, enfileiradas: 0, canceladas: 0, recuperadas: 0, motivos: {}, erro, em: new Date().toISOString() });
     }
-    const r = await alterarBase((b) => aplicarEcommerce(b, checkouts, pedidos, agora));
+    const { r, desativar } = await alterarBase((b) => {
+      const r = aplicarEcommerce(b, checkouts, pedidos, agora);
+      // Cupom de cashback do site: baixa de quem usou no site, e desativa o que não vale mais
+      const c = conferirCupons(b, pedidos);
+      if (c.baixas) console.log(`[crm] cupons do site usados: ${c.baixas}`);
+      return { r, desativar: c.desativar };
+    });
+    if (desativar.length) await desativarCupons(desativar);
     guardar({ ...r, em: new Date().toISOString() });
     return r;
   } finally {

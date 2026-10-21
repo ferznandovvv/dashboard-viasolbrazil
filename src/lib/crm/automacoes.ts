@@ -3,9 +3,9 @@
  * só põem mensagens na fila. Quem manda, e em que ritmo, é a fila.
  */
 
-import { alterarBase, diasEntre, hojeSp, somarDias } from "./base";
+import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
-import { creditoLiquidoDaVenda } from "./devolucoes";
+import { campanhaDoCredito, creditosParaAviso, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
 import { resumir } from "./clientes";
 import { assinatura, conta as contaNoLimite, ehMarketing, enfileirar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
@@ -73,26 +73,30 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   };
   const participa = (id: string) => b.config.siteNasAutomacoes || !soSite(id);
 
-  // Cashback creditado: créditos dos últimos 3 dias ainda não avisados. Nunca no
-  // mesmo dia da compra: o aviso chega no dia seguinte, como agradecimento, e não
-  // como "olha o desconto que você não usou agora".
-  const desde = somarDias(hoje, -3);
-  const vendaPorId = new Map(b.vendas.map((v) => [v.id, v]));
-  for (const mov of b.cashback) {
-    if (mov.tipo !== "credito" || mov.criadoEm.slice(0, 10) < desde) continue;
-    const c = porId.get(mov.clienteId);
-    if (!c) continue;
-    const venda = mov.vendaId ? vendaPorId.get(mov.vendaId) : undefined;
-    const diaDaCompra = (venda?.data ?? mov.criadoEm).slice(0, 10);
-    if (diaDaCompra >= hoje) continue;
-    // Devolveu ou cancelou antes do aviso: avisa só o que sobrou (ou nada)
-    const valor = mov.vendaId ? creditoLiquidoDaVenda(b, mov.vendaId) : mov.valor;
-    if (valor < 0.01) continue;
+  // Cashback creditado: o aviso sai `cashbackAvisoDias` depois da compra (padrão 3),
+  // quando já deu tempo de trocar ou devolver; pega também os créditos que ainda
+  // não foram avisados (até 30 dias). Vai o que sobrou do crédito.
+  for (const x of creditosParaAviso(b, hoje)) {
+    const { mov, cliente: c, venda, diaDaCompra, valor } = x;
     if (mov.loja === "Site") {
-      // Compra no site: avisa que tem loja na cidade dela, quando tiver
+      // Compra no site: cupom na Shopify com o mesmo código da loja; lembra a loja da cidade, se tiver
       const perto = lojaNaCidade(c);
-      const campanha = perto ? "cashback_site_perto" : "cashback_site_longe";
-      tentar(campanha, enfileirar(b, { cliente: c, campanha, loja: perto, variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined, endereco: b.config.numeros.find((n) => n.loja === perto)?.endereco }, chave: `cb-credito-${mov.id}` }));
+      const campanha = campanhaDoCredito(mov, c, lojaNaCidade);
+      const cupom = b.codigos.find((k) => k.movimentoId === mov.id && k.shopifyId && !k.usadoEm && !k.shopifyDesativado);
+      const sombra = sombraDaCampanha(b, campanha);
+      if (!cupom && !sombra) {
+        tentar(campanha, { motivo: "cupom da Shopify ainda não criado" });
+        continue;
+      }
+      const res = enfileirar(b, {
+        cliente: c,
+        campanha,
+        loja: perto,
+        variaveis: { valor, validade: mov.validade, dataCompra: diaDaCompra, codigo: cupom?.codigo ?? "XXXXXX", lojaProxima: perto, cidade: perto ? LOJA_CIDADE[perto] : undefined, endereco: b.config.numeros.find((n) => n.loja === perto)?.endereco },
+        chave: `cb-credito-${mov.id}`,
+      });
+      if (res.mensagem && cupom) cupom.mensagemId = res.mensagem.id;
+      tentar(campanha, res);
       continue;
     }
     tentar(
@@ -178,6 +182,8 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
 /** Roda as automações do dia, uma vez só por dia (a não ser que `forcar`). */
 export async function rodarAutomacoes(forcar = false): Promise<ResultadoAutomacoes | null> {
   const hoje = hojeSp();
+  // Cupons do site na Shopify antes: o aviso leva o código
+  if (forcar || (await lerBase()).config.ultimaAutomacao !== hoje) await prepararCuponsSite(lojaNaCidade).catch((e) => console.error("[crm] cupons do site:", e instanceof Error ? e.message : e));
   return alterarBase((b) => {
     if (!forcar && b.config.ultimaAutomacao === hoje) return null;
     return rodarAutomacoesEm(b, hoje);

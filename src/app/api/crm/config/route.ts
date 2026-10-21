@@ -8,6 +8,7 @@ import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type 
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { CloudApi } from "@/lib/crm/envio/cloudApi";
 import { MODELOS_SUGERIDOS, payloadDoModelo } from "@/lib/crm/modelosMeta";
+import { escoposShopify } from "@/lib/crm/cupomShopify";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,8 @@ type Pedido =
   | { tipo: "oficial"; oficial: Partial<ConfigOficial> }
   | { tipo: "testar-oficial" }
   | { tipo: "modelos-meta" }
-  | { tipo: "criar-modelos-meta" };
+  | { tipo: "criar-modelos-meta" }
+  | { tipo: "testar-cupom" };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
   const n = Number(v);
@@ -87,6 +89,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe, vale.aviso].filter(Boolean).join(" · ") });
     }
     if (p.tipo === "reiniciar-waakg") return NextResponse.json(await reiniciarWaakg());
+    if (p.tipo === "testar-cupom") {
+      try {
+        const escopos = await escoposShopify();
+        const ok = escopos.includes("write_discounts");
+        return NextResponse.json({ ok, detalhe: ok ? "Ok: o painel pode criar e desativar cupom na Shopify." : `Falta a permissão write_discounts no app da Shopify do painel (tem: ${escopos.join(", ") || "nenhuma"}).` });
+      } catch (e) {
+        return NextResponse.json({ ok: false, detalhe: `Não consegui falar com a Shopify: ${e instanceof Error ? e.message : e}` });
+      }
+    }
     if (p.tipo === "testar-oficial" || p.tipo === "modelos-meta" || p.tipo === "criar-modelos-meta") {
       const of = oficialDe((await lerBase()).config);
       if (!of.token) return NextResponse.json({ erro: "Falta o token da Meta." }, { status: 400 });
@@ -143,6 +154,7 @@ export async function POST(req: NextRequest) {
                 .filter((f) => f.oferta && f.minimo >= 0)
             : atual.reativacaoFaixas,
           posVendaDias: num(c.posVendaDias, atual.posVendaDias, 1, 60),
+          cashbackAvisoDias: num(c.cashbackAvisoDias, atual.cashbackAvisoDias ?? 3, 1, 30),
           reativacaoDias: num(c.reativacaoDias, atual.reativacaoDias, 7, 3650),
           reativacaoTicketMinimo: num(c.reativacaoTicketMinimo, atual.reativacaoTicketMinimo),
           reativacaoIntervaloDias: num(c.reativacaoIntervaloDias, atual.reativacaoIntervaloDias, 7, 3650),

@@ -119,10 +119,11 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
               <label className="cfg-check">
                 <input type="checkbox" checked={cfg.cashbackSite} onChange={b("cashbackSite")} />
                 <span>
-                  <b>Compra no site também gera cashback pra usar nas lojas</b>
-                  <small>A mensagem avisa qual loja fica na cidade dela</small>
+                  <b>Compra no site também gera cashback</b>
+                  <small>Vira um cupom na Shopify com o mesmo código que vale no caixa da loja (mesma regra de compra mínima, só pra ela, uma vez). A mensagem leva o código e avisa qual loja fica na cidade dela.</small>
                 </span>
               </label>
+              <TesteCupom />
               <label className="cfg-check">
                 <input type="checkbox" checked={cfg.siteNasAutomacoes} onChange={b("siteNasAutomacoes")} />
                 <span>
@@ -184,6 +185,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
             <section className="card cfg-card">
               <h2>Outras</h2>
               <div className="cfg-grid">
+                <Campo rotulo="Aviso de cashback" sufixo="dias depois da compra" valor={cfg.cashbackAvisoDias ?? 3} onChange={n("cashbackAvisoDias")} dica="Dá tempo de trocar ou devolver antes do aviso" />
                 <Campo rotulo="Pós-venda" sufixo="dias depois da compra" valor={cfg.posVendaDias} onChange={n("posVendaDias")} dica="Campanha desligada por padrão" />
                 <label className="cfg-campo">
                   <span>Hora em que as campanhas do dia são geradas</span>
@@ -573,6 +575,26 @@ function Modelos({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Promise<void> 
         })}
       {erro && <div className="login-error">{erro}</div>}
     </section>
+  );
+}
+
+/** Confere se o painel tem permissão de criar cupom na Shopify. */
+function TesteCupom() {
+  const [msg, setMsg] = useState("");
+  const testar = async () => {
+    setMsg("Conferindo…");
+    try {
+      const r = await api<{ ok: boolean; detalhe: string }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "testar-cupom" }) });
+      setMsg(r.detalhe);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro");
+    }
+  };
+  return (
+    <div className="config-acoes">
+      <button className="mini ghost" onClick={testar}>Conferir permissão de cupom na Shopify</button>
+      {msg && <small className="muted">{msg}</small>}
+    </div>
   );
 }
 
