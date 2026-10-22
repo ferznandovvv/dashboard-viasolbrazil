@@ -482,6 +482,14 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 22/10: por segurança, só Ribeirão e Fiusa (boa taxa de resposta) seguem no
+    // automático até a API oficial ficar pronta
+    id: "pausa-baixa-resposta-2026-10-22",
+    aplicar: (b) => {
+      for (const n of b.config.numeros) if (["SP — Itaim", "Belo Horizonte", "Rio de Janeiro"].includes(n.loja)) n.ativo = false;
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
