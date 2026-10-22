@@ -457,6 +457,21 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 22/10: Centro, Praia Grande e Site desconectaram. As mensagens que
+    // gastaram as 5 tentativas com o número fora voltam pra fila.
+    id: "volta-fila-numero-caido-2026-10-22",
+    aplicar: (b) => {
+      const desde = new Date(Date.now() - 3 * 86400000).toISOString();
+      for (const m of b.mensagens) {
+        if (m.criadoEm < desde || !/disconnected|not found/i.test(m.erro ?? "")) continue;
+        if (m.status === "erro" || m.status === "fila") {
+          m.status = "fila";
+          m.tentativas = 0;
+        }
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

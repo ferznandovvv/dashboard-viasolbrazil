@@ -13,6 +13,24 @@ import { CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, tetoDoNumero, type Atendimento
 
 /** Quando cada número pode mandar de novo (ms). Em memória: reiniciar zera, e tudo bem. */
 const proximoEnvio = new Map<string, number>();
+/** Carrinho e Pix têm o próprio relógio: não esperam o espaçamento do dia, só o intervalo mínimo */
+const proximoSite = new Map<string, number>();
+
+/** Erro de número desconectado (sessão caiu): não é culpa da mensagem, não gasta tentativa. */
+export const ehNumeroCaido = (erro?: string) => /disconnected|not found|not connected|logged ?out|sess[aã]o/i.test(erro ?? "");
+
+/**
+ * Espaçamento do envio comum: a janela do dia dividida pelo teto (ex.: 30
+ * mensagens em 10 h = uma a cada 20 min), com um pouco de variação. Mandar
+ * tudo de manhã cedo, em sequência, é o padrão que o WhatsApp mais derruba.
+ * Não acelera no fim do dia pra "bater a cota": o que não saiu fica pra amanhã.
+ */
+function espacamentoSeg(base: BaseCrm, teto: number, minSeg: number, maxSeg: number): number {
+  const janelaSeg = Math.max(1, base.config.envioFim - base.config.envioInicio) * 3600;
+  const alvo = Math.min(45 * 60, janelaSeg / Math.max(1, teto)) * (0.8 + Math.random() * 0.4);
+  return Math.max(aleatorio(minSeg, maxSeg), Math.round(alvo));
+}
+
 let processando = false;
 
 function agoraSp(): { dia: number; hora: number; minuto: number } {
@@ -77,15 +95,17 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
     const escolhidas: Mensagem[] = [];
 
     for (const n of cfg.numeros.filter((x) => x.ativo && x.sessao)) {
-      if ((proximoEnvio.get(n.loja) ?? 0) > agora) continue;
-      // Carrinho e Pix passam na frente e não esperam o teto do lançamento (só o normal do número):
-      // é a cliente que acabou de estar no site, e o Pix vence em minutos
+      // Carrinho e Pix passam na frente e não esperam o teto do lançamento (só o normal do número)
+      // nem o espaçamento do dia: é a cliente que acabou de estar no site, e o Pix vence em minutos
+      const podeComum = (proximoEnvio.get(n.loja) ?? 0) <= agora;
+      const podeSite = (proximoSite.get(n.loja) ?? 0) <= agora;
+      if (!podeComum && !podeSite) continue;
       const jaHoje = enviadasHoje(base, n.loja, hoje);
       if (jaHoje >= (n.tetoDia ?? cfg.tetoDiaPorNumero)) continue;
-      const cabeComum = jaHoje < tetoDoNumero(cfg, n, hoje);
+      const cabeComum = podeComum && jaHoje < tetoDoNumero(cfg, n, hoje);
       const doSite = (x: Mensagem) => CAMPANHAS_SITE.includes(x.campanha);
       const m = base.mensagens
-        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso && podeAgora(x) && (cabeComum || doSite(x)))
+        .filter((x) => x.loja === n.loja && x.provedor !== "oficial" && x.status === "fila" && x.naoAntesDe <= agoraIso && podeAgora(x) && (doSite(x) ? podeSite : cabeComum))
         .sort((a, b) => Number(doSite(b)) - Number(doSite(a)) || a.naoAntesDe.localeCompare(b.naoAntesDe) || a.criadoEm.localeCompare(b.criadoEm))[0];
       if (m) escolhidas.push(m);
     }
@@ -111,9 +131,25 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
           const r2 = await adaptador.enviarTexto(numero.sessao, m.telefone, m.complemento);
           if (!r2.ok) console.error(`[crm] código Pix não saiu pra ${m.telefone}: ${r2.erro}`);
         }
-        // Campanha já vem espaçada pelo horário de cada mensagem; aqui só garante o intervalo mínimo
-        const espera = m.campanhaId ? cfg.intervaloMinSeg : aleatorio(cfg.intervaloMinSeg, cfg.intervaloMaxSeg);
-        proximoEnvio.set(m.loja, Date.now() + espera * 1000);
+        const agoraMs = Date.now();
+        if (!r.ok && ehNumeroCaido(r.erro)) {
+          // Número caiu: segura o número 15 min (sem gastar tentativa da mensagem)
+          proximoEnvio.set(m.loja, agoraMs + 15 * 60000);
+          proximoSite.set(m.loja, agoraMs + 15 * 60000);
+          return { m, r };
+        }
+        const minimo = aleatorio(cfg.intervaloMinSeg, cfg.intervaloMaxSeg);
+        proximoSite.set(m.loja, agoraMs + minimo * 1000);
+        if (CAMPANHAS_SITE.includes(m.campanha)) {
+          // Carrinho/Pix não empurram o relógio do envio comum, só garantem um respiro
+          proximoEnvio.set(m.loja, Math.max(proximoEnvio.get(m.loja) ?? 0, agoraMs + cfg.intervaloMinSeg * 1000));
+        } else if (m.campanhaId) {
+          // Campanha manual já vem espaçada pelo horário de cada mensagem
+          proximoEnvio.set(m.loja, agoraMs + cfg.intervaloMinSeg * 1000);
+        } else {
+          const n = cfg.numeros.find((x) => x.loja === m.loja);
+          proximoEnvio.set(m.loja, agoraMs + espacamentoSeg(base, tetoDoNumero(cfg, n, hoje), cfg.intervaloMinSeg, cfg.intervaloMaxSeg) * 1000);
+        }
         return { m, r };
       })
     );
@@ -122,6 +158,14 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
       for (const { m, r } of resultados) {
         const x = b.mensagens.find((y) => y.id === m.id);
         if (!x) continue;
+        if (!r.ok && ehNumeroCaido(r.erro)) {
+          // Número desconectado: volta pra fila sem gastar tentativa; sai quando reconectar
+          erros++;
+          x.erro = r.erro;
+          x.status = "fila";
+          x.naoAntesDe = new Date(Date.now() + 15 * 60000).toISOString();
+          continue;
+        }
         x.tentativas += 1;
         if (r.ok) {
           x.status = "enviada";
@@ -204,6 +248,14 @@ export async function processarFilaOficial(ignorarJanela = false): Promise<Resul
       for (const { m, r } of resultados) {
         const x = b.mensagens.find((y) => y.id === m.id);
         if (!x) continue;
+        if (!r.ok && ehNumeroCaido(r.erro)) {
+          // Número desconectado: volta pra fila sem gastar tentativa; sai quando reconectar
+          erros++;
+          x.erro = r.erro;
+          x.status = "fila";
+          x.naoAntesDe = new Date(Date.now() + 15 * 60000).toISOString();
+          continue;
+        }
         x.tentativas += 1;
         if (r.ok) {
           x.status = "enviada";
