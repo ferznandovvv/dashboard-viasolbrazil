@@ -472,6 +472,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 22/10: WhatsApp restringiu Centro (e provavelmente Praia Grande e Site) por
+    // mensagem em massa. Esses três param de mandar automático; o teto do
+    // lançamento cai pra 15 por dia nos outros.
+    id: "restricao-2026-10-22",
+    aplicar: (b) => {
+      for (const n of b.config.numeros) if (["Centro", "Praia Grande", "Site"].includes(n.loja)) n.ativo = false;
+      b.config.tetoTemporario = { valor: 15, ate: b.config.tetoTemporario?.ate && b.config.tetoTemporario.ate > "2026-11-30" ? b.config.tetoTemporario.ate : "2026-11-30" };
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
