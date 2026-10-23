@@ -3,7 +3,7 @@
  * as rotas e o menu usam as mesmas regras.
  */
 
-export type Papel = "dono" | "socia" | "financeiro" | "loja";
+export type Papel = "dono" | "socia" | "gerente" | "financeiro" | "loja";
 
 /** Partes do sistema que um papel pode abrir */
 export type Area = "vendas" | "produtos" | "estoque" | "financeiro" | "crm" | "loja" | "tv" | "config";
@@ -13,6 +13,10 @@ export const PAPEIS: Record<Papel, { nome: string; explica: string }> = {
   socia: {
     nome: "Sócia",
     explica: "Vê vendas, produtos, financeiro, CRM e as telas das lojas. Não mexe nas Configurações.",
+  },
+  gerente: {
+    nome: "Gerente",
+    explica: "Vê vendas, histórico, produtos, CRM, atendimento e as telas das lojas. Não vê o financeiro nem as Configurações.",
   },
   financeiro: { nome: "Financeiro", explica: "Lança e paga contas. Vê o DRE se você liberar." },
   loja: {
@@ -24,6 +28,7 @@ export const PAPEIS: Record<Papel, { nome: string; explica: string }> = {
 const AREAS: Record<Papel, Area[]> = {
   dono: ["vendas", "produtos", "estoque", "financeiro", "crm", "loja", "tv", "config"],
   socia: ["vendas", "produtos", "estoque", "financeiro", "crm", "loja", "tv"],
+  gerente: ["vendas", "produtos", "estoque", "crm", "loja", "tv"],
   financeiro: ["financeiro"],
   // Sem estoque por enquanto: o saldo da TOTVS ainda tem divergência (pedido do Fernando)
   loja: ["loja"],
@@ -38,8 +43,8 @@ export function inicio(papel: Papel): string {
   return "/";
 }
 
-/** A sócia acompanha o CRM, mas campanhas e configurações dele ficam com o dono */
-export const soLeitura = (papel: Papel, area: Area) => papel === "socia" && area === "crm";
+/** A sócia e a gerente acompanham o CRM, mas campanhas e configurações dele ficam com o dono */
+export const soLeitura = (papel: Papel, area: Area) => (papel === "socia" || papel === "gerente") && area === "crm";
 
 /** Abertas para qualquer um: entrar, o aquecimento agendado, o webhook do WhatsApp e o logo */
 export function publica(caminho: string): boolean {

@@ -48,7 +48,7 @@ function senhaNova(): string {
   return Array.from(n, (x) => letras[x % letras.length]).join("");
 }
 
-const ORDEM: Papel[] = ["dono", "socia", "financeiro", "loja"];
+const ORDEM: Papel[] = ["dono", "socia", "gerente", "financeiro", "loja"];
 
 async function chamar<T>(corpo?: object): Promise<T> {
   const r = await fetch("/api/acesso/contas", {
