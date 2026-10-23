@@ -1701,3 +1701,5 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .cfg-check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 /* Vendas recentes: as duas notas de uma troca */
 .tag-troca { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border); white-space: nowrap; }
+/* Produtos: peças vendidas na loja, embaixo do estoque */
+.vend-loja { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); white-space: nowrap; }

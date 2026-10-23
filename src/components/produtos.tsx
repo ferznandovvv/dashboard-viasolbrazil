@@ -31,6 +31,8 @@ interface Resposta {
   lojasSel?: string[];
   top?: number;
   vendasIncompletas?: boolean;
+  /** Na busca: quanto tempo as vendas levaram (só vem quando elas foram pedidas) */
+  vendasMs?: number;
   ignorados?: { produto: string; vendidas: number }[];
 }
 
@@ -38,6 +40,8 @@ type Aba = "busca" | "vendidos";
 
 /** Períodos que fazem sentido para decidir reposição. */
 const PERIODOS = ["Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
+/** Na busca, de quando vêm as vendas de cada loja (padrão: mês atual). */
+const PERIODOS_BUSCA = ["Hoje", "Últimos 7 dias", "Mês atual", "Mês passado", "Últimos 3 meses"];
 const TOPS = [20, 50, 100];
 
 /** Nomes curtos no topo das colunas, para as 8 lojas caberem sem rolar. */
@@ -81,6 +85,14 @@ export function Produtos() {
   const [periodo, setPeriodo] = useState<Period>(
     () => presets.find((p) => p.key === "Mês passado") ?? presets[0]
   );
+  const presetsBusca = useMemo(() => buildPresets().filter((p) => PERIODOS_BUSCA.includes(p.key)), []);
+  const [periodoBusca, setPeriodoBusca] = useState<Period>(
+    () => presetsBusca.find((p) => p.key === "Mês atual") ?? presetsBusca[0]
+  );
+  /** Termo cujo estoque acabou de chegar: aí as vendas dele são pedidas (`vez` refaz mesmo com o termo igual) */
+  const [termoComEstoque, setTermoComEstoque] = useState<{ termo: string; vez: number } | null>(null);
+  const [carregandoVendas, setCarregandoVendas] = useState(false);
+  const pedidoVendas = useRef(0);
   const [lojasSel, setLojasSel] = useState<string[]>([]);
   const [top, setTop] = useState(20);
   const [dados, setDados] = useState<Resposta | null>(null);
@@ -98,12 +110,14 @@ export function Produtos() {
     try {
       const r = await fetch(`/api/produtos?${qs}`, { cache: "no-store" });
       const j = (await r.json()) as Resposta;
-      if (id !== pedido.current) return;
+      if (id !== pedido.current) return false;
       setDados(j);
       if (j.lojas?.length) setLojas(j.lojas);
       setOrdem(null);
+      return true;
     } catch {
       if (id === pedido.current) setFalha("Não consegui buscar agora. Tente de novo.");
+      return false;
     } finally {
       if (id === pedido.current) setCarregando(false);
     }
@@ -138,9 +152,14 @@ export function Produtos() {
       (de && ate ? { key: "custom", from: de, to: ate } : null);
     if (lsUrl.length) setLojasSel(lsUrl);
     setTop(tUrl);
-    if (perUrl) setPeriodo(perUrl);
-    if (p.get("aba") === "vendidos" && veVendidos) setAba("vendidos");
-    else if (p.get("q")) setQ(p.get("q") ?? "");
+    if (p.get("aba") === "vendidos" && veVendidos) {
+      setAba("vendidos");
+      if (perUrl) setPeriodo(perUrl);
+    } else {
+      if (p.get("q")) setQ(p.get("q") ?? "");
+      const perBusca = presetsBusca.find((x) => x.key === p.get("periodo")) ?? (de && ate ? { key: "custom", from: de, to: ate } : null);
+      if (perBusca) setPeriodoBusca(perBusca);
+    }
     setPronto(true);
     // só na montagem
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,6 +171,10 @@ export function Produtos() {
     p.set("aba", aba);
     if (aba === "busca") {
       if (q.trim()) p.set("q", q.trim());
+      if (periodoBusca.key === "custom") {
+        p.set("de", periodoBusca.from);
+        p.set("ate", periodoBusca.to);
+      } else if (periodoBusca.key !== "Mês atual") p.set("periodo", periodoBusca.key);
     } else {
       if (periodo.key === "custom") {
         p.set("de", periodo.from);
@@ -161,7 +184,7 @@ export function Produtos() {
       p.set("top", String(top));
     }
     window.history.replaceState(null, "", `?${p.toString()}`);
-  }, [pronto, aba, q, periodo, lojasSel, top]);
+  }, [pronto, aba, q, periodo, periodoBusca, lojasSel, top]);
 
   // Busca por nome é instantânea (filtra a foto do estoque): vai enquanto digita
   useEffect(() => {
@@ -169,12 +192,37 @@ export function Produtos() {
     const termo = q.trim();
     if (termo.length < 2) {
       setDados(null);
+      setTermoComEstoque(null);
       return;
     }
-    const t = setTimeout(() => consultar(`modo=busca&q=${encodeURIComponent(termo)}`), 350);
+    const t = setTimeout(async () => {
+      if (await consultar(`modo=busca&q=${encodeURIComponent(termo)}`)) setTermoComEstoque({ termo, vez: Date.now() });
+    }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, aba, pronto]);
+
+  // Vendas de cada loja: vêm depois do estoque, numa segunda busca, para a
+  // tela não esperar por elas; mudar o período só refaz esta parte
+  useEffect(() => {
+    if (aba !== "busca" || !termoComEstoque) return;
+    const { termo } = termoComEstoque;
+    const id = ++pedidoVendas.current;
+    setCarregandoVendas(true);
+    fetch(
+      `/api/produtos?modo=busca&q=${encodeURIComponent(termo)}&vendas=1&from=${periodoBusca.from}&to=${periodoBusca.to}`,
+      { cache: "no-store" }
+    )
+      .then((r) => r.json())
+      .then((j: Resposta) => {
+        if (id === pedidoVendas.current && termo === q.trim()) setDados(j);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (id === pedidoVendas.current) setCarregandoVendas(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termoComEstoque, periodoBusca, aba]);
 
   // Mais vendidos: mudou loja, período ou quantidade, a lista já se refaz
   // (com uma pausa curta, para tocar em várias lojas seguidas virar uma busca só)
@@ -188,7 +236,10 @@ export function Produtos() {
   const trocarAba = (a: Aba) => {
     if (a === aba) return;
     pedido.current++; // descarta resposta em voo da outra aba
+    pedidoVendas.current++;
     setCarregando(false);
+    setCarregandoVendas(false);
+    setTermoComEstoque(null);
     setDados(null);
     setAba(a);
   };
@@ -247,6 +298,12 @@ export function Produtos() {
     });
   })();
 
+  /** Tem vendas para mostrar: sempre nos mais vendidos; na busca, depois que elas chegam */
+  const temVendas = dados?.modo === "vendidos" || dados?.vendasMs !== undefined;
+  /** Peças vendidas na loja, pequeno embaixo do estoque */
+  const vendidasNaLoja = (l: Linha, loja: string) =>
+    temVendas && (l.vendasPorLoja[loja] ?? 0) > 0 ? <small className="vend-loja">{l.vendasPorLoja[loja]} vend.</small> : null;
+
   const baixarCSV = () => {
     if (!dados) return;
     const vend = dados.modo === "vendidos";
@@ -254,15 +311,17 @@ export function Produtos() {
       ...(vend ? ["Posição"] : []),
       "Produto",
       ...tabelas.map((t) => `Preço ${t}`),
-      ...(vend ? ["Vendidas"] : []),
+      ...(temVendas ? ["Vendidas"] : []),
       ...colunasEstoque,
+      ...(temVendas ? colunasEstoque.map((loja) => `Vendidas ${loja}`) : []),
     ];
     const corpo = lista.map((l) => [
       ...(vend ? [String(posicao.get(l.produto) ?? "")] : []),
       `"${l.produto.replace(/"/g, '""')}"`,
       ...tabelas.map((t) => (l.precos?.[t] ? l.precos[t].toFixed(2).replace(".", ",") : "")),
-      ...(vend ? [String(l.vendidas)] : []),
+      ...(temVendas ? [String(l.vendidas)] : []),
       ...colunasEstoque.map((loja) => String(l.porLoja[loja] ?? 0)),
+      ...(temVendas ? colunasEstoque.map((loja) => String(l.vendasPorLoja[loja] ?? 0)) : []),
     ]);
     const csv = [cab, ...corpo].map((r) => r.join(";")).join("\n");
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
@@ -303,8 +362,10 @@ export function Produtos() {
           />
           <div className="rank-aviso" style={{ margin: "4px 0 0" }}>
             Mostra o estoque de agora {minhas ? `em ${minhas}` : "em todas as lojas"}, cada cor e
-            tamanho numa linha.
+            tamanho numa linha, e quanto cada loja vendeu no período abaixo.
           </div>
+          <div className="passo">Vendas de quando</div>
+          <SeletorPeriodo opcoes={presetsBusca} atual={periodoBusca} aoMudar={setPeriodoBusca} rotulo="Vendas de quando" />
         </>
       ) : (
         <>
@@ -384,10 +445,19 @@ export function Produtos() {
               </div>
             ) : (
               <div className="goal-head">
-                <h2>{dados.total.toLocaleString("pt-BR")} variações com estoque</h2>
-                {dados.total > dados.itens.length && (
-                  <span className="muted">mostrando as primeiras {dados.itens.length} — refine a busca</span>
-                )}
+                <h2>
+                  {dados.total.toLocaleString("pt-BR")} {dados.vendasMs !== undefined ? "variações" : "variações com estoque"}
+                </h2>
+                <span className="muted" role="status">
+                  {carregandoVendas
+                    ? "buscando as vendas de cada loja…"
+                    : dados.vendasMs !== undefined && dados.from && dados.to
+                      ? `vendas de ${fmtDay(dados.from)} a ${fmtDay(dados.to)} · vieram em ${
+                          dados.vendasMs < 1000 ? "menos de 1 s" : `${(dados.vendasMs / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s`
+                        }`
+                      : ""}
+                  {dados.total > dados.itens.length && ` · mostrando as primeiras ${dados.itens.length} — refine a busca`}
+                </span>
               </div>
             )}
 
@@ -412,10 +482,10 @@ export function Produtos() {
                       {dados.modo === "vendidos" && <span className="pos">{posicao.get(l.produto)}º</span>}
                       {l.produto}
                     </b>
-                    {(tabelas.length > 0 || dados.modo === "vendidos") && (
+                    {(tabelas.length > 0 || temVendas) && (
                       <p className="prod-cartao-precos">
                         {tabelas.map((t) => `${t} ${preco(l.precos?.[t])}`).join(" · ")}
-                        {dados.modo === "vendidos" && `${tabelas.length ? " · " : ""}${l.vendidas} vendidas`}
+                        {temVendas && `${tabelas.length ? " · " : ""}${l.vendidas} vendidas`}
                       </p>
                     )}
                     <dl className="prod-cartao-lojas">
@@ -424,7 +494,10 @@ export function Produtos() {
                         return (
                           <div key={loja} className={`${tom(v)}${escolhidas.includes(loja) ? " loja-sel" : ""}`}>
                             <dt>{curto(loja)}</dt>
-                            <dd>{v}</dd>
+                            <dd>
+                              {v}
+                              {vendidasNaLoja(l, loja)}
+                            </dd>
                           </div>
                         );
                       })}
@@ -439,7 +512,7 @@ export function Produtos() {
                       <tr className="grupo">
                         <th />
                         <th colSpan={tabelas.length} className="fim-preco">Preço</th>
-                        {dados.modo === "vendidos" && <th />}
+                        {temVendas && <th />}
                         <th colSpan={colunasEstoque.length}>Estoque</th>
                       </tr>
                     )}
@@ -453,7 +526,7 @@ export function Produtos() {
                           `Tabela ${t}${lojasDaTabela(t).length ? ` — vale em ${juntar(lojasDaTabela(t).map(curto))}` : ""}`
                         )
                       )}
-                      {dados.modo === "vendidos" && cabOrdem("vendidas", "Vendidas", "n")}
+                      {temVendas && cabOrdem("vendidas", "Vendidas", "n")}
                       {colunasEstoque.map((loja) =>
                         cabOrdem(`loja:${loja}`, <abbr title={loja}>{curto(loja)}</abbr>, `n${marcaLoja(loja)}`, loja)
                       )}
@@ -477,7 +550,7 @@ export function Produtos() {
                               </td>
                             );
                           })}
-                          {dados.modo === "vendidos" && <td className="n">{l.vendidas}</td>}
+                          {temVendas && <td className="n">{l.vendidas}</td>}
                           {colunasEstoque.map((loja) => {
                             const v = l.porLoja[loja] ?? 0;
                             return (
@@ -486,6 +559,7 @@ export function Produtos() {
                                 className={`n ${tom(v)}${marcaLoja(loja)}`}
                               >
                                 {v}
+                                {vendidasNaLoja(l, loja)}
                               </td>
                             );
                           })}
@@ -519,6 +593,7 @@ export function Produtos() {
               )}
               {dados.modo === "vendidos" &&
                 "Vendidas = peças vendidas no período nas lojas escolhidas."}
+              {dados.modo === "busca" && temVendas && "Embaixo do estoque de cada loja, as peças que ela vendeu no período."}
               <span className="so-tela-grande"> Clique no nome de uma coluna para ordenar.</span>
             </div>
           </div>

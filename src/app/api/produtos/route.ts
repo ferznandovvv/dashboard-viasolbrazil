@@ -90,23 +90,42 @@ export async function GET(req: NextRequest) {
       anexarPreco(e, s.codigo);
       linhas.set(alvo, e);
     }
+
+    // ?vendas=1: junta as peças vendidas no período, por loja. É a segunda
+    // busca da tela — o estoque aparece antes e as vendas completam depois
+    let vendasInfo = {};
+    if (sp.get("vendas") === "1") {
+      const { from, to } = periodoDe(sp);
+      const inicio = Date.now();
+      const vendas = await fetchVendasPorProduto(from, to, rodandoLocal() ? 5 * 60000 : 35000);
+      const chaves = Array.from(linhas.keys()).sort((a, b) => b.length - a.length);
+      for (const v of vendas.itens) {
+        if (!lojasVistas.includes(v.loja)) continue;
+        const chave = normalizar(v.nome);
+        if (!chave || !palavras.every((p) => chave.includes(p)) || ignorado(chave)) continue;
+        // Nome da nota igual ao do estoque ou começando igual (mesmo cruzamento dos mais vendidos)
+        const k = linhas.has(chave) ? chave : chaves.find((x) => chave.startsWith(x) || x.startsWith(chave));
+        let e = k ? linhas.get(k) : undefined;
+        if (!e) {
+          // Vendeu e não tem saldo em loja nenhuma: aparece assim mesmo
+          e = { produto: v.nome.trim(), vendidas: 0, vendasPorLoja: {}, porLoja: {}, precos: {} };
+          linhas.set(chave, e);
+        }
+        e.vendidas += v.qtd;
+        if (v.loja) e.vendasPorLoja[v.loja] = (e.vendasPorLoja[v.loja] ?? 0) + v.qtd;
+      }
+      vendasInfo = { from, to, vendasMs: Date.now() - inicio, vendasIncompletas: vendas.incompleto, erro: vendas.erro ?? estoque.erro };
+    }
+
     // Para a loja, só o que tem saldo (ou divergência) nas lojas dela
     const itens = Array.from(linhas.values())
       .filter((l) => !restrito || Object.values(l.porLoja).some((q) => q !== 0))
       .sort((a, b) => a.produto.localeCompare(b.produto, "pt-BR"));
-    return NextResponse.json({ ...base, itens: itens.slice(0, 500), total: itens.length });
+    return NextResponse.json({ ...base, ...vendasInfo, itens: itens.slice(0, 500), total: itens.length });
   }
 
   // ——— Mais vendidos ———
-  const hoje = todaySpKey();
-  const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-  let from = sp.get("from") ?? "";
-  let to = sp.get("to") ?? "";
-  if (!isDate(from) || !isDate(to) || from > to) {
-    to = hoje;
-    from = `${hoje.slice(0, 7)}-01`;
-  }
-  if (to > hoje) to = hoje;
+  const { from, to } = periodoDe(sp);
   const lojasSel = (sp.get("lojas") ?? "")
     .split(",")
     .map((l) => l.trim())
@@ -168,6 +187,16 @@ export async function GET(req: NextRequest) {
     itens: ranking.map(([, l]) => l),
     total: ranking.length,
   });
+}
+
+/** Período pedido (?from&to); sem um válido, o mês atual. Nunca passa de hoje. */
+function periodoDe(sp: URLSearchParams): { from: string; to: string } {
+  const hoje = todaySpKey();
+  const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const from = sp.get("from") ?? "";
+  const to = sp.get("to") ?? "";
+  if (!isDate(from) || !isDate(to) || from > to) return { from: `${hoje.slice(0, 7)}-01`, to: hoje };
+  return { from, to: to > hoje ? hoje : to };
 }
 
 /** Nome da nota já traz cor e tamanho; o do saldo às vezes vem separado. */
