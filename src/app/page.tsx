@@ -71,9 +71,12 @@ function NoAnoPassado({ valor, estimado }: { valor: number; estimado?: boolean }
 function AdsInline({
   label,
   ads,
+  porQue = "pedido",
 }: {
   label: string;
   ads: { spend: number; roas: number; cpa: number; error?: string };
+  /** "pedido" no online, "venda" nas lojas */
+  porQue?: string;
 }) {
   return (
     <div className="invest-note">
@@ -84,7 +87,12 @@ function AdsInline({
         {ads.spend > 0 && (
           <>ROAS {ads.roas.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}×</>
         )}
-        {ads.cpa > 0 && <> · {brl.format(ads.cpa)} por pedido</>}
+        {ads.cpa > 0 && (
+          <>
+            {" "}
+            · {brl.format(ads.cpa)} por {porQue}
+          </>
+        )}
       </div>
       {ads.error && <div className="err-msg">{ads.error}</div>}
     </div>
@@ -654,6 +662,12 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {data.anunciosLojas?.error && (
+            <div className="card muted" style={{ fontSize: 12.5 }}>
+              Anúncios das lojas: o token da Meta não abre as contas das lojas ({data.anunciosLojas.error}). Na hora de
+              gerar o token, dê ao usuário do sistema acesso às contas de anúncio das lojas.
+            </div>
+          )}
           {data.stores.length > 0 && (
           <div className="channels stores">
             {data.stores
@@ -664,6 +678,7 @@ export default function Dashboard() {
                 anterior: l.prevRevenue,
                 estimado: l.prevEstimado,
                 pedidos: l.orders,
+                anuncios: l.anuncios ?? 0,
                 trocas: l.trocas,
                 devolucoes: l.devolucoes,
               }))
@@ -695,6 +710,13 @@ export default function Dashboard() {
                     {textoTrocas(u.trocas, u.devolucoes) && <> · {textoTrocas(u.trocas, u.devolucoes)}</>}
                     {u.pedidos > 0 && <> · ticket {brl.format(u.receita / u.pedidos)}</>}
                   </div>
+                  {u.anuncios > 0 && (
+                    <AdsInline
+                      label="Anúncios Meta"
+                      porQue="venda"
+                      ads={{ spend: u.anuncios, roas: u.receita / u.anuncios, cpa: u.pedidos ? u.anuncios / u.pedidos : 0 }}
+                    />
+                  )}
                   <MetaMini feito={data.monthByUnit[u.nome] ?? 0} meta={metaDe(u.nome)} />
                 </div>
               );

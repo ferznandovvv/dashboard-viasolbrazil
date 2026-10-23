@@ -109,7 +109,14 @@ export const INTEGRACOES: Integracao[] = [
       {
         nome: "META_ACCESS_TOKEN",
         rotulo: "Token (ads_read)",
-        dica: "Business Manager → Usuários do sistema → Gerar token",
+        dica: "Business Manager → Usuários do sistema → Gerar token. O usuário precisa ter acesso à conta do site e às contas das lojas",
+      },
+      {
+        nome: "META_CONTAS_LOJAS",
+        rotulo: "Contas de anúncio das lojas (só se mudar)",
+        dica: "Em branco: CA VIASOL OFICIAL (324266283725524) e Via Sol Ribeirão Preto (343471301180450). A loja de cada campanha sai do nome: [RJ], [PG], [BH], [SP], [RP] ou LOJA NOVA (Fiusa)",
+        opcional: true,
+        visivel: true,
       },
     ],
   },

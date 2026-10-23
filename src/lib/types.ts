@@ -139,7 +139,11 @@ export interface DashboardData {
     /** Trocas e devoluções com dinheiro de volta, no período */
     trocas?: number;
     devolucoes?: number;
+    /** Gasto com anúncios Meta da loja no período (campanhas com a loja no nome) */
+    anuncios?: number;
   }[];
+  /** Anúncios das lojas físicas: se as contas responderam e o que não tem loja no nome */
+  anunciosLojas?: { connected: boolean; error?: string; semLoja: number };
   /** TikTok Ads × vendas TikTok Shop */
   tiktokAds: {
     connected: boolean;

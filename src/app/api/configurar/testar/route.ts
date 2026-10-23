@@ -7,7 +7,7 @@ import { fetchTikTokOrders } from "@/lib/connectors/tiktok";
 import { fetchMeliOrders } from "@/lib/connectors/mercadolivre";
 import { fetchShopeeOrders } from "@/lib/connectors/shopee";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
-import { fetchMetaSpend } from "@/lib/connectors/meta";
+import { fetchAnunciosLojas, fetchMetaSpend } from "@/lib/connectors/meta";
 import { testarPlanilha } from "@/lib/historico";
 import { addDays, todaySpKey } from "@/lib/types";
 import type { ChannelResult } from "@/lib/types";
@@ -150,7 +150,19 @@ export async function POST(req: NextRequest) {
       if (!r.connected) return NextResponse.json({ ok: false, mensagem: "Faltam chaves (ou falta autorizar)." });
       if (r.error) return NextResponse.json({ ok: false, mensagem: r.error });
       const gasto = r.daily.reduce((s, d) => s + d.spend, 0);
-      return NextResponse.json({ ok: true, mensagem: `Funcionando — gasto de R$ ${gasto.toFixed(2).replace(".", ",")} nos últimos 7 dias.` });
+      const reais = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
+      if (id === "meta") {
+        // As contas das lojas físicas usam o mesmo token: ele precisa enxergar as três
+        const lojas = await fetchAnunciosLojas(addDays(hoje, -6), hoje);
+        const porLoja = Object.entries(lojas.porLoja).map(([l, dias]) => `${l} ${reais(dias.reduce((t, d) => t + d.spend, 0))}`);
+        return NextResponse.json({
+          ok: !lojas.error,
+          mensagem:
+            `Site: ${reais(gasto)} nos últimos 7 dias. Lojas: ` +
+            (lojas.error ? `o token não abre as contas das lojas (${lojas.error})` : porLoja.join(" · ") || "nenhum gasto nos últimos 7 dias") + ".",
+        });
+      }
+      return NextResponse.json({ ok: true, mensagem: `Funcionando — gasto de ${reais(gasto)} nos últimos 7 dias.` });
     }
     return NextResponse.json({ ok: false, mensagem: "Integração desconhecida." }, { status: 400 });
   } catch (e) {

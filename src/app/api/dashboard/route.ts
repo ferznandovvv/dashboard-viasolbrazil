@@ -20,7 +20,7 @@ import {
   trocasEm,
 } from "@/lib/types";
 import { readConfig } from "@/lib/config";
-import { fetchMetaSpend } from "@/lib/connectors/meta";
+import { fetchAnunciosLojas, fetchMetaSpend } from "@/lib/connectors/meta";
 import { fetchTikTokAdsSpend } from "@/lib/connectors/tiktokAds";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { fetchClima } from "@/lib/connectors/weather";
@@ -102,6 +102,8 @@ export async function GET(req: NextRequest) {
     .map(([codigo]) => Number(codigo));
 
   const semLojasRes = Promise.resolve<ChannelResult>({ channel: "lojas", connected: true, orders: [] });
+  // Anúncios das lojas físicas (contas próprias), em paralelo com o resto
+  const anunciosLojasP = semLojas ? null : fetchAnunciosLojas(from, to);
   const [shopifyRes, tiktokRes, meliRes, lojasRes, lojasItens, adsRes, ttAdsRes, shopeeRes, ...anoPassado] = await Promise.all([
     fetchShopifyOrders(fetchStart),
     fetchTikTokOrders(fetchStart),
@@ -327,6 +329,11 @@ export async function GET(req: NextRequest) {
     lojaMap.set(o.store, e);
   }
   const stores = Array.from(lojaMap.values()).sort((a, b) => b.revenue - a.revenue);
+  const anunciosLojas = anunciosLojasP ? await anunciosLojasP : null;
+  for (const s of stores) {
+    const gasto = (anunciosLojas?.porLoja[s.name] ?? []).filter((d) => d.date >= from && d.date <= to).reduce((t, d) => t + d.spend, 0);
+    if (gasto > 0) s.anuncios = gasto;
+  }
 
   // ——— Ano passado: sistema quando ele tem o período; senão, a planilha ———
   const somaAnt = (filtro: (o: NormalizedOrder) => boolean) =>
@@ -572,6 +579,7 @@ export async function GET(req: NextRequest) {
       ? { revenue: receitaAnt, orders: 0, avgTicket: 0, pieces: 0, avgPieces: 0, discount: 0 }
       : totalsOf(previous),
     comparacao: { de: prevFrom, ate: prevTo, daPlanilha, estimado },
+    anunciosLojas: anunciosLojas ? { connected: anunciosLojas.connected, error: anunciosLojas.error, semLoja: anunciosLojas.semLoja } : undefined,
     daily: Array.from(dayMap.values()),
     recentOrders: current.slice(0, 25),
     topProducts,
