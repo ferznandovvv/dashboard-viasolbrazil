@@ -5,7 +5,7 @@
 
 import { LOJAS } from "@/lib/connectors/totvs";
 import { hojeSp, somarDias } from "./base";
-import { vencendoAte } from "./cashback";
+import { creditosAbertos } from "./cashback";
 import { contaComoCompra, valorLiquido, type BaseCrm } from "./tipos";
 
 const arred = (v: number) => Math.round(v);
@@ -22,6 +22,21 @@ export interface CashbackMes {
   vencendo10d: number;
   clientesVencendo: number;
   expirado: number;
+  /** Os mesmos números por loja: crédito pela loja da compra, uso pela loja onde usou */
+  porLoja: CashbackLoja[];
+}
+
+export interface CashbackLoja {
+  loja: string;
+  creditado: number;
+  creditos: number;
+  usado: number;
+  resgates: number;
+  comprasComCashback: number;
+  vencendo10d: number;
+  clientesVencendo: number;
+  /** Saldo ainda válido, pela loja da compra que gerou o crédito */
+  emAberto: number;
 }
 
 export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
@@ -39,30 +54,56 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
     const k = `${v.clienteId}|${v.data.slice(0, 10)}|${v.loja}`;
     vendasDoDia.set(k, (vendasDoDia.get(k) ?? 0) + valorLiquido(v));
   }
+  const lojas = new Map<string, CashbackLoja & { vencendoClientes: Set<string> }>();
+  const daLoja = (loja?: string) => {
+    const nome = loja || "Sem loja";
+    let l = lojas.get(nome);
+    if (!l) {
+      l = { loja: nome, creditado: 0, creditos: 0, usado: 0, resgates: 0, comprasComCashback: 0, vencendo10d: 0, clientesVencendo: 0, emAberto: 0, vencendoClientes: new Set() };
+      lojas.set(nome, l);
+    }
+    return l;
+  };
   const contadas = new Set<string>();
   for (const m of b.cashback) {
     if (m.criadoEm < desdeIso) continue;
     if (m.tipo === "credito") {
       creditado += m.valor;
       creditos++;
+      daLoja(m.loja).creditado += m.valor;
+      daLoja(m.loja).creditos++;
     } else if (m.tipo === "resgate") {
       usado += -m.valor;
       resgates++;
+      daLoja(m.loja).usado += -m.valor;
+      daLoja(m.loja).resgates++;
       const dia = new Date(new Date(m.criadoEm).getTime() - 3 * 3600000).toISOString().slice(0, 10);
       const k = `${m.clienteId}|${dia}|${m.loja}`;
       if (!contadas.has(k)) {
         contadas.add(k);
         compras += vendasDoDia.get(k) ?? 0;
+        daLoja(m.loja).comprasComCashback += vendasDoDia.get(k) ?? 0;
       }
     } else if (m.tipo === "expiracao") expirado += -m.valor;
   }
+  // Saldo em aberto e o que vence, crédito por crédito, na loja da compra que o gerou
+  const lojaDoMovimento = new Map(b.cashback.map((m) => [m.id, m.loja]));
   const ate = somarDias(hoje, 10);
   let vencendo = 0;
   let clientesVencendo = 0;
   for (const id of new Set(b.cashback.map((m) => m.clienteId))) {
-    const v = vencendoAte(b, id, ate, hoje).valor;
-    if (v > 0) {
-      vencendo += v;
+    let daCliente = 0;
+    for (const c of creditosAbertos(b, id, hoje)) {
+      const l = daLoja(lojaDoMovimento.get(c.movimentoId));
+      l.emAberto += c.restante;
+      if (c.validade <= ate) {
+        daCliente += c.restante;
+        l.vencendo10d += c.restante;
+        l.vencendoClientes.add(id);
+      }
+    }
+    if (daCliente > 0) {
+      vencendo += daCliente;
       clientesVencendo++;
     }
   }
@@ -76,6 +117,18 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
     vencendo10d: arred(vencendo),
     clientesVencendo,
     expirado: arred(expirado),
+    porLoja: Array.from(lojas.values())
+      .map(({ vencendoClientes, ...l }) => ({
+        ...l,
+        creditado: arred(l.creditado),
+        usado: arred(l.usado),
+        comprasComCashback: arred(l.comprasComCashback),
+        vencendo10d: arred(l.vencendo10d),
+        clientesVencendo: vencendoClientes.size,
+        emAberto: arred(l.emAberto),
+      }))
+      .filter((l) => l.creditado || l.usado || l.emAberto)
+      .sort((a, b) => b.usado - a.usado || b.creditado - a.creditado),
   };
 }
 

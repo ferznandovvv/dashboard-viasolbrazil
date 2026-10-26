@@ -1703,3 +1703,10 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .tag-troca { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border); white-space: nowrap; }
 /* Produtos: peças vendidas na loja, embaixo do estoque */
 .vend-loja { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); white-space: nowrap; }
+/* CRM › cashback do mês, por loja */
+.cb-lojas { margin-top: 14px; }
+.cb-lojas tbody th { text-align: left; font-weight: 600; color: var(--text-primary); text-transform: none; letter-spacing: 0; font-size: 13px; padding: 8px; border-top: 1px solid var(--border); border-bottom: none; }
+.cb-lojas td { vertical-align: middle; }
+.cb-lojas .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-lojas td small { display: block; font-size: 12px; color: var(--text-muted); }
+.cb-nota { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }

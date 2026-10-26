@@ -882,7 +882,9 @@ function CashbackDoMes({ c, emAberto }: { c: CashbackMes; emAberto: number }) {
         <div className={`tile ${c.vencendo10d > 0 ? "alerta" : ""}`}>
           <div className="label">Vence em 10 dias</div>
           <div className="value">{reais(c.vencendo10d)}</div>
-          <div className="muted">{c.clientesVencendo} clientes · os lembretes saem sozinhos</div>
+          <div className="muted">
+            {c.clientesVencendo} {c.clientesVencendo === 1 ? "cliente" : "clientes"} · os lembretes saem sozinhos
+          </div>
         </div>
         <div className="tile">
           <div className="label">Em aberto</div>
@@ -890,6 +892,47 @@ function CashbackDoMes({ c, emAberto }: { c: CashbackMes; emAberto: number }) {
           <div className="muted">{c.expirado > 0 ? `${reais(c.expirado)} venceram no mês` : "no nome das clientes"}</div>
         </div>
       </div>
+
+      {c.porLoja?.length > 0 && (
+        <div className="tbl-wrap" tabIndex={0} role="region" aria-label={`Cashback em ${mes}, por loja`}>
+          <table className="prod-tbl cb-lojas">
+            <thead>
+              <tr>
+                <th scope="col">Loja</th>
+                <th scope="col" className="n">Creditado</th>
+                <th scope="col" className="n">Usado em compra</th>
+                <th scope="col" className="n">Compras com cashback</th>
+                <th scope="col" className="n">Vence em 10 dias</th>
+                <th scope="col" className="n">Em aberto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.porLoja.map((l) => (
+                <tr key={l.loja}>
+                  <th scope="row">{l.loja}</th>
+                  <td className="n">
+                    {reais(l.creditado)}
+                    <small>{l.creditos} {l.creditos === 1 ? "compra" : "compras"}</small>
+                  </td>
+                  <td className="n">
+                    <b>{reais(l.usado)}</b>
+                    <small>{l.resgates ? `${l.resgates} ${l.resgates === 1 ? "vez" : "vezes"}` : "nenhuma vez"}</small>
+                  </td>
+                  <td className="n">{l.comprasComCashback ? reais(l.comprasComCashback) : "–"}</td>
+                  <td className={`n ${l.vencendo10d > 0 ? "cap-pior" : ""}`}>
+                    {reais(l.vencendo10d)}
+                    {l.clientesVencendo > 0 && <small>{l.clientesVencendo} {l.clientesVencendo === 1 ? "cliente" : "clientes"}</small>}
+                  </td>
+                  <td className="n">{reais(l.emAberto)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="cb-nota">
+        Creditado e em aberto ficam na loja da compra que gerou o cashback; usado, na loja onde a cliente usou.
+      </p>
     </section>
   );
 }
