@@ -205,7 +205,7 @@ export interface TemplateMeta {
   botaoLink?: boolean;
   /**
    * O que vai no final do link do botão: "link" (padrão, o link do carrinho/pedido
-   * sem o começo), "whatsLoja" (número da loja, pro wa.me) ou "codigo" (cupom do site)
+   * sem o começo), "whatsLoja" (link curto /w/<loja> do site, que redireciona pro WhatsApp da loja) ou "codigo" (cupom do site)
    */
   botaoVar?: string;
 }
@@ -469,6 +469,8 @@ export interface ConfigCrm {
   envioDias: number[];
   /** Teto diário por número */
   tetoDiaPorNumero: number;
+  /** Link curto /w/<loja> criado na Shopify (loja → número pro qual ele aponta) */
+  linksLoja?: Record<string, string>;
   /** Teto temporário (lançamento): nenhum número manda mais que `valor` por dia até `ate` (AAAA-MM-DD) */
   tetoTemporario?: { valor: number; ate: string };
   /** Como a vendedora gosta de ser chamada na assinatura, por CPF (ex.: MARIA VALESKA assina "Valeska") */

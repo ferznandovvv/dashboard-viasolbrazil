@@ -10,6 +10,7 @@
 
 import { alterarBase, lerBase } from "./base";
 import { adaptadorDe } from "./envio/adaptador";
+import { garantirLinksDasLojas } from "./linkLoja";
 import { ENDERECO_PUBLICO_PADRAO, type ConfigCrm } from "./tipos";
 
 export function urlDoWebhook(config: Pick<ConfigCrm, "webhookSegredo" | "enderecoPublico">): string {
@@ -67,6 +68,14 @@ export async function configurarWebhooks(): Promise<Record<string, string>> {
       await alterarBase((b) => {
         for (const n of b.config.numeros) if (!n.telefone && achados[n.loja]) n.telefone = achados[n.loja];
       });
+  }
+  // Link curto /w/<loja> na Shopify pro botão "Falar com a loja" da API oficial
+  try {
+    const links = await garantirLinksDasLojas();
+    const erros = Object.entries(links).filter(([, d]) => d !== "ok");
+    if (erros.length) console.error("[crm] link das lojas:", JSON.stringify(Object.fromEntries(erros)));
+  } catch (e) {
+    console.error("[crm] link das lojas:", e instanceof Error ? e.message : e);
   }
   if (!adaptador?.garantirWebhook) return r;
   const numeros = base.config.numeros.filter((x) => x.ativo && x.sessao);

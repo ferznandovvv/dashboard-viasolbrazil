@@ -261,7 +261,7 @@ function ModeloDaCampanha({ nome, modelo, aoMudar }: { nome: string; modelo: Mod
           <span>Final do link do botão</span>
           <select className="crm-input" value={t.botaoVar ?? "link"} onChange={(e) => setT({ ...t, botaoVar: e.target.value })} style={{ maxWidth: 360 }}>
             <option value="link">Link do carrinho ou do pedido</option>
-            <option value="whatsLoja">WhatsApp da loja (wa.me/…)</option>
+            <option value="whatsLoja">WhatsApp da loja (viasolbrazil.com.br/w/loja)</option>
             <option value="codigo">Código do cupom (site/discount/…)</option>
           </select>
         </label>

@@ -5,6 +5,7 @@
 
 import { brl, dataBr, novoId, primeiroNome, somarDias, hojeSp } from "./base";
 import { gerarCodigo } from "./cashback";
+import { sufixoWhatsLoja } from "./linkLoja";
 import { CAMPANHAS, CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem, type TipoCampanha } from "./tipos";
 
 export interface Variaveis {
@@ -349,10 +350,11 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   if (dona) lojaRef = dona;
   const base0: Variaveis = { loja: lojaRef, vendedora: assinatura(base, lojaRef), compraMinima: compraMinimaPara(base, p.variaveis?.valor) };
   const v: Variaveis = { ...base0, ...p.variaveis, ...(dona ? { loja: dona, vendedora: assinatura(base, dona) } : {}) };
-  v.whatsLoja ??= whatsDaLoja(base, v.lojaProxima ?? lojaRef);
+  // Botão: link curto do site (/w/<loja>) que redireciona pro WhatsApp da loja (a Meta não aceita wa.me no botão)
+  v.whatsLoja ??= sufixoWhatsLoja(base, v.lojaProxima ?? lojaRef);
   const t = modelo.template;
   const botao = t?.botaoLink ? (t.botaoVar && t.botaoVar !== "link" ? valorDaVariavel(t.botaoVar, c, v) : sufixoDoLink(v.link)) : undefined;
-  if (!of.sombra && t?.botaoLink && !botao) return { motivo: t.botaoVar === "whatsLoja" ? `sem o WhatsApp da loja ${v.lojaProxima ?? lojaRef} (Configurar › Números)` : "sem o link do botão" };
+  if (!of.sombra && t?.botaoLink && !botao) return { motivo: t.botaoVar === "whatsLoja" ? `sem o link do WhatsApp da loja ${v.lojaProxima ?? lojaRef} (número em Configurar › Números)` : "sem o link do botão" };
   const texto = renderizar(modelo.variacoes.find((x) => x.trim()) ?? "", c, lojaRef, v);
   const m: Mensagem = {
     id: novoId(),
