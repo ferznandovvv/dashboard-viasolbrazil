@@ -117,6 +117,10 @@ export async function POST(req: NextRequest) {
       if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
       const tel = normalizarTelefone(String(p.telefone ?? ""));
       if (!tel) return NextResponse.json({ erro: "Celular inválido." }, { status: 400 });
+      // Fica guardado pros próximos testes
+      await alterarBase((b) => {
+        b.config.telefoneTeste = tel;
+      });
       const r = await new CloudApi(of.token).enviarTemplate(of.phoneNumberId, tel, { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["Fernando", "um biquíni de teste"], botao: "collections/all" });
       return NextResponse.json(r.ok ? { ok: true, detalhe: "Mandado. Responde a mensagem no celular pra testar a resposta automática." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
     }

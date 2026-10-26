@@ -325,7 +325,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
         )}
 
         {secao === "site" && <WhatsAppSite d={d} aoMudar={async () => { await carregar(); await recarregar(); }} />}
-        {secao === "numeros" && <Numeros lojas={d.lojas} numeros={cfg.numeros} provedor={cfg.provedor} salvar={(numeros) => salvar({ numeros }, "Números salvos.")} />}
+        {secao === "numeros" && <Numeros lojas={d.lojas} numeros={cfg.numeros} provedor={cfg.provedor} telefoneTeste={cfg.telefoneTeste} salvar={(numeros) => salvar({ numeros }, "Números salvos.")} />}
 
         {secao === "modelos" && <Modelos d={d} aoMudar={carregar} />}
 
@@ -402,11 +402,11 @@ export function Campo({ rotulo, valor, onChange, prefixo, sufixo, dica, texto, p
   );
 }
 
-function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numeros: NumeroWhatsapp[]; provedor: string; salvar: (n: NumeroWhatsapp[]) => Promise<void> }) {
+function Numeros({ lojas, numeros, provedor, salvar, telefoneTeste }: { lojas: string[]; numeros: NumeroWhatsapp[]; provedor: string; salvar: (n: NumeroWhatsapp[]) => Promise<void>; telefoneTeste?: string }) {
   // As lojas e, no fim, o número do site na WA-AKG (carrinho e Pix enquanto a API oficial não está pronta)
   const [lista, setLista] = useState<NumeroWhatsapp[]>(() => [...lojas.filter((l) => l !== "Site"), "Site"].map((l) => numeros.find((n) => n.loja === l) ?? { loja: l, sessao: "", ativo: false }));
   const [teste, setTeste] = useState<Record<string, string>>({});
-  const [telTeste, setTelTeste] = useState("");
+  const [telTeste, setTelTeste] = useState(telefoneTeste ?? "");
   const muda = (i: number, p: Partial<NumeroWhatsapp>) => setLista(lista.map((n, j) => (j === i ? { ...n, ...p } : n)));
 
   const testar = async (loja: string) => {

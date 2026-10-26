@@ -71,7 +71,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
   const txt = (k: keyof ConfigOficial) => (e: React.ChangeEvent<HTMLInputElement>) => setOf({ ...of, [k]: e.target.value });
   const chk = (k: keyof ConfigOficial) => (e: React.ChangeEvent<HTMLInputElement>) => setOf({ ...of, [k]: e.target.checked });
   const pelaOficial = (c: TipoCampanha) => of.campanhas.includes(c);
-  const [telTeste, setTelTeste] = useState("");
+  const [telTeste, setTelTeste] = useState(d.config.telefoneTeste ?? "");
   const [pin, setPin] = useState("");
 
   return (

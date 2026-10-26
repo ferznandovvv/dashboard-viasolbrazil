@@ -469,6 +469,8 @@ export interface ConfigCrm {
   envioDias: number[];
   /** Teto diário por número */
   tetoDiaPorNumero: number;
+  /** Celular de quem testa (só dígitos, com 55): já vem preenchido nos botões de teste */
+  telefoneTeste?: string;
   /** Link curto /w/<loja> criado na Shopify (loja → número pro qual ele aponta) */
   linksLoja?: Record<string, string>;
   /** Teto temporário (lançamento): nenhum número manda mais que `valor` por dia até `ate` (AAAA-MM-DD) */

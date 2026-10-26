@@ -532,6 +532,12 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    id: "telefone-teste-fernando",
+    aplicar: (b) => {
+      b.config.telefoneTeste ??= "5516992174018";
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
