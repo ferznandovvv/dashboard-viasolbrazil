@@ -621,7 +621,8 @@ export const MODELOS_PADRAO: Modelo[] = [
       "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Não deixa vencer, hein! Quando chegar novidade, posso te mandar foto?",
       "Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Entrou {valor} de cashback pra você, válido até {validade} (vale em compra a partir de {compraMinima}). Adorei te atender, volta logo.",
     ],
-    template: { nome: "via_sol_cashback", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
+    // Versão "atualização de conta": a Meta aprovou como utilidade (bem mais barata que marketing)
+    template: { nome: "via_sol_saldo_cashback", idioma: "pt_BR", parametros: ["primeiro", "loja", "vendedora", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "cashback_site_perto",

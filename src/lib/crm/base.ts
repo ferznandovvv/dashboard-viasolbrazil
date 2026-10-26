@@ -569,6 +569,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 26/10: a Meta aprovou o aviso de cashback das lojas em versão "atualização de conta"
+    // como utilidade. Os do site e o lembrete de vencimento ficaram marketing: seguem os
+    // textos mais calorosos (custo igual).
+    id: "cashback-loja-utilidade",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "cashback_creditado");
+      if (m) m.template = { nome: "via_sol_saldo_cashback", idioma: "pt_BR", parametros: ["primeiro", "loja", "vendedora", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" };
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
