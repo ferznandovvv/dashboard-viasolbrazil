@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(r.ok ? { ok: true, detalhe: "Número registrado na API. Guarde o PIN: a Meta pede ele se um dia precisar registrar de novo." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
     }
     if (p.tipo === "teste-oficial") {
-      // Manda o modelo de carrinho (aprovado) pro celular de quem testa: confere envio, botão e,
+      // Manda um modelo aprovado pro celular de quem testa: confere envio, botão e,
       // se a pessoa responder, o webhook e a resposta automática
       const of = oficialDe((await lerBase()).config);
       if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
@@ -121,7 +121,8 @@ export async function POST(req: NextRequest) {
       await alterarBase((b) => {
         b.config.telefoneTeste = tel;
       });
-      const r = await new CloudApi(of.token).enviarTemplate(of.phoneNumberId, tel, { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["Fernando", "um biquíni de teste"], botao: "collections/all" });
+      // Modelo de utilidade (Pix): o de marketing não chega pra quem a Meta põe no grupo de controle (erro 130472)
+      const r = await new CloudApi(of.token).enviarTemplate(of.phoneNumberId, tel, { nome: "via_sol_pix_pendente", idioma: "pt_BR", parametros: ["Fernando", "#TESTE", "R$ 1,00"], botao: "collections/all" });
       return NextResponse.json(r.ok ? { ok: true, detalhe: "Mandado. Responde a mensagem no celular pra testar a resposta automática." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
     }
     if (p.tipo === "testar-oficial" || p.tipo === "modelos-meta" || p.tipo === "criar-modelos-meta") {
