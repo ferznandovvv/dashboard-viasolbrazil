@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CaixaEMetas } from "@/components/MetasVendedoras";
+import { MetasVendedoras } from "@/components/MetasVendedoras";
 
 interface Painel {
   loja: string;
@@ -334,7 +334,7 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
 
       <BlocoVendas v={p.vendas} celular={p.celular} />
 
-      <CaixaEMetas loja={p.loja} />
+      <MetasVendedoras loja={p.loja} />
 
       <Vendedoras v={p.vendas} />
 

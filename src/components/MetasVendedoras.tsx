@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CaixaDoDia as Caixa } from "@/app/api/loja/route";
-import { CaixaDoDia } from "./CaixaDoDia";
 
 interface Vendedora {
   nome: string;
@@ -18,8 +16,6 @@ interface Dados {
   metaLoja: number;
   vendedoras: Vendedora[];
   semVendedora: number;
-  conectado: boolean;
-  caixa?: Caixa;
 }
 
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -27,10 +23,11 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 const primeiroNome = (n: string) => n.split(" ")[0].toLowerCase().replace(/^./, (c) => c.toUpperCase());
 
 /**
- * O caixa de hoje e a meta de cada vendedora, numa consulta só à TOTVS.
- * Era a antiga "tela das lojas"; agora fica dentro da tela da loja.
+ * Meta de cada vendedora no mês: a meta da loja dividida entre quem vendeu
+ * nos últimos 30 dias. Era a antiga "tela das lojas"; agora fica dentro da
+ * tela da loja, junto com o caixa.
  */
-export function CaixaEMetas({ loja }: { loja: string }) {
+export function MetasVendedoras({ loja }: { loja: string }) {
   const [d, setD] = useState<Dados | null>(null);
 
   useEffect(() => {
@@ -51,18 +48,7 @@ export function CaixaEMetas({ loja }: { loja: string }) {
     };
   }, [loja]);
 
-  if (!d) return null;
-  return (
-    <>
-      {d.conectado && d.caixa && <CaixaDoDia c={d.caixa} />}
-      <MetasVendedoras d={d} />
-    </>
-  );
-}
-
-/** Meta de cada vendedora no mês: a meta da loja dividida entre quem vendeu nos últimos 30 dias. */
-function MetasVendedoras({ d }: { d: Dados }) {
-  if (!d.metaLoja || !d.vendedoras.length) return null;
+  if (!d || !d.metaLoja || !d.vendedoras.length) return null;
 
   return (
     <section className="card metas-vend" aria-labelledby="metas-vend-titulo">

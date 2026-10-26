@@ -2,51 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { lojasPermitidas } from "@/lib/acesso/lojas";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
-import { type NormalizedOrder, addDays, contaComoPedido, devolucoesEm, pedidosEm, spDateKey, todaySpKey, trocasEm } from "@/lib/types";
+import { addDays, contaComoPedido, spDateKey, todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-/** O caixa do dia pelas notas da TOTVS: o que entrou, por forma de pagamento, e o que voltou. */
-export interface CaixaDoDia {
-  /** Vendas do dia (inclusive a venda nova das trocas) */
-  entrou: number;
-  /** Devoluções e trocas: o valor das peças que voltaram (positivo) */
-  devolvido: number;
-  liquido: number;
-  vendas: number;
-  trocas: number;
-  devolucoes: number;
-  /** Por forma de pagamento; a venda nova de uma troca conta em `trocas`, não em `vendas` */
-  formas: { forma: string; valor: number; vendas: number; trocas: number }[];
-  /** Hora da última venda (ISO) */
-  ultima?: string;
-}
-
-function caixaDoDia(deHoje: NormalizedOrder[]): CaixaDoDia {
-  const entradas = deHoje.filter((o) => !o.devolucao);
-  const formas = new Map<string, CaixaDoDia["formas"][number]>();
-  for (const o of entradas) {
-    const forma = (o.payment ?? "").trim() || "Não informado";
-    const f = formas.get(forma) ?? { forma, valor: 0, vendas: 0, trocas: 0 };
-    f.valor += o.total;
-    if (o.troca) f.trocas += 1;
-    else f.vendas += 1;
-    formas.set(forma, f);
-  }
-  const entrou = entradas.reduce((s, o) => s + o.total, 0);
-  const devolvido = -deHoje.filter((o) => o.devolucao).reduce((s, o) => s + o.total, 0);
-  return {
-    entrou,
-    devolvido,
-    liquido: entrou - devolvido,
-    vendas: pedidosEm(deHoje),
-    trocas: trocasEm(deHoje),
-    devolucoes: devolucoesEm(deHoje),
-    formas: Array.from(formas.values()).sort((a, b) => b.valor - a.valor),
-    ultima: entradas.map((o) => o.createdAt).sort().pop(),
-  };
-}
 
 export interface Vendedora {
   nome: string;
@@ -138,7 +97,6 @@ export async function GET(req: NextRequest) {
     semVendedora,
     vendedoras,
     conectado: vendas.connected,
-    caixa: caixaDoDia(daLoja.filter((o) => spDateKey(o.createdAt) === hoje)),
     erro: vendas.error,
   });
 }

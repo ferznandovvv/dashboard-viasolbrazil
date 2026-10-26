@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { NormalizedOrder } from "@/lib/types";
-import { nomeForma } from "./CaixaDoDia";
 import { brl } from "./viz";
+
+/** "CARTAO CREDITO" → "Cartao credito": a TOTVS manda tudo em caixa alta */
+function nomeForma(f: string): string {
+  return f === f.toUpperCase() ? f.charAt(0) + f.slice(1).toLowerCase() : f;
+}
 
 /** Vendas de loja já abertas nesta visita: abrir de novo não consulta a TOTVS outra vez */
 const jaBuscadas = new Map<string, NormalizedOrder>();
