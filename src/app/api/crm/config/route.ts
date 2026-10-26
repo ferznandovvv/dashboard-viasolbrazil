@@ -133,7 +133,12 @@ export async function POST(req: NextRequest) {
         const sit = await api.situacao(of.phoneNumberId);
         // Garante que este app recebe as respostas das clientes (webhook da conta)
         const webhook = of.wabaId ? await api.assinarWebhooks(of.wabaId) : { ok: false, erro: "falta o WABA ID" };
-        return NextResponse.json({ ...sit, detalhe: [sit.detalhe, webhook.ok ? "webhook da conta ok" : `webhook da conta: ${webhook.erro}`].filter(Boolean).join(" · ") });
+        const ult = (await lerBase()).statusOficial?.slice(-1)[0];
+        const nomes: Record<string, string> = { sent: "enviada", delivered: "entregue", read: "lida", failed: "NÃO entregue" };
+        const erroTxt = ult && Date.now() - Date.parse(ult.em) < 86400000
+          ? `último aviso da Meta (${new Date(ult.em).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}, ${ult.telefone}): ${nomes[ult.status] ?? ult.status}${ult.erro ? `, ${ult.erro}` : ""}`
+          : "nenhum aviso de entrega da Meta nas últimas 24 h";
+        return NextResponse.json({ ...sit, detalhe: [sit.detalhe, webhook.ok ? "webhook da conta ok" : `webhook da conta: ${webhook.erro}`, erroTxt].filter(Boolean).join(" · ") });
       }
       if (!of.wabaId) return NextResponse.json({ erro: "Falta o ID da conta do WhatsApp Business (WABA)." }, { status: 400 });
       if (p.tipo === "modelos-meta") return NextResponse.json({ modelos: await api.modelos(of.wabaId) });

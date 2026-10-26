@@ -132,14 +132,14 @@ function extrair(c: Record<string, unknown>): EventoRecebido[] {
         out.push({ tipo: "mensagem", sessao, telefone: tel(m.to), texto: textoDe(m), idExterno: String(m.id ?? ""), em: quando(m.timestamp), fromMe: true });
       }
       for (const s of (v.statuses ?? []) as Record<string, unknown>[]) {
-        const erro = ((s.errors ?? []) as { title?: string; error_data?: { details?: string } }[])[0];
+        const erro = ((s.errors ?? []) as { code?: number; title?: string; error_data?: { details?: string } }[])[0];
         out.push({
           tipo: "status",
           sessao,
           telefone: tel(s.recipient_id),
           idExterno: String(s.id ?? ""),
           status: String(s.status ?? "").toUpperCase(),
-          texto: erro ? (erro.error_data?.details ?? erro.title) : undefined,
+          texto: erro ? `${erro.code ? `${erro.code} ` : ""}${erro.error_data?.details ?? erro.title ?? ""}`.trim() : undefined,
         });
       }
     }

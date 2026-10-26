@@ -536,6 +536,10 @@ export interface BaseCrm {
   atendimentoIgnorado?: Record<string, string>;
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */
   vendedoras: Record<string, string>;
+  /** Últimos status do oficial vindos do webhook (enviada, entregue, lida, falhou + motivo) */
+  statusOficial?: { em: string; telefone: string; status: string; erro?: string }[];
+  /** Últimas mensagens que a Meta aceitou mas não entregou (motivo vem pelo webhook) */
+  errosOficial?: { em: string; telefone: string; erro: string }[];
   /** Resposta automática do número oficial: telefone → quando foi a última (uma a cada 12 h) */
   autoRespostas?: Record<string, string>;
   modelos: Modelo[];

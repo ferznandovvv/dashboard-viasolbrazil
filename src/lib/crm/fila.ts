@@ -348,11 +348,25 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     loja = acharLoja(nome);
   }
 
+  if (ev.tipo === "status" && ev.idExterno && doOficial) {
+    // Diagnóstico do oficial: guarda o último status de cada envio (aparece no "Testar conexão")
+    const st = (ev.status ?? "").toLowerCase();
+    await alterarBase((b) => {
+      (b.statusOficial ??= []).push({ em: new Date().toISOString(), telefone: ev.telefone, status: st, erro: ev.texto });
+      if (b.statusOficial.length > 30) b.statusOficial.splice(0, b.statusOficial.length - 30);
+    });
+  }
   if (ev.tipo === "status" && ev.idExterno) {
     const mapa: Record<string, Mensagem["status"]> = { DELIVERED: "entregue", READ: "lida", PLAYED: "lida" };
     // Meta recusou depois de aceitar (número sem WhatsApp, modelo pausado, limite): vira erro
     if ((ev.status ?? "").toUpperCase() === "FAILED") {
+      if (doOficial) console.error(`[crm] Meta não entregou pra ${ev.telefone}: ${ev.texto ?? "sem detalhe"}`);
       await alterarBase((b) => {
+        // Guarda os últimos recusados do oficial (mostrados no "Testar conexão")
+        if (doOficial) {
+          (b.errosOficial ??= []).push({ em: new Date().toISOString(), telefone: ev.telefone, erro: ev.texto ?? "sem detalhe" });
+          if (b.errosOficial.length > 20) b.errosOficial.splice(0, b.errosOficial.length - 20);
+        }
         const m = b.mensagens.find((x) => x.idExterno === ev.idExterno);
         if (m && m.status !== "respondida") {
           m.status = "erro";
