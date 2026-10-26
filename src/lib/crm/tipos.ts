@@ -203,6 +203,11 @@ export interface TemplateMeta {
   parametros: string[];
   /** O modelo tem botão de link com final variável: vai o link sem o começo (urlBase) */
   botaoLink?: boolean;
+  /**
+   * O que vai no final do link do botão: "link" (padrão, o link do carrinho/pedido
+   * sem o começo), "whatsLoja" (número da loja, pro wa.me) ou "codigo" (cupom do site)
+   */
+  botaoVar?: string;
 }
 
 /** WhatsApp oficial (Cloud API da Meta), usado pelo número do site. */
@@ -234,6 +239,10 @@ export interface ConfigOficial {
   pagamentoTodos: boolean;
   /** Começo do link do botão nos modelos (o resto vai como variável) */
   urlBase: string;
+  /** Quem responde no número oficial recebe na hora o link do WhatsApp da loja dela */
+  autoResposta?: boolean;
+  /** WhatsApp de atendimento quando não dá pra saber a loja (só dígitos, com 55) */
+  whatsAtendimento?: string;
 }
 
 export const OFICIAL_PADRAO: ConfigOficial = {
@@ -392,6 +401,8 @@ export interface NumeroWhatsapp {
   mandarPor?: string;
   /** Ligado, mas só começa a mandar a partir deste dia (AAAA-MM-DD): descanso depois de restrição */
   ligarEm?: string;
+  /** Número do WhatsApp da loja (só dígitos, com 55): vai no botão "Falar com a loja" da API oficial. Lido da WA-AKG quando conecta */
+  telefone?: string;
 }
 
 export interface ConfigCrm {
@@ -521,6 +532,8 @@ export interface BaseCrm {
   atendimentoIgnorado?: Record<string, string>;
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */
   vendedoras: Record<string, string>;
+  /** Resposta automática do número oficial: telefone → quando foi a última (uma a cada 12 h) */
+  autoRespostas?: Record<string, string>;
   modelos: Modelo[];
   campanhas: CampanhaManual[];
   config: ConfigCrm;
@@ -596,6 +609,7 @@ export const MODELOS_PADRAO: Modelo[] = [
       "{primeiro}, obrigada pela visita {quando}! 🧡 Aqui é a {vendedora}, da Via Sol {loja}. Ficou {valor} de cashback no seu nome, pra usar até {validade} numa compra a partir de {compraMinima}. Não deixa vencer, hein! Quando chegar novidade, posso te mandar foto?",
       "Oi {primeiro}! {vendedora} aqui, da Via Sol {loja} 👙 Entrou {valor} de cashback pra você, válido até {validade} (vale em compra a partir de {compraMinima}). Adorei te atender, volta logo.",
     ],
+    template: { nome: "via_sol_cashback", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "cashback_site_perto",
@@ -605,6 +619,7 @@ export const MODELOS_PADRAO: Modelo[] = [
       "Oi {primeiro}! Aqui é a {vendedora}, da Via Sol {lojaProxima} ☀️ Vi que você comprou no nosso site, e a compra rendeu {valor} de cashback, válido até {validade}. Pra usar no site é só colocar o código {codigo} no checkout, e ele vale aqui na loja também{endereco}. Vale em compras a partir de {compraMinima}. Passa aqui pra provar as novidades, que eu te atendo!",
       "{primeiro}, tudo bem? Aqui é a {vendedora}, da loja da Via Sol em {cidade}{endereco} 🧡 Sua compra no site rendeu {valor} de cashback, com o código {codigo}. Dá pra usar no checkout do site ou aqui na loja, até {validade}, em compras a partir de {compraMinima}. Qualquer coisa, me chama por aqui!",
     ],
+    template: { nome: "via_sol_cashback_site_perto", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "lojaProxima", "valor", "validade", "codigo", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "cashback_site_longe",
@@ -612,14 +627,16 @@ export const MODELOS_PADRAO: Modelo[] = [
     variacoes: [
       "Oi {primeiro}! Aqui é da Via Sol ☀️ Sua compra no nosso site rendeu {valor} de cashback, válido até {validade}. Pra usar, é só colocar o código {codigo} no checkout do site, em compras a partir de {compraMinima}. Ele também vale em qualquer loja física nossa.",
     ],
+    template: { nome: "via_sol_cashback_site", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade", "codigo", "compraMinima"], botaoLink: true, botaoVar: "codigo" },
   },
   {
     campanha: "cashback_vencendo",
     ativo: true,
     variacoes: [
-      "Oi {primeiro}, {vendedora} aqui, da Via Sol {loja} ☀️ Lembra do seu cashback de {valor}? Ele vence em {validade}. Chegaram peças novas essa semana, quer que eu te mande umas fotos pra você escolher com calma?",
+      "Oi {primeiro}, {vendedora} aqui, da Via Sol {loja} ☀️ Lembra do seu cashback de {valor}? Ele vence em {validade}. Quer que eu te mande umas fotos das novidades pra você escolher com calma?",
       "{primeiro}, tudo bem? Passando pra lembrar que você tem {valor} de cashback aqui na Via Sol {loja}, válido até {validade} 🧡 Quer que eu separe algo do seu tamanho pra você vir ver?",
     ],
+    template: { nome: "via_sol_cashback_vencendo", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "cashback_vencendo_urgente",
@@ -628,6 +645,7 @@ export const MODELOS_PADRAO: Modelo[] = [
       "{primeiro}, é a {vendedora} 🧡 Seu cashback de {valor} vence em {validade}, daqui a pouquinho. Não queria que você perdesse. Se não der pra passar na loja, me responde que eu vejo um jeito de te ajudar a usar.",
       "Oi {primeiro}! Último lembrete da {vendedora}: {valor} de cashback no seu nome vencendo dia {validade} ☀️ Dá tempo de usar ainda, te espero na Via Sol {loja}.",
     ],
+    template: { nome: "via_sol_cashback_vencendo", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "aniversario",

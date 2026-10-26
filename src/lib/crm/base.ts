@@ -8,7 +8,7 @@
 import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
-import { type BaseCrm, CONFIG_PADRAO, MODELOS_PADRAO } from "./tipos";
+import { type BaseCrm, CONFIG_PADRAO, MODELOS_PADRAO, oficialDe } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm");
@@ -500,6 +500,25 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
         n.ativo = true;
         if (["Centro", "Praia Grande", "Site", "SP — Itaim"].includes(n.loja)) n.ligarEm = "2026-10-28";
       }
+    },
+  },
+  {
+    // 26/10: avisos de cashback prontos pra API oficial (número 16 99129-6855):
+    // modelo da Meta em cada campanha, resposta automática com o WhatsApp da loja.
+    // Só passam a sair por lá quando forem marcados em "Campanhas que saem pelo
+    // número oficial" e a Meta estiver configurada.
+    id: "cashback-pela-oficial-v1",
+    aplicar: (b) => {
+      for (const padrao of MODELOS_PADRAO) {
+        if (!padrao.template) continue;
+        const m = b.modelos.find((x) => x.campanha === padrao.campanha);
+        if (m && !m.template) m.template = structuredClone(padrao.template);
+        if (m && padrao.campanha === "cashback_vencendo")
+          m.variacoes = m.variacoes.map((v) => v.split("Chegaram peças novas essa semana, quer que eu te mande umas fotos pra você escolher com calma?").join("Quer que eu te mande umas fotos das novidades pra você escolher com calma?"));
+      }
+      const of = (b.config.oficial ??= oficialDe(b.config));
+      of.autoResposta ??= true;
+      of.whatsAtendimento ??= "5516991687616";
     },
   },
   {

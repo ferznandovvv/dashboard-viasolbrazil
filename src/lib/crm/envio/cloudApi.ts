@@ -48,6 +48,17 @@ export class CloudApi implements Adaptador {
     });
   }
 
+  /** Inscreve o app do token nos webhooks da conta (sem isso a resposta da cliente não chega). */
+  async assinarWebhooks(wabaId: string): Promise<{ ok: boolean; erro?: string }> {
+    try {
+      const r = await fetch(`${GRAPH}/${wabaId}/subscribed_apps`, { method: "POST", headers: { Authorization: `Bearer ${this.token}` }, cache: "no-store" });
+      const j = (await r.json().catch(() => ({}))) as { success?: boolean; error?: { message: string } };
+      return r.ok && j.success ? { ok: true } : { ok: false, erro: j.error?.message ?? `Meta ${r.status}` };
+    } catch (e) {
+      return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
   private async post(caminho: string, corpo: unknown): Promise<ResultadoEnvio> {
     try {
       const r = await fetch(`${GRAPH}/${caminho}`, {

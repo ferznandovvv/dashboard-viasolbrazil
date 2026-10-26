@@ -197,6 +197,19 @@ export class WaAkg implements Adaptador {
     }
   }
 
+  /** Número do próprio WhatsApp da sessão (só dígitos), quando ela está conectada. */
+  async meuNumero(sessao: string): Promise<string | undefined> {
+    try {
+      const { id } = await this.resolver(sessao);
+      const r = await this.chamar(`/api/sessions/${encodeURIComponent(id)}`);
+      const me = ((r.json?.data ?? r.json) as { me?: { id?: string } } | null)?.me;
+      const dig = String(me?.id ?? "").split(/[:@]/)[0].replace(/\D/g, "");
+      return dig.length >= 12 ? dig : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async situacao(sessao: string): Promise<SituacaoNumero> {
     try {
       cacheSessoes.delete(this.url); // consulta de situação sempre olha a lista fresca

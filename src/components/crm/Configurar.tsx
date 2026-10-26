@@ -451,6 +451,7 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
               <th>Loja</th>
               <th>Sessão / id</th>
               <th>Vendedora que assina</th>
+              <th>WhatsApp da loja</th>
               <th>Endereço (pra cliente do site)</th>
               <th>Teto/dia</th>
               <th>Ligado</th>
@@ -462,13 +463,14 @@ function Numeros({ lojas, numeros, provedor, salvar }: { lojas: string[]; numero
                 <td className="fin-desc">{n.loja === "Site" ? "Site (e-commerce)" : n.loja}</td>
                 <td data-rotulo="Sessão / id"><input className="crm-input" aria-label={`Sessão da ${n.loja}`} value={n.sessao} onChange={(e) => muda(i, { sessao: e.target.value })} placeholder="ex.: centro" /></td>
                 <td data-rotulo="Vendedora que assina"><input className="crm-input" aria-label={`Vendedora que assina pela ${n.loja}`} value={n.vendedora ?? ""} onChange={(e) => muda(i, { vendedora: e.target.value })} placeholder="ex.: Carol" /></td>
+                <td data-rotulo="WhatsApp da loja"><input className="crm-input" aria-label={`WhatsApp da ${n.loja}`} inputMode="tel" value={n.telefone ?? ""} onChange={(e) => muda(i, { telefone: e.target.value || undefined })} placeholder="lido da WA-AKG" /></td>
                 <td data-rotulo="Endereço" className="cfg-numeros-end"><input className="crm-input" aria-label={`Endereço da ${n.loja}`} value={n.endereco ?? ""} onChange={(e) => muda(i, { endereco: e.target.value })} placeholder="ex.: Rua do Comércio, 1200" /></td>
                 <td data-rotulo="Teto/dia" className="cfg-numeros-teto"><input className="crm-input" aria-label={`Teto por dia da ${n.loja}`} inputMode="numeric" value={n.tetoDia ?? ""} onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); muda(i, { tetoDia: v ? Number(v) : undefined }); }} placeholder="geral" /></td>
                 <td data-rotulo="Ligado"><input type="checkbox" aria-label={`Número da ${n.loja} ligado`} checked={n.ativo} onChange={(e) => muda(i, { ativo: e.target.checked })} /></td>
               </tr>
               <tr className="cfg-numeros-acoes">
                 <td />
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="cfg-numeros-botoes">
                     {n.loja !== "Site" && !(n.ativo && n.sessao) && (
                       <label className="cfg-check-inline">

@@ -25,6 +25,8 @@ export interface Adaptador {
   /** `sessao` identifica o número (sessionId na WA-AKG, phone_number_id na Cloud API). */
   enviarTexto(sessao: string, telefone: string, texto: string): Promise<ResultadoEnvio>;
   situacao(sessao: string): Promise<SituacaoNumero>;
+  /** Número do próprio WhatsApp da sessão (só dígitos), se o provedor souber */
+  meuNumero?(sessao: string): Promise<string | undefined>;
   /** Nome legível da sessão a partir do código que vem no webhook (quando o provedor tem os dois). */
   nomeDaSessao?(codigo: string): Promise<string | undefined>;
   /** Contatos do número (dígitos do telefone ou do id → nome salvo / nome do WhatsApp) */

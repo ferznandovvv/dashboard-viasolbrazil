@@ -104,7 +104,10 @@ export async function POST(req: NextRequest) {
       const api = new CloudApi(of.token);
       if (p.tipo === "testar-oficial") {
         if (!of.phoneNumberId) return NextResponse.json({ erro: "Falta o ID do número (phone number ID)." }, { status: 400 });
-        return NextResponse.json(await api.situacao(of.phoneNumberId));
+        const sit = await api.situacao(of.phoneNumberId);
+        // Garante que este app recebe as respostas das clientes (webhook da conta)
+        const webhook = of.wabaId ? await api.assinarWebhooks(of.wabaId) : { ok: false, erro: "falta o WABA ID" };
+        return NextResponse.json({ ...sit, detalhe: [sit.detalhe, webhook.ok ? "webhook da conta ok" : `webhook da conta: ${webhook.erro}`].filter(Boolean).join(" · ") });
       }
       if (!of.wabaId) return NextResponse.json({ erro: "Falta o ID da conta do WhatsApp Business (WABA)." }, { status: 400 });
       if (p.tipo === "modelos-meta") return NextResponse.json({ modelos: await api.modelos(of.wabaId) });
@@ -179,7 +182,7 @@ export async function POST(req: NextRequest) {
           numeros: Array.isArray(c.numeros)
             ? c.numeros
                 .filter((n) => n && typeof n.loja === "string")
-                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined, endereco: String(n.endereco ?? "").trim().slice(0, 120) || undefined, horario: horarioLimpo(n.horario), mandarPor: String(n.mandarPor ?? "").trim() || undefined, ligarEm: /^\d{4}-\d{2}-\d{2}$/.test(String(n.ligarEm ?? "")) ? String(n.ligarEm) : undefined }))
+                .map((n) => ({ loja: n.loja, sessao: String(n.sessao ?? "").trim(), ativo: Boolean(n.ativo), tetoDia: n.tetoDia ? num(n.tetoDia, 20, 1, 500) : undefined, vendedora: String(n.vendedora ?? "").trim() || undefined, endereco: String(n.endereco ?? "").trim().slice(0, 120) || undefined, horario: horarioLimpo(n.horario), mandarPor: String(n.mandarPor ?? "").trim() || undefined, ligarEm: /^\d{4}-\d{2}-\d{2}$/.test(String(n.ligarEm ?? "")) ? String(n.ligarEm) : undefined, telefone: String(n.telefone ?? "").replace(/\D/g, "").replace(/^(?!55)(\d{10,11})$/, "55$1") || undefined }))
             : atual.numeros,
           envioInicio: num(c.envioInicio, atual.envioInicio, 0, 23),
           envioFim: num(c.envioFim, atual.envioFim, 1, 24),
@@ -229,6 +232,8 @@ export async function POST(req: NextRequest) {
           pixMinutos: num(o.pixMinutos, atual.pixMinutos, 10, 1380),
           pagamentoTodos: o.pagamentoTodos !== undefined ? Boolean(o.pagamentoTodos) : atual.pagamentoTodos,
           urlBase: typeof o.urlBase === "string" && /^https:\/\/[^\s]+$/.test(o.urlBase.trim()) ? o.urlBase.trim() : atual.urlBase,
+          autoResposta: o.autoResposta !== undefined ? Boolean(o.autoResposta) : atual.autoResposta,
+          whatsAtendimento: o.whatsAtendimento !== undefined ? String(o.whatsAtendimento).replace(/\D/g, "").replace(/^(?!55)(\d{10,11})$/, "55$1") || undefined : atual.whatsAtendimento,
         };
         if (nova.fim <= nova.inicio) throw new Error("O fim do horário do site precisa ser depois do início.");
         b.config.oficial = nova;
@@ -247,6 +252,7 @@ export async function POST(req: NextRequest) {
                   idioma: String(t.idioma ?? "pt_BR").trim() || "pt_BR",
                   parametros: (t.parametros ?? []).map((x) => String(x).trim()).filter(Boolean).slice(0, 10),
                   botaoLink: Boolean(t.botaoLink),
+                  botaoVar: ["link", "whatsLoja", "codigo"].includes(String(t.botaoVar)) ? String(t.botaoVar) : existente?.template?.botaoVar,
                 }
               : undefined;
         if (existente) {

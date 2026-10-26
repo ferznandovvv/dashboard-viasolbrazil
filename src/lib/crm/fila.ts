@@ -8,7 +8,8 @@
 
 import { adaptadorDe } from "./envio/adaptador";
 import { CloudApi } from "./envio/cloudApi";
-import { alterarBase, hojeSp, lerBase } from "./base";
+import { alterarBase, hojeSp, lerBase, primeiroNome } from "./base";
+import { whatsDaLoja } from "./mensagens";
 import { CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, tetoDoNumero, type Atendimento, type BaseCrm, type Mensagem } from "./tipos";
 
 /** Quando cada número pode mandar de novo (ms). Em memória: reiniciar zera, e tudo bem. */
@@ -56,7 +57,7 @@ export function dentroDaJanela(base: BaseCrm): boolean {
 /** Mensagens que já saíram hoje por aquele número. */
 export function enviadasHoje(base: BaseCrm, loja: string, hoje = hojeSp()): number {
   return base.mensagens.filter(
-    (m) => m.loja === loja && m.enviadoEm?.startsWith(hoje) && ["enviada", "entregue", "lida", "respondida"].includes(m.status)
+    (m) => m.loja === loja && m.provedor !== "oficial" && m.enviadoEm?.startsWith(hoje) && ["enviada", "entregue", "lida", "respondida"].includes(m.status)
   ).length;
 }
 
@@ -226,8 +227,10 @@ export async function processarFilaOficial(ignorarJanela = false): Promise<Resul
     const cabe = Math.max(0, Math.min(20, of.tetoDia - jaHoje));
     if (!cabe) return { enviadas: 0, erros: 0, motivo: "teto do dia do site" };
     const agoraIso = new Date().toISOString();
+    // Aviso das lojas pelo oficial segue o horário das lojas; carrinho e Pix, o do site
+    const janelaLojas = ignorarJanela || dentroDaJanela(base);
     const escolhidas = base.mensagens
-      .filter((m) => m.provedor === "oficial" && m.status === "fila" && m.naoAntesDe <= agoraIso)
+      .filter((m) => m.provedor === "oficial" && m.status === "fila" && m.naoAntesDe <= agoraIso && (CAMPANHAS_SITE.includes(m.campanha) || janelaLojas))
       .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe))
       .slice(0, cabe);
     if (!escolhidas.length) return { enviadas: 0, erros: 0 };
@@ -439,6 +442,35 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     // Pelo oficial é resposta dentro das 24h que ela abriu: texto livre vale
     const adaptador = doOficial ? adaptadorOficial(base)?.api : adaptadorDe(base.config);
     if (adaptador) void adaptador.enviarTexto(ev.sessao, ev.telefone, confirmacao);
+  }
+
+  // Número oficial só manda aviso: quem responde ali recebe na hora o link do WhatsApp da
+  // loja dela (uma vez a cada 12 h). É resposta dentro das 24 h que ela abriu: não é cobrada.
+  if (doOficial && feito !== "opt-out" && recente && !sombra && !base.config.pausado && of.autoResposta !== false) {
+    const ultima = base.autoRespostas?.[ev.telefone];
+    if (!ultima || Date.now() - Date.parse(ultima) > 12 * 3600000) {
+      const cliente = base.clientes.find((c) => c.telefone === ev.telefone);
+      const nossa = base.mensagens
+        .filter((m) => m.provedor === "oficial" && m.telefone === ev.telefone && m.enviadoEm)
+        .sort((a, b2) => b2.enviadoEm!.localeCompare(a.enviadoEm!))[0];
+      const loja = nossa?.loja ?? cliente?.lojaOrigem;
+      const whats = whatsDaLoja(base, loja);
+      const api = adaptadorOficial(base);
+      if (whats && api) {
+        const nome = primeiroNome(cliente?.nome ?? ev.nome ?? "");
+        const deQuem = loja && loja !== LOJA_OFICIAL ? ` da Via Sol ${loja}` : "";
+        const resposta = `Oi${nome ? ` ${nome}` : ""}! Esse número só manda os avisos da Via Sol 🧡 Pra falar com a gente${deQuem}, é só tocar aqui: https://wa.me/${whats}`;
+        const r = await api.api.enviarTexto(api.numero, ev.telefone, resposta);
+        if (r.ok) {
+          await alterarBase((b) => {
+            (b.autoRespostas ??= {})[ev.telefone] = new Date().toISOString();
+            // Conta como respondida no atendimento: o resto da conversa segue no número da loja
+            b.atendimento.push({ loja: LOJA_OFICIAL, telefone: ev.telefone, de: "loja", em: new Date().toISOString(), texto: "(resposta automática)", id: r.idExterno });
+          });
+          feito += " · resposta automática";
+        }
+      }
+    }
   }
   return feito;
 }

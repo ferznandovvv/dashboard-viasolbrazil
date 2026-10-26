@@ -15,7 +15,7 @@ interface ModeloMeta {
 }
 
 const SITUACAO: Record<string, string> = { APPROVED: "aprovado", PENDING: "em análise", REJECTED: "recusado", PAUSED: "pausado", DISABLED: "desativado" };
-const CHAVES = ["primeiro", "nome", "valor", "itens", "pedido", "link", "validade", "loja"];
+const CHAVES = ["primeiro", "nome", "vendedora", "loja", "lojaProxima", "valor", "validade", "compraMinima", "codigo", "itens", "pedido", "link"];
 const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
 /**
@@ -77,7 +77,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
       <section className={`card cfg-card ${of.sombra ? "cfg-sombra" : ""}`}>
         <h2>WhatsApp oficial do site</h2>
         <p className="muted pg-nota">
-          Número do e-commerce pela API oficial da Meta. Carrinho abandonado e Pix não pago saem por aqui, como modelo aprovado. As lojas continuam na WA-AKG. Fila, limite por cliente e SAIR valem pros dois.
+          Número da API oficial da Meta. Sai por aqui o que estiver marcado em &quot;Campanhas que saem pelo número oficial&quot;, como modelo aprovado. Aviso de cashback das lojas pelo oficial continua assinado pela vendedora, com botão pro WhatsApp da loja. Fila, limite por cliente e SAIR valem pros dois.
         </p>
         <label className="cfg-check">
           <input type="checkbox" checked={of.sombra} onChange={chk("sombra")} />
@@ -91,6 +91,16 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
           <Campo rotulo="ID do número (phone number ID)" valor={of.phoneNumberId ?? ""} onChange={txt("phoneNumberId")} texto placeholder="ex.: 123456789012345" />
           <Campo rotulo="ID da conta do WhatsApp Business (WABA)" valor={of.wabaId ?? ""} onChange={txt("wabaId")} texto placeholder="ex.: 109876543210987" dica="Pra listar e criar os modelos" />
           <Campo rotulo={`Segredo do app (opcional)${d.temAppSecret ? " (salvo)" : ""}`} valor={of.appSecret ?? ""} onChange={txt("appSecret")} texto placeholder="confere a assinatura do webhook" />
+        </div>
+        <label className="cfg-check">
+          <input type="checkbox" checked={of.autoResposta !== false} onChange={chk("autoResposta")} />
+          <span>
+            <b>Resposta automática com o WhatsApp da loja</b>
+            <small>Quem responde no número oficial recebe na hora o link do WhatsApp da loja dela (uma vez a cada 12 h). Não é cobrada: é resposta a quem escreveu.</small>
+          </span>
+        </label>
+        <div className="cfg-grid">
+          <Campo rotulo="WhatsApp de atendimento (quando não dá pra saber a loja)" valor={of.whatsAtendimento ?? ""} onChange={txt("whatsAtendimento")} texto placeholder="ex.: 16 99168-7616" dica="O de cada loja fica em Números" />
         </div>
         {d.webhookOficial && (
           <div className="cfg-campo">
@@ -141,7 +151,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
           ))}
         </div>
         <h3 className="crm-h3">Campanhas que saem pelo número oficial</h3>
-        <p className="muted pg-nota">Enquanto a Meta não estiver configurada (token e ID do número), o que está marcado aqui sai pelo número do site na WA-AKG, se ele estiver ligado em Números › Site, com o texto de Textos e o modo sombra das lojas. Desmarcado também sai por ele. Carrinho e Pix nunca saem pelo número de uma loja.</p>
+        <p className="muted pg-nota">Enquanto a Meta não estiver configurada (token e ID do número), carrinho e Pix marcados aqui saem pelo número do site na WA-AKG, se ele estiver ligado em Números › Site; os avisos das lojas seguem pelo número de cada loja. Carrinho e Pix nunca saem pelo número de uma loja.</p>
         <div className="cfg-dias">
           {d.campanhas
             .filter((c) => c.id !== "avulsa")
@@ -210,7 +220,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
 }
 
 function ModeloDaCampanha({ nome, modelo, aoMudar }: { nome: string; modelo: Modelo; aoMudar: () => Promise<void> }) {
-  const [t, setT] = useState<TemplateMeta>(() => modelo.template ?? { nome: "", idioma: "pt_BR", parametros: [], botaoLink: false });
+  const [t, setT] = useState<TemplateMeta>(() => modelo.template ?? { nome: "", idioma: "pt_BR", parametros: [], botaoLink: false, botaoVar: "link" });
   const [msg, setMsg] = useState("");
   const salvar = async () => {
     try {
@@ -243,9 +253,19 @@ function ModeloDaCampanha({ nome, modelo, aoMudar }: { nome: string; modelo: Mod
         <input type="checkbox" checked={Boolean(t.botaoLink)} onChange={(e) => setT({ ...t, botaoLink: e.target.checked })} />
         <span>
           <b>Tem botão com o link</b>
-          <small>O botão do modelo termina com {"{{1}}"}: vai o link do carrinho ou do pedido</small>
+          <small>O botão do modelo termina com {"{{1}}"}: vai o que estiver escolhido abaixo</small>
         </span>
       </label>
+      {t.botaoLink && (
+        <label className="cfg-campo">
+          <span>Final do link do botão</span>
+          <select className="crm-input" value={t.botaoVar ?? "link"} onChange={(e) => setT({ ...t, botaoVar: e.target.value })} style={{ maxWidth: 360 }}>
+            <option value="link">Link do carrinho ou do pedido</option>
+            <option value="whatsLoja">WhatsApp da loja (wa.me/…)</option>
+            <option value="codigo">Código do cupom (site/discount/…)</option>
+          </select>
+        </label>
+      )}
       <div className="config-acoes">
         <button className="mini ghost" onClick={salvar}>Salvar modelo</button>
         {msg && <small className="muted">{msg}</small>}

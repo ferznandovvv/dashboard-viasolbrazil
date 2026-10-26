@@ -8,7 +8,7 @@
  * volta pelo túnel; funciona igual na 1.6.
  */
 
-import { lerBase } from "./base";
+import { alterarBase, lerBase } from "./base";
 import { adaptadorDe } from "./envio/adaptador";
 import { ENDERECO_PUBLICO_PADRAO, type ConfigCrm } from "./tipos";
 
@@ -56,6 +56,18 @@ export async function configurarWebhooks(): Promise<Record<string, string>> {
   const base = await lerBase();
   const adaptador = adaptadorDe(base.config);
   const r: Record<string, string> = {};
+  // Número de cada loja (pro botão "Falar com a loja" da API oficial): lê da WA-AKG quando falta
+  if (adaptador?.meuNumero) {
+    const achados: Record<string, string> = {};
+    for (const n of base.config.numeros.filter((x) => x.sessao && !x.telefone)) {
+      const tel = await adaptador.meuNumero(n.sessao);
+      if (tel) achados[n.loja] = tel;
+    }
+    if (Object.keys(achados).length)
+      await alterarBase((b) => {
+        for (const n of b.config.numeros) if (!n.telefone && achados[n.loja]) n.telefone = achados[n.loja];
+      });
+  }
   if (!adaptador?.garantirWebhook) return r;
   const numeros = base.config.numeros.filter((x) => x.ativo && x.sessao);
   if (!numeros.length) return r;

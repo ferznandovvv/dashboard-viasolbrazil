@@ -32,6 +32,8 @@ export interface Variaveis {
   pedido?: string;
   /** Pix: hora em que o código vence ("15:54") */
   expira?: string;
+  /** WhatsApp da loja (só dígitos): final do botão "Falar com a loja" (wa.me) da API oficial */
+  whatsLoja?: string;
 }
 
 /** Valor de uma variável, pra preencher {{1}}, {{2}}... do modelo da Meta. */
@@ -53,6 +55,18 @@ export function valorDaVariavel(chave: string, cliente: Cliente, v: Variaveis): 
       return v.pedido ?? "";
     case "expira":
       return v.expira ?? "";
+    case "vendedora":
+      return v.vendedora?.trim() || "equipe";
+    case "compraMinima":
+      return v.compraMinima ?? "";
+    case "codigo":
+      return v.codigo ?? "";
+    case "lojaProxima":
+      return v.lojaProxima ?? v.loja ?? "";
+    case "cidade":
+      return v.cidade ?? cliente.cidade ?? "";
+    case "whatsLoja":
+      return v.whatsLoja ?? "";
     case "loja":
       return v.loja ?? "";
     default:
@@ -176,6 +190,14 @@ export function emprestimoDe(base: BaseCrm, loja?: string): string | undefined {
   return base.config.numeros.some((x) => x.loja === n.mandarPor && x.ativo && x.sessao) ? n.mandarPor : undefined;
 }
 
+/** WhatsApp da loja (só dígitos), pro botão e a resposta automática do oficial. Sem ele, o de atendimento. */
+export function whatsDaLoja(base: BaseCrm, loja?: string): string | undefined {
+  const n = base.config.numeros.find((x) => x.loja === loja);
+  const dono = n && !n.telefone && n.mandarPor ? base.config.numeros.find((x) => x.loja === n.mandarPor) : undefined;
+  const tel = n?.telefone ?? dono?.telefone ?? oficialDe(base.config).whatsAtendimento;
+  return tel?.replace(/\D/g, "") || undefined;
+}
+
 export interface PedidoFila {
   cliente: Cliente;
   campanha: TipoCampanha;
@@ -218,6 +240,8 @@ export function viaOficial(base: BaseCrm, campanha: TipoCampanha): boolean {
   const of = oficialDe(base.config);
   if (!of.campanhas.includes(campanha)) return false;
   if (of.token && of.phoneNumberId) return true;
+  // Campanha das lojas marcada pro oficial, mas a Meta ainda não está pronta: segue pelo número da loja
+  if (!CAMPANHAS_SITE.includes(campanha)) return false;
   return !base.config.numeros.some((n) => n.loja === LOJA_OFICIAL && n.ativo && n.sessao);
 }
 
@@ -317,15 +341,25 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
     if (!of.token || !of.phoneNumberId) return { motivo: "WhatsApp oficial não configurado" };
     if (!modelo.template?.nome) return { motivo: "campanha sem modelo aprovado na Meta" };
   }
-  const v: Variaveis = { loja: LOJA_OFICIAL, ...p.variaveis };
-  const texto = renderizar(modelo.variacoes.find((t) => t.trim()) ?? "", c, LOJA_OFICIAL, v);
+  // Campanha das lojas pelo oficial: a mensagem continua sendo da loja (assinatura,
+  // nome, botão pro WhatsApp dela e nas contas da loja); só o envio é pelo número oficial
+  const doSite = CAMPANHAS_SITE.includes(p.campanha);
+  let lojaRef = doSite ? LOJA_OFICIAL : (p.loja ?? c.lojaOrigem ?? LOJA_OFICIAL);
+  const dona = doSite ? undefined : emprestimoDe(base, lojaRef);
+  if (dona) lojaRef = dona;
+  const base0: Variaveis = { loja: lojaRef, vendedora: assinatura(base, lojaRef), compraMinima: compraMinimaPara(base, p.variaveis?.valor) };
+  const v: Variaveis = { ...base0, ...p.variaveis, ...(dona ? { loja: dona, vendedora: assinatura(base, dona) } : {}) };
+  v.whatsLoja ??= whatsDaLoja(base, v.lojaProxima ?? lojaRef);
   const t = modelo.template;
+  const botao = t?.botaoLink ? (t.botaoVar && t.botaoVar !== "link" ? valorDaVariavel(t.botaoVar, c, v) : sufixoDoLink(v.link)) : undefined;
+  if (!of.sombra && t?.botaoLink && !botao) return { motivo: t.botaoVar === "whatsLoja" ? `sem o WhatsApp da loja ${v.lojaProxima ?? lojaRef} (Configurar › Números)` : "sem o link do botão" };
+  const texto = renderizar(modelo.variacoes.find((x) => x.trim()) ?? "", c, lojaRef, v);
   const m: Mensagem = {
     id: novoId(),
     clienteId: c.id,
     telefone: c.telefone!,
     campanha: p.campanha,
-    loja: LOJA_OFICIAL,
+    loja: lojaRef,
     texto,
     status: of.sombra ? "simulada" : "fila",
     naoAntesDe: p.naoAntesDe ?? new Date().toISOString(),
@@ -339,7 +373,7 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
           nome: t.nome,
           idioma: t.idioma || "pt_BR",
           parametros: t.parametros.map((k) => valorDaVariavel(k, c, v)),
-          botao: t.botaoLink ? sufixoDoLink(v.link) : undefined,
+          botao,
         }
       : undefined,
   };
