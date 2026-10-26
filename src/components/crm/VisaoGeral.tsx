@@ -829,7 +829,7 @@ function EnvioNumeros({ linhas }: { linhas: (LinhaEnvio & { conectado: boolean |
                     <small className="muted">
                       {" "}
                       {l.provedor === "oficial" ? "oficial" : "WA-AKG"}
-                      {!l.ativo ? " · desligado" : l.conectado === false ? " · desconectado" : ""}
+                      {!l.ativo ? " · desligado" : l.ligarEm ? ` · volta em ${l.ligarEm.slice(8, 10)}/${l.ligarEm.slice(5, 7)}` : l.conectado === false ? " · desconectado" : ""}
                     </small>
                   </td>
                   <td>

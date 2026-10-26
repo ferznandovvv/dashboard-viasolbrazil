@@ -390,6 +390,8 @@ export interface NumeroWhatsapp {
   horario?: { semana?: string; sabado?: string; domingo?: string };
   /** Loja sem número ligado: as mensagens das clientes dela saem pelo número desta outra loja (ex.: Loja de Fábrica pelo Centro) */
   mandarPor?: string;
+  /** Ligado, mas só começa a mandar a partir deste dia (AAAA-MM-DD): descanso depois de restrição */
+  ligarEm?: string;
 }
 
 export interface ConfigCrm {

@@ -94,7 +94,7 @@ export async function processarFila(ignorarJanela = false): Promise<ResultadoTic
     const hoje = hojeSp();
     const escolhidas: Mensagem[] = [];
 
-    for (const n of cfg.numeros.filter((x) => x.ativo && x.sessao)) {
+    for (const n of cfg.numeros.filter((x) => x.ativo && x.sessao && (!x.ligarEm || hoje >= x.ligarEm))) {
       // Carrinho e Pix passam na frente e não esperam o teto do lançamento (só o normal do número)
       // nem o espaçamento do dia: é a cliente que acabou de estar no site, e o Pix vence em minutos
       const podeComum = (proximoEnvio.get(n.loja) ?? 0) <= agora;

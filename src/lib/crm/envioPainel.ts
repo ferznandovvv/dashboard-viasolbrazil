@@ -12,6 +12,8 @@ export interface LinhaEnvio {
   loja: string;
   provedor: "waakg" | "oficial";
   ativo: boolean;
+  /** Ligado, mas descansando até este dia */
+  ligarEm?: string;
   /** Enviadas hoje e o teto do dia */
   hoje: number;
   teto: number;
@@ -35,7 +37,7 @@ export function envioPorNumero(base: BaseCrm): LinhaEnvio[] {
   const hoje = hojeSp();
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
   const lojas = [
-    ...cfg.numeros.filter((n) => n.sessao).map((n) => ({ loja: n.loja, provedor: "waakg" as const, ativo: n.ativo, teto: tetoDoNumero(cfg, n, hoje) })),
+    ...cfg.numeros.filter((n) => n.sessao).map((n) => ({ loja: n.loja, provedor: "waakg" as const, ativo: n.ativo, ligarEm: n.ligarEm && hoje < n.ligarEm ? n.ligarEm : undefined, teto: tetoDoNumero(cfg, n, hoje) })),
     ...(cfg.oficial?.phoneNumberId || cfg.oficial?.campanhas?.length
       ? [{ loja: LOJA_OFICIAL, provedor: "oficial" as const, ativo: Boolean(cfg.oficial?.phoneNumberId && cfg.oficial?.token), teto: cfg.oficial?.tetoDia ?? 250 }]
       : []),

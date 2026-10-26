@@ -490,6 +490,19 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 26/10: números com pouca resposta voltam com 5 por dia. Rio e BH já;
+    // os que foram restringidos (Centro, Praia Grande, Site) e SP (3%) descansam até quarta.
+    id: "volta-5-por-dia-2026-10-26",
+    aplicar: (b) => {
+      for (const n of b.config.numeros) {
+        if (!["Rio de Janeiro", "Belo Horizonte", "Centro", "Praia Grande", "Site", "SP — Itaim"].includes(n.loja)) continue;
+        n.tetoDia = 5;
+        n.ativo = true;
+        if (["Centro", "Praia Grande", "Site", "SP — Itaim"].includes(n.loja)) n.ligarEm = "2026-10-28";
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
