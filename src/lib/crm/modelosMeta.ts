@@ -81,6 +81,49 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     rodape: SAIR,
     botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
   },
+  // Versões "secas" (atualização de conta), pra Meta aprovar como utilidade: mais baratas
+  // e sem o bloqueio de marketing (grupo de controle e limite por pessoa). Sem convite
+  // no texto; o caminho pra loja fica no botão.
+  {
+    campanha: "cashback_creditado",
+    nome: "via_sol_saldo_cashback",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. O cashback da sua compra na Via Sol {{2}} foi creditado.\nAtendimento: {{3}}\nValor: {{4}}\nVálido até: {{5}}\nUso: em compras a partir de {{6}}, informando seu CPF no caixa.",
+    exemplo: ["Ana", "Fiusa", "Valeska", "R$ 43,35", "28/11", "R$ 217,00"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
+  {
+    campanha: "cashback_site_longe",
+    nome: "via_sol_saldo_cashback_site",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. O cashback da sua compra no site da Via Sol foi creditado.\nValor: {{2}}\nVálido até: {{3}}\nCódigo: {{4}}\nUso: em compras a partir de {{5}}, no checkout do site ou nas lojas físicas.",
+    exemplo: ["Ana", "R$ 46,08", "28/11", "LHRYN2", "R$ 231,00"],
+    rodape: SAIR,
+    botao: { texto: "Usar no site", base: "https://viasolbrazil.com.br/discount/", exemploSufixo: "LHRYN2" },
+  },
+  {
+    campanha: "cashback_site_perto",
+    nome: "via_sol_saldo_cashback_site_loja",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. O cashback da sua compra no site da Via Sol foi creditado.\nValor: {{2}}\nVálido até: {{3}}\nCódigo: {{4}}\nUso: em compras a partir de {{5}}, no checkout do site ou na Via Sol {{6}}, a loja da sua cidade.",
+    exemplo: ["Ana", "R$ 25,72", "28/11", "F5Y6YP", "R$ 129,00", "Centro"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/centro" },
+  },
+  {
+    campanha: "cashback_vencendo",
+    nome: "via_sol_vencimento_cashback",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. Aviso de vencimento do seu cashback na Via Sol.\nSaldo: {{2}}\nVence em: {{3}}\nUso: em compras a partir de {{4}}, informando seu CPF no caixa.",
+    exemplo: ["Ana", "R$ 30,00", "28/11", "R$ 150,00"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
 ];
 
 /** O corpo do pedido de criação na Graph API. */
