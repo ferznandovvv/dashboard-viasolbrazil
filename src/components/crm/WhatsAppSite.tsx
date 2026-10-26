@@ -71,6 +71,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
   const txt = (k: keyof ConfigOficial) => (e: React.ChangeEvent<HTMLInputElement>) => setOf({ ...of, [k]: e.target.value });
   const chk = (k: keyof ConfigOficial) => (e: React.ChangeEvent<HTMLInputElement>) => setOf({ ...of, [k]: e.target.checked });
   const pelaOficial = (c: TipoCampanha) => of.campanhas.includes(c);
+  const [telTeste, setTelTeste] = useState("");
 
   return (
     <>
@@ -112,6 +113,19 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
         <div className="config-acoes">
           <button className="mini" onClick={salvar} disabled={!mudou || indo !== ""}>{indo === "salvar" ? "Salvando…" : "Salvar"}</button>
           <button className="mini ghost" onClick={testar} disabled={indo !== "" || mudou}>{indo === "testar" ? "Testando…" : "Testar conexão"}</button>
+        </div>
+        <div className="config-acoes">
+          <input className="crm-input" value={telTeste} onChange={(e) => setTelTeste(e.target.value)} placeholder="seu celular, ex.: (16) 99999-8888" inputMode="tel" style={{ maxWidth: 240 }} />
+          <button
+            className="mini ghost"
+            disabled={!telTeste || indo !== "" || mudou}
+            onClick={async () => {
+              const r = await chamar<{ ok?: boolean; detalhe?: string }>("teste", { tipo: "teste-oficial", telefone: telTeste });
+              if (r?.detalhe) setMsg(r.detalhe);
+            }}
+          >
+            {indo === "teste" ? "Mandando…" : "Mandar mensagem de teste"}
+          </button>
         </div>
       </section>
 

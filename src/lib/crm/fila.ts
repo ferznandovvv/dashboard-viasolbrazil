@@ -446,7 +446,8 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
 
   // Número oficial só manda aviso: quem responde ali recebe na hora o link do WhatsApp da
   // loja dela (uma vez a cada 12 h). É resposta dentro das 24 h que ela abriu: não é cobrada.
-  if (doOficial && feito !== "opt-out" && recente && !sombra && !base.config.pausado && of.autoResposta !== false) {
+  // Vale mesmo com o modo sombra do site ligado: é resposta a quem escreveu, não campanha
+  if (doOficial && feito !== "opt-out" && recente && !base.config.pausado && of.autoResposta !== false) {
     const ultima = base.autoRespostas?.[ev.telefone];
     if (!ultima || Date.now() - Date.parse(ultima) > 12 * 3600000) {
       const cliente = base.clientes.find((c) => c.telefone === ev.telefone);

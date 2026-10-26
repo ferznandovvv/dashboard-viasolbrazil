@@ -7,6 +7,7 @@ import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
 import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type ConfigCrm, type ConfigOficial, type Modelo, type TemplateMeta } from "@/lib/crm/tipos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { CloudApi } from "@/lib/crm/envio/cloudApi";
+import { normalizarTelefone } from "@/lib/crm/telefone";
 import { MODELOS_SUGERIDOS, payloadDoModelo } from "@/lib/crm/modelosMeta";
 import { escoposShopify } from "@/lib/crm/cupomShopify";
 
@@ -97,6 +98,16 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         return NextResponse.json({ ok: false, detalhe: `Não consegui falar com a Shopify: ${e instanceof Error ? e.message : e}` });
       }
+    }
+    if (p.tipo === "teste-oficial") {
+      // Manda o modelo de carrinho (aprovado) pro celular de quem testa: confere envio, botão e,
+      // se a pessoa responder, o webhook e a resposta automática
+      const of = oficialDe((await lerBase()).config);
+      if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
+      const tel = normalizarTelefone(String(p.telefone ?? ""));
+      if (!tel) return NextResponse.json({ erro: "Celular inválido." }, { status: 400 });
+      const r = await new CloudApi(of.token).enviarTemplate(of.phoneNumberId, tel, { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["Fernando", "um biquíni de teste"], botao: "collections/all" });
+      return NextResponse.json(r.ok ? { ok: true, detalhe: "Mandado. Responde a mensagem no celular pra testar a resposta automática." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
     }
     if (p.tipo === "testar-oficial" || p.tipo === "modelos-meta" || p.tipo === "criar-modelos-meta") {
       const of = oficialDe((await lerBase()).config);
