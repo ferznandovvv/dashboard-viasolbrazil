@@ -522,6 +522,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Número oficial: 16 99129-6855 (conta Via Sol Brazil 1244398827175184).
+    // O token é colado à mão no painel; aqui só os IDs, que não são segredo.
+    id: "oficial-ids-99129-6855",
+    aplicar: (b) => {
+      const of = (b.config.oficial ??= oficialDe(b.config));
+      of.phoneNumberId ||= "681535561713461";
+      of.wabaId ||= "1244398827175184";
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
