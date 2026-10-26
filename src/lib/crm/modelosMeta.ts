@@ -56,7 +56,7 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     nome: "via_sol_cashback_site_perto",
     categoria: "UTILITY",
     corpo:
-      "Oi {{1}}! Aqui é a {{2}}, da Via Sol {{3}} ☀️\nSua compra no nosso site rendeu {{4}} de cashback, válido até {{5}}. No site é só usar o código {{6}} no checkout, e ele vale aqui na loja também, em compras a partir de {{7}}.",
+      "Oi {{1}}! Aqui é a {{2}}, da Via Sol {{3}} ☀️\nSua compra no nosso site rendeu {{4}} de cashback, válido até {{5}}. No site é só usar o código {{6}} no checkout, e ele vale aqui na loja também, em compras a partir de {{7}}. Passa aqui pra provar as novidades, vou adorar te atender 🧡",
     exemplo: ["Ana", "Pamela", "Centro", "R$ 25,72", "23/11", "F5Y6YP", "R$ 129,00"],
     rodape: SAIR,
     botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
