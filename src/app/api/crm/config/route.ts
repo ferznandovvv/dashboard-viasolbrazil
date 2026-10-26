@@ -55,6 +55,7 @@ type Pedido =
   | { tipo: "criar-modelos-meta" }
   | { tipo: "teste-oficial"; telefone: string }
   | { tipo: "registrar-oficial"; pin: string }
+  | { tipo: "perfil-oficial" }
   | { tipo: "testar-cupom" };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
@@ -100,6 +101,23 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         return NextResponse.json({ ok: false, detalhe: `Não consegui falar com a Shopify: ${e instanceof Error ? e.message : e}` });
       }
+    }
+    if (p.tipo === "perfil-oficial") {
+      // Foto (sol da marca) e textos do perfil do número oficial
+      const of = oficialDe((await lerBase()).config);
+      if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
+      const { readFile } = await import("node:fs/promises");
+      const { join } = await import("node:path");
+      const foto = await readFile(join(process.cwd(), "public", "marca", "whatsapp-perfil.png"));
+      const r = await new CloudApi(of.token).perfil(of.phoneNumberId, "1422008623381560", {
+        about: "Biquínis e saídas de praia ☀️ Avisos de cashback e pedidos",
+        description: "Via Sol Brazil, moda praia. Por este número chegam os avisos de cashback e dos seus pedidos do site. Pra falar com a gente, toque no botão da mensagem ou chame o WhatsApp da sua loja.",
+        email: "contato@viasolbrazil.com.br",
+        websites: ["https://viasolbrazil.com.br/"],
+        vertical: "APPAREL",
+        foto,
+      });
+      return NextResponse.json(r.ok ? { ok: true, detalhe: "Perfil atualizado: foto, descrição, e-mail e site." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
     }
     if (p.tipo === "registrar-oficial") {
       // O PIN é escolhido e digitado pelo dono; não fica salvo no painel

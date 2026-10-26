@@ -48,6 +48,38 @@ export class CloudApi implements Adaptador {
     });
   }
 
+  /**
+   * Perfil do número (o que a cliente vê ao tocar no nome): textos e foto. A foto sobe
+   * pela API de upload do app (gera um "handle") e vai junto.
+   */
+  async perfil(phoneNumberId: string, appId: string, p: { about?: string; description?: string; email?: string; websites?: string[]; address?: string; vertical?: string; foto?: Buffer }): Promise<{ ok: boolean; erro?: string }> {
+    try {
+      let handle: string | undefined;
+      if (p.foto) {
+        const s = await fetch(`${GRAPH}/${appId}/uploads?file_length=${p.foto.length}&file_type=image/png&access_token=${encodeURIComponent(this.token)}`, { method: "POST", cache: "no-store" });
+        const sj = (await s.json().catch(() => ({}))) as { id?: string; error?: { message: string } };
+        if (!sj.id) return { ok: false, erro: `upload da foto: ${sj.error?.message ?? s.status}` };
+        const u = await fetch(`${GRAPH}/${sj.id}`, { method: "POST", headers: { Authorization: `OAuth ${this.token}`, file_offset: "0" }, body: new Uint8Array(p.foto), cache: "no-store" });
+        const uj = (await u.json().catch(() => ({}))) as { h?: string; error?: { message: string } };
+        if (!uj.h) return { ok: false, erro: `upload da foto: ${uj.error?.message ?? u.status}` };
+        handle = uj.h;
+      }
+      const corpo: Record<string, unknown> = { messaging_product: "whatsapp" };
+      for (const k of ["about", "description", "email", "websites", "address", "vertical"] as const) if (p[k] !== undefined) corpo[k] = p[k];
+      if (handle) corpo.profile_picture_handle = handle;
+      const r = await fetch(`${GRAPH}/${phoneNumberId}/whatsapp_business_profile`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+        cache: "no-store",
+      });
+      const j = (await r.json().catch(() => ({}))) as { success?: boolean; error?: { message: string; error_data?: { details?: string } } };
+      return r.ok && j.success ? { ok: true } : { ok: false, erro: j.error?.error_data?.details ?? j.error?.message ?? `Meta ${r.status}` };
+    } catch (e) {
+      return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
   /** Registra o número na Cloud API com o PIN de 6 dígitos da verificação em duas etapas (escolhido pelo dono). */
   async registrar(phoneNumberId: string, pin: string): Promise<{ ok: boolean; erro?: string }> {
     try {
