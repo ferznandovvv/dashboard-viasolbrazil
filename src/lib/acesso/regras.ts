@@ -75,7 +75,7 @@ export function areaDaRota(caminho: string, metodo: string, busca: URLSearchPara
   if (em("/crm") || em("/api/crm") || em("/atendimento")) return "crm";
   if (em("/api/produtos")) return busca.get("modo") === "vendidos" ? "produtos" : "estoque";
   if (em("/produtos")) return "estoque";
-  if (caminho === "/" || em("/api/dashboard") || em("/historico") || em("/api/historico")) return "vendas";
+  if (caminho === "/" || em("/api/dashboard") || em("/api/venda") || em("/historico") || em("/api/historico")) return "vendas";
   // Metas: ler aparece em Vendas; mudar é configuração
   if (em("/api/config")) return metodo === "GET" ? "vendas" : "config";
   if (em("/api/acesso/eu")) return null;

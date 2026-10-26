@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MetasVendedoras } from "@/components/MetasVendedoras";
+import { CaixaEMetas } from "@/components/MetasVendedoras";
 
 interface Painel {
   loja: string;
@@ -334,7 +334,7 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
 
       <BlocoVendas v={p.vendas} celular={p.celular} />
 
-      <MetasVendedoras loja={p.loja} />
+      <CaixaEMetas loja={p.loja} />
 
       <Vendedoras v={p.vendas} />
 
@@ -374,7 +374,7 @@ function VendasWhats({ w, mes, ativo }: { w: Painel["peloWhats"]; mes?: string; 
         </div>
       </div>
       {w.lista.length ? (
-        <div className="tbl-wrap">
+        <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Vendas pelo WhatsApp">
           <table className="prod-tbl fin-tbl">
             <thead>
               <tr>
@@ -421,7 +421,7 @@ function BlocoVendas({ v, celular }: { v: Vendas; celular: Painel["celular"] }) 
       </div>
       {v.meta ? (
         <>
-          <div className="lp-meta" role="progressbar" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100}>
+          <div className="lp-meta" role="progressbar" aria-label="Meta do mês" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100}>
             <i style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
           </div>
           <div className="lp-vendas-info">
@@ -465,7 +465,7 @@ function Vendedoras({ v }: { v: Vendas }) {
   return (
     <section className="card">
       <h2>Vendedoras em {v.mes}</h2>
-      <div className="tbl-wrap">
+      <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Vendedoras do mês">
         <table className="prod-tbl fin-tbl lp-tab">
           <thead>
             <tr>

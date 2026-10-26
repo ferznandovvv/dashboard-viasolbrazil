@@ -581,7 +581,8 @@ export async function GET(req: NextRequest) {
     comparacao: { de: prevFrom, ate: prevTo, daPlanilha, estimado },
     anunciosLojas: anunciosLojas ? { connected: anunciosLojas.connected, error: anunciosLojas.error, semLoja: anunciosLojas.semLoja } : undefined,
     daily: Array.from(dayMap.values()),
-    recentOrders: current.slice(0, 25),
+    // Sem o CPF da vendedora: o nome já vem resolvido
+    recentOrders: current.slice(0, 25).map(({ sellerCpf: _cpf, ...o }) => o),
     topProducts,
     products,
     states,

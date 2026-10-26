@@ -8,6 +8,7 @@ import { type CategoriaTempo, categoriaTempo } from "@/lib/connectors/weather";
 import { Cabecalho } from "@/components/Moldura";
 import { usePode } from "@/components/sessao";
 import { SeletorPeriodo } from "@/components/SeletorPeriodo";
+import { DetalheVenda } from "@/components/DetalheVenda";
 
 /** Unidades selecionadas: "Site" e/ou nomes de lojas. Vazio = visão geral. */
 type Canal = "shopify" | "tiktok" | "meli" | "shopee";
@@ -148,6 +149,7 @@ export default function Dashboard() {
   const [metaInput, setMetaInput] = useState("");
   const [metasLocais, setMetasLocais] = useState<Record<string, number>>({});
   const [porLoja, setPorLoja] = useState(true);
+  const [vendaAberta, setVendaAberta] = useState<string | null>(null);
   const [agrup, setAgrup] = useState<"modelo" | "cor" | "tamanho" | "completo">("modelo");
   const [cache] = useState<Map<string, DashboardData>>(() => new Map());
   // Identifica a última busca pedida: respostas atrasadas de filtros antigos
@@ -1163,7 +1165,7 @@ export default function Dashboard() {
                 return (
                   <div className="card">
                     <h2>Horários de pico</h2>
-                    <div className="heat-wrap">
+                    <div className="heat-wrap" tabIndex={0} role="region" aria-label="Vendas por dia da semana e hora">
                     <div
                       className="heat"
                       style={{ gridTemplateColumns: `34px repeat(${faixa.length}, 1fr)` }}
@@ -1210,10 +1212,11 @@ export default function Dashboard() {
 
               <div className="card">
                 <h2>{soSite ? "Últimos pedidos" : "Últimas vendas"}</h2>
+                {data.recentOrders.length > 0 && <p className="dica-toque">Toque no número da venda para ver os produtos e a forma de pagamento.</p>}
                 {data.recentOrders.length === 0 ? (
                   <div className="empty">Nenhuma venda no período.</div>
                 ) : (
-                  <div className="orders-table-wrap">
+                  <div className="orders-table-wrap" tabIndex={0} role="region" aria-label="Últimas vendas">
                     <table>
                       <thead>
                         <tr>
@@ -1225,8 +1228,12 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {data.recentOrders.map((o) => (
-                          <tr key={`${o.channel}-${o.id}`}>
+                        {data.recentOrders.map((o) => {
+                          const chave = `${o.channel}-${o.id}`;
+                          const aberta = vendaAberta === chave;
+                          return (
+                          <Fragment key={chave}>
+                          <tr className={aberta ? "venda-aberta" : undefined}>
                             <td>
                               <span
                                 className="ch-dot"
@@ -1239,7 +1246,16 @@ export default function Dashboard() {
                               {o.store ?? CHANNEL_META[o.channel].name}
                             </td>
                             <td>
-                              {o.label}
+                              <button
+                                type="button"
+                                className="venda-abrir"
+                                aria-expanded={aberta}
+                                aria-controls={aberta ? `det-${chave}` : undefined}
+                                onClick={() => setVendaAberta(aberta ? null : chave)}
+                              >
+                                <span className="venda-seta" aria-hidden="true" />
+                                {o.label}
+                              </button>
                               {o.troca && <span className="tag-troca">{o.devolucao ? "troca · peça devolvida" : "troca · peça nova"}</span>}
                             </td>
                             <td className="muted">
@@ -1254,7 +1270,16 @@ export default function Dashboard() {
                             <td>{o.customer ?? <span className="muted">—</span>}</td>
                             <td className="num">{brl.format(o.total)}</td>
                           </tr>
-                        ))}
+                          {aberta && (
+                            <tr id={`det-${chave}`} className="venda-det-linha">
+                              <td colSpan={5}>
+                                <DetalheVenda o={o} />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
