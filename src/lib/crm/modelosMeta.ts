@@ -124,6 +124,25 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     rodape: SAIR,
     botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
   },
+  // Lembrete de vencimento ainda mais seco (só extrato, sem falar em compra), pra tentar utilidade
+  {
+    campanha: "cashback_vencendo",
+    nome: "via_sol_extrato_cashback",
+    categoria: "UTILITY",
+    corpo: "Olá, {{1}}. Atualização da sua conta na Via Sol.\nSaldo de cashback: {{2}}\nVencimento: {{3}}\nEste é um aviso automático do seu saldo.",
+    exemplo: ["Ana", "R$ 30,00", "28/11"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
+  {
+    campanha: "cashback_vencendo",
+    nome: "via_sol_saldo_vencimento",
+    categoria: "UTILITY",
+    corpo: "Olá, {{1}}. O saldo de {{2}} de cashback na sua conta Via Sol tem vencimento em {{3}}. Em caso de dúvida sobre o seu saldo, fale com a loja pelo botão abaixo.",
+    exemplo: ["Ana", "R$ 30,00", "28/11"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
 ];
 
 /** O corpo do pedido de criação na Graph API. */
