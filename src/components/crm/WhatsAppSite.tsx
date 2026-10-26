@@ -143,6 +143,12 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
             {indo === "teste" ? "Mandando…" : "Mandar mensagem de teste"}
           </button>
         </div>
+        {/* Resultado logo abaixo dos botões (antes aparecia só no fim da página) */}
+        {(msg || erro || indo) && (
+          <div className={erro ? "login-error" : "cfg-resultado"} role="status">
+            {indo ? "Aguarde…" : erro || msg}
+          </div>
+        )}
       </section>
 
       <section className="card cfg-card">
