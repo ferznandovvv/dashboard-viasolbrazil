@@ -53,6 +53,7 @@ type Pedido =
   | { tipo: "testar-oficial" }
   | { tipo: "modelos-meta" }
   | { tipo: "criar-modelos-meta" }
+  | { tipo: "teste-oficial"; telefone: string }
   | { tipo: "testar-cupom" };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
