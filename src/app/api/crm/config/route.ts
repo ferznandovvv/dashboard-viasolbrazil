@@ -54,6 +54,7 @@ type Pedido =
   | { tipo: "modelos-meta" }
   | { tipo: "criar-modelos-meta" }
   | { tipo: "teste-oficial"; telefone: string }
+  | { tipo: "registrar-oficial"; pin: string }
   | { tipo: "testar-cupom" };
 
 const num = (v: unknown, padrao: number, min = 0, max = 1_000_000) => {
@@ -99,6 +100,15 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         return NextResponse.json({ ok: false, detalhe: `Não consegui falar com a Shopify: ${e instanceof Error ? e.message : e}` });
       }
+    }
+    if (p.tipo === "registrar-oficial") {
+      // O PIN é escolhido e digitado pelo dono; não fica salvo no painel
+      const of = oficialDe((await lerBase()).config);
+      if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
+      const pin = String(p.pin ?? "").replace(/\D/g, "");
+      if (pin.length !== 6) return NextResponse.json({ erro: "O PIN tem 6 números." }, { status: 400 });
+      const r = await new CloudApi(of.token).registrar(of.phoneNumberId, pin);
+      return NextResponse.json(r.ok ? { ok: true, detalhe: "Número registrado na API. Guarde o PIN: a Meta pede ele se um dia precisar registrar de novo." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
     }
     if (p.tipo === "teste-oficial") {
       // Manda o modelo de carrinho (aprovado) pro celular de quem testa: confere envio, botão e,

@@ -48,6 +48,22 @@ export class CloudApi implements Adaptador {
     });
   }
 
+  /** Registra o número na Cloud API com o PIN de 6 dígitos da verificação em duas etapas (escolhido pelo dono). */
+  async registrar(phoneNumberId: string, pin: string): Promise<{ ok: boolean; erro?: string }> {
+    try {
+      const r = await fetch(`${GRAPH}/${phoneNumberId}/register`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+        cache: "no-store",
+      });
+      const j = (await r.json().catch(() => ({}))) as { success?: boolean; error?: { message: string; error_data?: { details?: string } } };
+      return r.ok && j.success ? { ok: true } : { ok: false, erro: j.error?.error_data?.details ?? j.error?.message ?? `Meta ${r.status}` };
+    } catch (e) {
+      return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
   /** Inscreve o app do token nos webhooks da conta (sem isso a resposta da cliente não chega). */
   async assinarWebhooks(wabaId: string): Promise<{ ok: boolean; erro?: string }> {
     try {
@@ -101,17 +117,27 @@ export class CloudApi implements Adaptador {
 
   async situacao(sessao: string): Promise<SituacaoNumero> {
     try {
-      const r = await fetch(`${GRAPH}/${sessao}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier`, {
+      const r = await fetch(`${GRAPH}/${sessao}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier,status,name_status,platform_type,code_verification_status`, {
         headers: { Authorization: `Bearer ${this.token}` },
         cache: "no-store",
       });
-      const j = (await r.json().catch(() => ({}))) as { display_phone_number?: string; verified_name?: string; quality_rating?: string; messaging_limit_tier?: string; error?: { message: string } };
+      const j = (await r.json().catch(() => ({}))) as { display_phone_number?: string; verified_name?: string; quality_rating?: string; messaging_limit_tier?: string; status?: string; name_status?: string; platform_type?: string; code_verification_status?: string; error?: { message: string } };
       if (!r.ok) return { sessao, conectado: false, detalhe: j.error?.message };
       const qualidade: Record<string, string> = { GREEN: "qualidade alta", YELLOW: "qualidade média", RED: "qualidade baixa" };
       return {
         sessao,
         conectado: true,
-        detalhe: [j.verified_name, j.display_phone_number, j.quality_rating ? qualidade[j.quality_rating] ?? j.quality_rating : "", j.messaging_limit_tier ? `limite ${j.messaging_limit_tier.replace("TIER_", "")}/dia` : ""].filter(Boolean).join(" · "),
+        detalhe: [
+          j.verified_name,
+          j.display_phone_number,
+          j.quality_rating && j.quality_rating !== "UNKNOWN" ? qualidade[j.quality_rating] ?? j.quality_rating : "",
+          j.messaging_limit_tier ? `limite ${j.messaging_limit_tier.replace("TIER_", "")}/dia` : "",
+          j.platform_type === "CLOUD_API" ? "registrado na API" : j.platform_type ? `NÃO registrado na API (${j.platform_type}): falta \"Registrar número\"` : "",
+          j.name_status ? `nome: ${j.name_status === "APPROVED" ? "aprovado" : j.name_status.toLowerCase()}` : "",
+          j.status && j.status !== "CONNECTED" ? `situação: ${j.status.toLowerCase()}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
       };
     } catch (e) {
       return { sessao, conectado: false, detalhe: e instanceof Error ? e.message : String(e) };

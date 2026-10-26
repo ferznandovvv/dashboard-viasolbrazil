@@ -72,6 +72,7 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
   const chk = (k: keyof ConfigOficial) => (e: React.ChangeEvent<HTMLInputElement>) => setOf({ ...of, [k]: e.target.checked });
   const pelaOficial = (c: TipoCampanha) => of.campanhas.includes(c);
   const [telTeste, setTelTeste] = useState("");
+  const [pin, setPin] = useState("");
 
   return (
     <>
@@ -113,6 +114,21 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
         <div className="config-acoes">
           <button className="mini" onClick={salvar} disabled={!mudou || indo !== ""}>{indo === "salvar" ? "Salvando…" : "Salvar"}</button>
           <button className="mini ghost" onClick={testar} disabled={indo !== "" || mudou}>{indo === "testar" ? "Testando…" : "Testar conexão"}</button>
+        </div>
+        <div className="config-acoes">
+          <input className="crm-input" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="PIN de 6 números" inputMode="numeric" type="password" autoComplete="off" style={{ maxWidth: 170 }} />
+          <button
+            className="mini ghost"
+            disabled={pin.length !== 6 || indo !== "" || mudou}
+            title="Só uma vez, depois de adicionar o número na Meta. Escolha um PIN e guarde: ele protege o número."
+            onClick={async () => {
+              const r = await chamar<{ ok?: boolean; detalhe?: string }>("registrar", { tipo: "registrar-oficial", pin });
+              if (r?.detalhe) setMsg(r.detalhe);
+              setPin("");
+            }}
+          >
+            {indo === "registrar" ? "Registrando…" : "Registrar número"}
+          </button>
         </div>
         <div className="config-acoes">
           <input className="crm-input" value={telTeste} onChange={(e) => setTelTeste(e.target.value)} placeholder="seu celular, ex.: (16) 99999-8888" inputMode="tel" style={{ maxWidth: 240 }} />
