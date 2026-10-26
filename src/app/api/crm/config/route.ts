@@ -283,6 +283,8 @@ export async function POST(req: NextRequest) {
           pagamentoTodos: o.pagamentoTodos !== undefined ? Boolean(o.pagamentoTodos) : atual.pagamentoTodos,
           urlBase: typeof o.urlBase === "string" && /^https:\/\/[^\s]+$/.test(o.urlBase.trim()) ? o.urlBase.trim() : atual.urlBase,
           autoResposta: o.autoResposta !== undefined ? Boolean(o.autoResposta) : atual.autoResposta,
+          lojasPeloNumero: Array.isArray(o.lojasPeloNumero) ? o.lojasPeloNumero.map(String) : atual.lojasPeloNumero,
+          naoMandar: Array.isArray(o.naoMandar) ? o.naoMandar.filter((c) => CAMPANHAS.some((x) => x.id === c)) : atual.naoMandar,
           whatsAtendimento: o.whatsAtendimento !== undefined ? String(o.whatsAtendimento).replace(/\D/g, "").replace(/^(?!55)(\d{10,11})$/, "55$1") || undefined : atual.whatsAtendimento,
         };
         if (nova.fim <= nova.inicio) throw new Error("O fim do horário do site precisa ser depois do início.");

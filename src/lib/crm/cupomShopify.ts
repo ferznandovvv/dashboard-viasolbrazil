@@ -102,8 +102,8 @@ export function campanhaDoCredito(mov: MovimentoCashback, c: Cliente, lojaNaCida
 }
 
 /** A campanha está em modo sombra (o das lojas ou o do número oficial)? */
-export function sombraDaCampanha(b: BaseCrm, campanha: TipoCampanha): boolean {
-  return viaOficial(b, campanha) ? oficialDe(b.config).sombra : b.config.modoSombra;
+export function sombraDaCampanha(b: BaseCrm, campanha: TipoCampanha, loja?: string): boolean {
+  return viaOficial(b, campanha, loja) ? oficialDe(b.config).sombra : b.config.modoSombra;
 }
 
 /** Crédito que foi avisado junto com outro da mesma cliente (ela recebe uma mensagem só). */
@@ -131,7 +131,7 @@ export function creditosParaAviso(b: BaseCrm, hoje = hojeSp()): CreditoParaAviso
   const vendaPorId = new Map(b.vendas.map((v) => [v.id, v]));
   const avisados = new Set(
     b.mensagens
-      .filter((m) => m.chave?.startsWith("cb-credito-") && ((m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || sombraDaCampanha(b, m.campanha))) || (m.status === "cancelada" && m.erro === JUNTO)))
+      .filter((m) => m.chave?.startsWith("cb-credito-") && ((m.status !== "cancelada" && m.status !== "erro" && (m.status !== "simulada" || sombraDaCampanha(b, m.campanha, m.loja))) || (m.status === "cancelada" && m.erro === JUNTO)))
       .map((m) => m.chave!.slice("cb-credito-".length))
   );
   const restante = new Map<string, number>();
@@ -171,7 +171,7 @@ async function criarCuponsSite(lojaNaCidade: (c: Cliente) => string | undefined)
   const b = await lerBase();
   const pendentes = creditosParaAviso(b)
     .filter((x) => x.mov.loja === "Site")
-    .filter((x) => !sombraDaCampanha(b, campanhaDoCredito(x.mov, x.cliente, lojaNaCidade)))
+    .filter((x) => !sombraDaCampanha(b, campanhaDoCredito(x.mov, x.cliente, lojaNaCidade), lojaNaCidade(x.cliente) ?? x.cliente.lojaOrigem))
     .filter((x) => !b.codigos.some((k) => k.movimentoId === x.mov.id && k.shopifyId))
     // Só cria cupom pra quem vai receber o aviso (com telefone, sem SAIR)
     .filter((x) => !motivoBloqueio(b, x.cliente, campanhaDoCredito(x.mov, x.cliente, lojaNaCidade)));

@@ -197,6 +197,24 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
               </label>
             ))}
         </div>
+        <h3 className="crm-h3">Lojas que continuam pelo número da própria loja</h3>
+        <p className="muted pg-nota">Os avisos dessas lojas saem pelo WhatsApp delas (WA-AKG), mesmo com a campanha marcada acima. As outras saem pelo oficial, assinadas pela vendedora e com botão pro WhatsApp da loja.</p>
+        <div className="cfg-dias">
+          {d.lojas
+            .filter((l) => l !== "Site")
+            .map((l) => (
+              <label key={l} className="cfg-check-inline">
+                <input type="checkbox" checked={(of.lojasPeloNumero ?? []).includes(l)} onChange={(e) => setOf({ ...of, lojasPeloNumero: e.target.checked ? [...(of.lojasPeloNumero ?? []), l] : (of.lojasPeloNumero ?? []).filter((x) => x !== l) })} /> {l}
+              </label>
+            ))}
+        </div>
+        <label className="cfg-check">
+          <input type="checkbox" checked={(of.naoMandar ?? []).includes("cashback_vencendo")} onChange={(e) => setOf({ ...of, naoMandar: e.target.checked ? [...(of.naoMandar ?? []), "cashback_vencendo"] : (of.naoMandar ?? []).filter((x) => x !== "cashback_vencendo") })} />
+          <span>
+            <b>Pelo oficial, só o último lembrete de vencimento</b>
+            <small>O primeiro lembrete (10 dias antes) não sai pelo oficial: corta pela metade o custo dos lembretes. O último (2 dias antes) sai normal.</small>
+          </span>
+        </label>
         <div className="config-acoes">
           <button className="mini" onClick={salvar} disabled={!mudou || indo !== ""}>{indo === "salvar" ? "Salvando…" : "Salvar"}</button>
         </div>

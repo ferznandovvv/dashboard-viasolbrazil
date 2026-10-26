@@ -134,7 +134,7 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       const perto = lojaNaCidade(c);
       const campanha = campanhaDoCredito(mov, c, lojaNaCidade);
       const cupom = b.codigos.find((k) => k.movimentoId === mov.id && k.shopifyId && !k.usadoEm && !k.shopifyDesativado);
-      const sombra = sombraDaCampanha(b, campanha);
+      const sombra = sombraDaCampanha(b, campanha, perto ?? c.lojaOrigem);
       if (!cupom && !sombra) {
         tentar(campanha, { motivo: "cupom da Shopify ainda não criado" });
         continue;

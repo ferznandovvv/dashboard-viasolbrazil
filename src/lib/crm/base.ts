@@ -538,6 +538,37 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 26/10: avisos das lojas pelo oficial (16 3702-3633), menos Ribeirão e Fiusa, que
+    // seguem pelo número delas. Só o último lembrete de vencimento sai pelo oficial.
+    // Começa em modo sombra. O que estava na fila pelos números das outras lojas é
+    // cancelado e volta pelo oficial na próxima rodada das automações.
+    id: "lojas-pelo-oficial-2026-10-26",
+    aplicar: (b) => {
+      const of = (b.config.oficial ??= oficialDe(b.config));
+      of.campanhas = ["carrinho_abandonado", "pix_pendente", "pix_expirado", "cashback_creditado", "cashback_site_perto", "cashback_site_longe", "cashback_vencendo", "cashback_vencendo_urgente"];
+      of.lojasPeloNumero = ["Ribeirão Preto", "Fiusa"];
+      of.naoMandar = ["cashback_vencendo"];
+      of.sombra = true;
+      const avisos = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "cashback_vencendo", "cashback_vencendo_urgente"];
+      const refazer = new Set<string>();
+      for (const m of b.mensagens) {
+        if (m.status !== "fila" || m.provedor === "oficial" || !avisos.includes(m.campanha)) continue;
+        if (of.lojasPeloNumero.includes(m.loja)) continue;
+        m.status = "cancelada";
+        m.erro = "Vai pelo número oficial";
+        refazer.add(m.clienteId);
+      }
+      // Carrinho e Pix que estavam na fila do número do site (WA-AKG) agora saem pelo oficial
+      for (const m of b.mensagens) {
+        if (m.status !== "fila" || m.provedor === "oficial" || !["carrinho_abandonado", "pix_pendente", "pix_expirado"].includes(m.campanha)) continue;
+        m.status = "cancelada";
+        m.erro = "Vai pelo número oficial";
+      }
+      // Créditos que iam "junto" desses avisos voltam a ser avisados (e se juntam de novo)
+      for (const m of b.mensagens) if (m.status === "cancelada" && m.erro === "Junto com outro aviso de cashback" && refazer.has(m.clienteId)) m.erro = "Vai pelo número oficial";
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

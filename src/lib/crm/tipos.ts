@@ -239,6 +239,10 @@ export interface ConfigOficial {
   pagamentoTodos: boolean;
   /** Começo do link do botão nos modelos (o resto vai como variável) */
   urlBase: string;
+  /** Lojas cujos avisos continuam pelo número próprio (WA-AKG), mesmo com a campanha marcada pro oficial */
+  lojasPeloNumero?: string[];
+  /** Campanhas que não saem pelo oficial (ex.: o primeiro lembrete de vencimento, pra economizar) */
+  naoMandar?: TipoCampanha[];
   /** Quem responde no número oficial recebe na hora o link do WhatsApp da loja dela */
   autoResposta?: boolean;
   /** WhatsApp de atendimento quando não dá pra saber a loja (só dígitos, com 55) */

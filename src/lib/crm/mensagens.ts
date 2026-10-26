@@ -237,9 +237,11 @@ export const conta = (base: BaseCrm, m: Mensagem) =>
  * configurado, sim. Marcada mas sem a Meta pronta: sai pelo número do site na
  * WA-AKG, se ele estiver ligado (tapa-buraco); senão simula no oficial.
  */
-export function viaOficial(base: BaseCrm, campanha: TipoCampanha): boolean {
+export function viaOficial(base: BaseCrm, campanha: TipoCampanha, loja?: string): boolean {
   const of = oficialDe(base.config);
   if (!of.campanhas.includes(campanha)) return false;
+  // Lojas que seguem pelo número próprio (as que respondem bem e não tiveram problema)
+  if (!CAMPANHAS_SITE.includes(campanha) && loja && (of.lojasPeloNumero ?? []).includes(loja)) return false;
   if (of.token && of.phoneNumberId) return true;
   // Campanha das lojas marcada pro oficial, mas a Meta ainda não está pronta: segue pelo número da loja
   if (!CAMPANHAS_SITE.includes(campanha)) return false;
@@ -278,7 +280,10 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   const bloqueio = motivoBloqueio(base, c, p.campanha, p.forcar);
   if (bloqueio) return { motivo: bloqueio };
   if (p.chave && base.mensagens.some((m) => m.chave === p.chave && m.status !== "cancelada" && (m.status !== "simulada" || sombraDe(base, m)))) return { motivo: "já enviada" };
-  if (viaOficial(base, p.campanha)) return enfileirarOficial(base, p);
+  if (viaOficial(base, p.campanha, p.loja ?? c.lojaOrigem)) {
+    if (oficialDe(base.config).naoMandar?.includes(p.campanha)) return { motivo: "não sai pelo número oficial (só o último lembrete)" };
+    return enfileirarOficial(base, p);
+  }
   // Carrinho e Pix fora da API oficial: só pelo número do site na WA-AKG, nunca pelo de uma loja
   if (CAMPANHAS_SITE.includes(p.campanha) && !base.config.numeros.some((n) => n.loja === LOJA_OFICIAL && n.ativo && n.sessao)) return { motivo: "número do site não ligado (Números › Site)" };
   let lojaRef = CAMPANHAS_SITE.includes(p.campanha) ? LOJA_OFICIAL : (p.loja ?? c.lojaOrigem);
