@@ -352,7 +352,7 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     // Diagnóstico do oficial: guarda o último status de cada envio (aparece no "Testar conexão")
     const st = (ev.status ?? "").toLowerCase();
     await alterarBase((b) => {
-      (b.statusOficial ??= []).push({ em: new Date().toISOString(), telefone: ev.telefone, status: st, erro: ev.texto });
+      (b.statusOficial ??= []).push({ em: new Date().toISOString(), telefone: ev.telefone, status: st, erro: ev.texto, id: ev.idExterno });
       if (b.statusOficial.length > 30) b.statusOficial.splice(0, b.statusOficial.length - 30);
     });
   }

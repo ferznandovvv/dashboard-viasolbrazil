@@ -142,10 +142,21 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
           >
             {indo === "teste" ? "Mandando…" : "Mandar mensagem de teste"}
           </button>
+          <button
+            type="button"
+            className="mini ghost"
+            disabled={!telTeste || indo !== "" || mudou}
+            onClick={async () => {
+              const r = await chamar<{ ok?: boolean; detalhe?: string }>("todas", { tipo: "teste-todos-oficial" });
+              if (r?.detalhe) setMsg(r.detalhe);
+            }}
+          >
+            {indo === "todas" ? "Mandando todas (uns 30 s)…" : "Testar todas as mensagens"}
+          </button>
         </div>
         {/* Resultado logo abaixo dos botões (antes aparecia só no fim da página) */}
         {(msg || erro || indo) && (
-          <div className={erro ? "login-error" : "cfg-resultado"} role="status">
+          <div className={erro ? "login-error" : "cfg-resultado"} role="status" style={{ whiteSpace: "pre-line" }}>
             {indo ? "Aguarde…" : erro || msg}
           </div>
         )}

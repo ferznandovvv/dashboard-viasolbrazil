@@ -541,7 +541,7 @@ export interface BaseCrm {
   /** Nome da vendedora por CPF (vem do cadastro de pessoa do TOTVS) */
   vendedoras: Record<string, string>;
   /** Últimos status do oficial vindos do webhook (enviada, entregue, lida, falhou + motivo) */
-  statusOficial?: { em: string; telefone: string; status: string; erro?: string }[];
+  statusOficial?: { em: string; telefone: string; status: string; erro?: string; id?: string }[];
   /** Últimas mensagens que a Meta aceitou mas não entregou (motivo vem pelo webhook) */
   errosOficial?: { em: string; telefone: string; erro: string }[];
   /** Resposta automática do número oficial: telefone → quando foi a última (uma a cada 12 h) */
@@ -604,6 +604,7 @@ export const MODELOS_PADRAO: Modelo[] = [
     variacoes: [
       "Oi {primeiro}! O Pix do seu pedido {pedido} na Via Sol venceu antes do pagamento ☀️ Se ainda quiser {itens}, montei o carrinho de novo pra você, é só abrir e finalizar: {link} Qualquer dúvida de tamanho ou pagamento, responde aqui que a gente te ajuda.",
     ],
+    template: { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["primeiro", "itens"], botaoLink: true },
   },
   {
     campanha: "boas_vindas",

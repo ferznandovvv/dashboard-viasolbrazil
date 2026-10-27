@@ -39,6 +39,15 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     exemplo: ["Ana", "#12345", "R$ 289,90"],
     botao: { texto: "Ver pedido", exemploSufixo: "1234567/orders/abc123/authenticate?key=xyz" },
   },
+  {
+    campanha: "pix_expirado",
+    nome: "via_sol_pix_vencido",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. O Pix do seu pedido {{2}} na Via Sol venceu antes do pagamento, então o pedido não foi concluído. As mesmas peças estão no carrinho do botão abaixo, caso queira finalizar. Em caso de dúvida, responda esta mensagem.",
+    exemplo: ["Ana", "#12345"],
+    botao: { texto: "Abrir carrinho", exemploSufixo: "cart/45678901234:1" },
+  },
   // Cashback das lojas: assina a vendedora e o botão abre o WhatsApp da loja, pra conversa seguir com ela.
   // A Meta não aceita wa.me no botão: vai viasolbrazil.com.br/w/<loja>, que redireciona (linkLoja.ts)
   {

@@ -8,6 +8,7 @@ import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type 
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { CloudApi } from "@/lib/crm/envio/cloudApi";
 import { normalizarTelefone } from "@/lib/crm/telefone";
+import { mensagensDeTeste } from "@/lib/crm/mensagens";
 import { MODELOS_SUGERIDOS, payloadDoModelo } from "@/lib/crm/modelosMeta";
 import { escoposShopify } from "@/lib/crm/cupomShopify";
 
@@ -54,6 +55,7 @@ type Pedido =
   | { tipo: "modelos-meta" }
   | { tipo: "criar-modelos-meta" }
   | { tipo: "teste-oficial"; telefone: string }
+  | { tipo: "teste-todos-oficial" }
   | { tipo: "registrar-oficial"; pin: string }
   | { tipo: "perfil-oficial" }
   | { tipo: "testar-cupom" };
@@ -142,6 +144,45 @@ export async function POST(req: NextRequest) {
       // Modelo de utilidade (Pix): o de marketing não chega pra quem a Meta põe no grupo de controle (erro 130472)
       const r = await new CloudApi(of.token).enviarTemplate(of.phoneNumberId, tel, { nome: "via_sol_pix_pendente", idioma: "pt_BR", parametros: ["Fernando", "#TESTE", "R$ 1,00"], botao: "collections/all" });
       return NextResponse.json(r.ok ? { ok: true, detalhe: "Mandado. Responde a mensagem no celular pra testar a resposta automática." } : { erro: r.erro }, { status: r.ok ? 200 : 400 });
+    }
+    if (p.tipo === "teste-todos-oficial") {
+      // Uma de cada modelo pro celular de teste, e o que a Meta respondeu de cada uma
+      const base = await lerBase();
+      const of = oficialDe(base.config);
+      if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
+      const tel = base.config.telefoneTeste;
+      if (!tel) return NextResponse.json({ erro: "Coloque o celular de teste e mande o teste simples primeiro." }, { status: 400 });
+      const api = new CloudApi(of.token);
+      const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const res: { rotulo: string; nome?: string; ok: boolean; id?: string; detalhe?: string }[] = [];
+      for (const it of mensagensDeTeste(base)) {
+        if (!it.template) {
+          res.push({ rotulo: it.rotulo, ok: false, detalhe: it.falta });
+          continue;
+        }
+        if (it.template.parametros.some((x) => !x.trim())) {
+          res.push({ rotulo: it.rotulo, nome: it.template.nome, ok: false, detalhe: "faltou preencher alguma variável" });
+          continue;
+        }
+        const r = await api.enviarTemplate(of.phoneNumberId, tel, it.template);
+        res.push({ rotulo: it.rotulo, nome: it.template.nome, ok: r.ok, id: r.idExterno, detalhe: r.erro });
+        await espera(1500);
+      }
+      // Dá tempo da Meta avisar se entregou ou segurou
+      await espera(10000);
+      const st = (await lerBase()).statusOficial ?? [];
+      const linhas = res.map((x) => {
+        const avisos = x.id ? st.filter((s) => s.id === x.id) : [];
+        const falhou = avisos.find((s) => s.status === "failed");
+        let sit: string;
+        if (!x.ok) sit = `NÃO saiu: ${x.detalhe ?? "erro"}`;
+        else if (falhou) sit = /130472/.test(falhou.erro ?? "") ? "a Meta segurou (seu número está no grupo de teste de marketing dela; cliente normal recebe)" : `NÃO entregue: ${falhou.erro ?? ""}`;
+        else if (avisos.some((s) => s.status === "read")) sit = "lida";
+        else if (avisos.some((s) => s.status === "delivered")) sit = "entregue";
+        else sit = "aceita pela Meta, sem aviso de entrega ainda";
+        return `${x.ok && !falhou ? "✓" : "✗"} ${x.rotulo}: ${sit}`;
+      });
+      return NextResponse.json({ ok: true, detalhe: `Mandado pro ${tel}:\n${linhas.join("\n")}`, itens: res });
     }
     if (p.tipo === "testar-oficial" || p.tipo === "modelos-meta" || p.tipo === "criar-modelos-meta") {
       const of = oficialDe((await lerBase()).config);

@@ -387,3 +387,55 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   base.mensagens.push(m);
   return { mensagem: m };
 }
+
+const ROTULO_TESTE: Partial<Record<TipoCampanha, string>> = {
+  carrinho_abandonado: "Carrinho abandonado",
+  pix_pendente: "Pix não pago",
+  pix_expirado: "Pix vencido",
+  cashback_creditado: "Cashback da loja",
+  cashback_site_perto: "Cashback do site (cliente perto de loja)",
+  cashback_site_longe: "Cashback do site",
+  cashback_vencendo: "Lembrete de vencimento",
+  cashback_vencendo_urgente: "Último lembrete de vencimento",
+};
+
+/**
+ * Uma mensagem de cada modelo da API oficial, com dados de exemplo (Fernando,
+ * R$ 43,35, loja Fiusa), pra conferir texto e botão no celular de teste.
+ * Modelos repetidos (os dois lembretes de vencimento) saem uma vez só.
+ */
+export function mensagensDeTeste(base: BaseCrm): { campanha: TipoCampanha; rotulo: string; template?: NonNullable<Mensagem["template"]>; falta?: string }[] {
+  const of = oficialDe(base.config);
+  const c = { id: "teste", nome: "Fernando", telefone: base.config.telefoneTeste } as Cliente;
+  const site = of.urlBase.replace(/\/+$/, "");
+  const valor = 43.35;
+  const vistos = new Set<string>();
+  const saida: ReturnType<typeof mensagensDeTeste> = [];
+  for (const campanha of of.campanhas) {
+    const rotulo = ROTULO_TESTE[campanha] ?? campanha;
+    const t = base.modelos.find((m) => m.campanha === campanha)?.template;
+    if (!t?.nome) {
+      saida.push({ campanha, rotulo, falta: "sem modelo aprovado na Meta" });
+      continue;
+    }
+    if (vistos.has(t.nome)) continue;
+    vistos.add(t.nome);
+    const loja = CAMPANHAS_SITE.includes(campanha) ? LOJA_OFICIAL : "Fiusa";
+    const v: Variaveis = {
+      loja,
+      vendedora: assinatura(base, campanha === "cashback_site_perto" ? "Fiusa" : loja),
+      valor,
+      validade: somarDias(hojeSp(), 33),
+      compraMinima: compraMinimaPara(base, valor),
+      codigo: "TESTE",
+      itens: "Biquíni Marina e mais 1 peça",
+      pedido: "#TESTE",
+      link: `${site}/collections/all`,
+      lojaProxima: campanha === "cashback_site_perto" ? "Fiusa" : undefined,
+    };
+    v.whatsLoja = sufixoWhatsLoja(base, v.lojaProxima ?? loja);
+    const botao = t.botaoLink ? (t.botaoVar && t.botaoVar !== "link" ? valorDaVariavel(t.botaoVar, c, v) : sufixoDoLink(v.link)) : undefined;
+    saida.push({ campanha, rotulo, template: { nome: t.nome, idioma: t.idioma || "pt_BR", parametros: t.parametros.map((k) => valorDaVariavel(k, c, v)), botao } });
+  }
+  return saida;
+}

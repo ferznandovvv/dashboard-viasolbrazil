@@ -590,6 +590,15 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Pix vencido não tinha modelo na Meta: ia travar ao sair do modo sombra.
+    // Usa o do carrinho (o carrinho já vem montado no botão) até o próprio ser aprovado.
+    id: "pix-vencido-com-modelo",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "pix_expirado");
+      if (m && !m.template?.nome) m.template = { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["primeiro", "itens"], botaoLink: true };
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
