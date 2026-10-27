@@ -25,6 +25,8 @@ export interface Adaptador {
   /** `sessao` identifica o número (sessionId na WA-AKG, phone_number_id na Cloud API). */
   enviarTexto(sessao: string, telefone: string, texto: string): Promise<ResultadoEnvio>;
   situacao(sessao: string): Promise<SituacaoNumero>;
+  /** Liga a sessão parada (STOPPED). Desconectada (LOGGED_OUT) precisa ler o QR de novo. */
+  iniciar?(sessao: string): Promise<{ ok: boolean; detalhe: string }>;
   /** Número do próprio WhatsApp da sessão (só dígitos), se o provedor souber */
   meuNumero?(sessao: string): Promise<string | undefined>;
   /** Nome legível da sessão a partir do código que vem no webhook (quando o provedor tem os dois). */

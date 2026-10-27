@@ -56,6 +56,7 @@ type Pedido =
   | { tipo: "criar-modelos-meta" }
   | { tipo: "teste-oficial"; telefone: string }
   | { tipo: "teste-todos-oficial"; telefone?: string; so?: string[] }
+  | { tipo: "ligar-sessoes" }
   | { tipo: "registrar-oficial"; pin: string }
   | { tipo: "perfil-oficial" }
   | { tipo: "testar-cupom" };
@@ -95,6 +96,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...sit, detalhe: [sit.detalhe, wh?.detalhe, vale.aviso].filter(Boolean).join(" · ") });
     }
     if (p.tipo === "reiniciar-waakg") return NextResponse.json(await reiniciarWaakg());
+    if (p.tipo === "ligar-sessoes") {
+      // Liga as sessões paradas na WA-AKG; as desconectadas precisam do QR (avisa quais)
+      const base = await lerBase();
+      const adaptador = adaptadorDe(base.config);
+      if (!adaptador?.iniciar) return NextResponse.json({ erro: "Configure a WA-AKG primeiro." }, { status: 400 });
+      const lojas = base.config.numeros.filter((n) => n.ativo && n.sessao);
+      const iniciar = adaptador.iniciar.bind(adaptador);
+      const antes = await Promise.all(lojas.map((n) => adaptador.situacao(n.sessao!)));
+      for (const [i, n] of lojas.entries()) if (!antes[i].conectado) await iniciar(n.sessao!);
+      await new Promise((r) => setTimeout(r, 12000));
+      const depois = await Promise.all(lojas.map((n) => adaptador.situacao(n.sessao!)));
+      const linhas = lojas.map((n, i) => {
+        const st = (depois[i].detalhe ?? "").split(" ")[0];
+        if (depois[i].conectado) return `✓ ${n.loja}: conectada${antes[i].conectado ? "" : " (liguei agora)"}`;
+        if (/LOGGED_OUT|QR|SCAN/i.test(depois[i].detalhe ?? "")) return `✗ ${n.loja}: precisa ler o QR na WA-AKG (o celular saiu)`;
+        return `… ${n.loja}: ${st || "sem status"}, ainda ligando`;
+      });
+      return NextResponse.json({ ok: true, detalhe: linhas.join("\n") });
+    }
     if (p.tipo === "testar-cupom") {
       try {
         const escopos = await escoposShopify();

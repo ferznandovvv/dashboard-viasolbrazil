@@ -634,6 +634,13 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Todas as sessões de volta na WA-AKG (respostas no painel; Ribeirão e Fiusa mandam por elas)
+    id: "sessoes-de-volta-2026-10-27",
+    aplicar: (b) => {
+      for (const n of b.config.numeros) delete n.ligarEm;
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

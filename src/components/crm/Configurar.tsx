@@ -240,6 +240,7 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
                       dica="É o que os botões de abrir conversas usam. Vazio = abre pelo endereço de cima (só funciona neste computador)."
                     />
                     <Campo rotulo={`API Key${d.temWaakgApiKey ? " (salva)" : ""}`} valor={cfg.waakgApiKey ?? ""} onChange={t("waakgApiKey")} texto placeholder="cole pra trocar" />
+                    <LigarSessoes />
                     <ReiniciarWhats />
                   </>
                 )}
@@ -623,6 +624,35 @@ function TesteCupom() {
     <div className="config-acoes">
       <button className="mini ghost" onClick={testar}>Conferir permissão de cupom na Shopify</button>
       {msg && <small className="muted">{msg}</small>}
+    </div>
+  );
+}
+
+/** Liga as sessões paradas da WA-AKG e diz quais precisam do QR. */
+function LigarSessoes() {
+  const [msg, setMsg] = useState("");
+  const [indo, setIndo] = useState(false);
+  const ligar = async () => {
+    setIndo(true);
+    setMsg("");
+    try {
+      const r = await api<{ ok: boolean; detalhe: string }>("/api/crm/config", { method: "POST", body: JSON.stringify({ tipo: "ligar-sessoes" }) });
+      setMsg(r.detalhe);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "erro");
+    } finally {
+      setIndo(false);
+    }
+  };
+  return (
+    <div className="cfg-campo">
+      <span>Sessões paradas</span>
+      <div>
+        <button className="mini ghost" onClick={ligar} disabled={indo}>
+          {indo ? "Ligando (uns 15 s)…" : "Ligar todas as sessões"}
+        </button>
+      </div>
+      <small style={{ whiteSpace: "pre-line" }}>{msg || "Liga as lojas que estão paradas na WA-AKG. A que saiu do celular precisa ler o QR de novo lá."}</small>
     </div>
   );
 }
