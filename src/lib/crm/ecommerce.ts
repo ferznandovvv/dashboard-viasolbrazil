@@ -305,6 +305,9 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
   /** Ela fez outro pedido pago depois deste (refez com cartão, por exemplo) */
   const comprouDeNovo = (p: Pedido) =>
     [telefoneDe(p), emailDe(p)].flatMap((k) => (k ? (pedidosDe.get(k) ?? []) : [])).some((x) => x.id !== p.id && pagou(x) && x.createdAt > p.createdAt);
+  /** Ela já fez outro pedido depois deste, pago ou não (refez o Pix, trocou peça): o lembrete vai só do mais novo */
+  const refez = (p: Pedido) =>
+    [telefoneDe(p), emailDe(p)].flatMap((k) => (k ? (pedidosDe.get(k) ?? []) : [])).some((x) => x.id !== p.id && !x.cancelledAt && x.createdAt > p.createdAt);
   const venceu = (p: Pedido, folgaMin: number) => {
     const { expira } = pixDoPedido(p);
     return expira ? agora >= expira - folgaMin * 60000 : minutos(p.createdAt) >= 30;
@@ -318,6 +321,10 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
     r.pixPendentes++;
     if (comprouDeNovo(p)) {
       motivo("Pix: comprou de novo");
+      continue;
+    }
+    if (refez(p)) {
+      motivo("Pix: refez o pedido (lembrete só do mais novo)");
       continue;
     }
     const tel = telefoneDe(p);
@@ -388,7 +395,9 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
           ? "Já pagou"
           : comprouDeNovo(p)
             ? "Comprou de novo"
-            : m.chave.startsWith("pix-") && venceu(p, 1)
+            : refez(p)
+              ? "Refez o pedido"
+              : m.chave.startsWith("pix-") && venceu(p, 1)
               ? "Pix venceu antes de sair"
               : undefined;
       if (erro) {

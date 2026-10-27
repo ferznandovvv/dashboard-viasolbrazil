@@ -55,7 +55,7 @@ type Pedido =
   | { tipo: "modelos-meta" }
   | { tipo: "criar-modelos-meta" }
   | { tipo: "teste-oficial"; telefone: string }
-  | { tipo: "teste-todos-oficial" }
+  | { tipo: "teste-todos-oficial"; telefone?: string; so?: string[] }
   | { tipo: "registrar-oficial"; pin: string }
   | { tipo: "perfil-oficial" }
   | { tipo: "testar-cupom" };
@@ -150,12 +150,13 @@ export async function POST(req: NextRequest) {
       const base = await lerBase();
       const of = oficialDe(base.config);
       if (!of.token || !of.phoneNumberId) return NextResponse.json({ erro: "Falta o token ou o ID do número." }, { status: 400 });
-      const tel = base.config.telefoneTeste;
+      // Outro celular (só pra este teste, não fica guardado) e, se vier, só algumas campanhas
+      const tel = p.telefone ? normalizarTelefone(String(p.telefone)) : base.config.telefoneTeste;
       if (!tel) return NextResponse.json({ erro: "Coloque o celular de teste e mande o teste simples primeiro." }, { status: 400 });
       const api = new CloudApi(of.token);
       const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
       const res: { rotulo: string; nome?: string; ok: boolean; id?: string; detalhe?: string }[] = [];
-      for (const it of mensagensDeTeste(base)) {
+      for (const it of mensagensDeTeste(base).filter((x) => !p.so?.length || p.so.includes(x.campanha))) {
         if (!it.template) {
           res.push({ rotulo: it.rotulo, ok: false, detalhe: it.falta });
           continue;
