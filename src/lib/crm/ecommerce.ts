@@ -24,6 +24,7 @@ import { salvarCliente } from "./clientes";
 import { enfileirar, viaOficial } from "./mensagens";
 import { conferirCupons, criarCupomCarrinho, desativarCupons, escoposShopify } from "./cupomShopify";
 import { gerarCodigo } from "./cashback";
+import { CloudApi } from "./envio/cloudApi";
 
 /** Confere uma vez por processo as permissões do app da Shopify e guarda na base. */
 let escoposConferidos = false;
@@ -40,7 +41,7 @@ async function conferirEscopos() {
     console.error("[crm] Shopify: não consegui ler as permissões:", e instanceof Error ? e.message : e);
   }
 }
-import { CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem } from "./tipos";
+import { CAMPANHAS_SITE, LOJA_OFICIAL, oficialDe, type BaseCrm, type Cliente, type Mensagem, type TipoCampanha } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 
 /**
@@ -517,6 +518,23 @@ let rodando = false;
 const memoria = globalThis as unknown as { __ultimoEcommerce?: ResultadoEcommerce & { em: string } };
 const guardar = (r: ResultadoEcommerce & { em: string }) => (memoria.__ultimoEcommerce = r);
 
+/** O modelo da campanha está aprovado na Meta? (consulta guardada por 1 h) */
+async function modeloAprovado(b: BaseCrm, campanha: TipoCampanha): Promise<boolean> {
+  const nome = b.modelos.find((m) => m.campanha === campanha)?.template?.nome;
+  const of = oficialDe(b.config);
+  if (!nome || !of.token || !of.wabaId) return false;
+  const cache = globalThis as unknown as { __modelosMeta?: { em: number; aprovados: string[] } };
+  if (!cache.__modelosMeta || Date.now() - cache.__modelosMeta.em > 3600000 || !cache.__modelosMeta.aprovados.includes(nome)) {
+    try {
+      const lista = await new CloudApi(of.token).modelos(of.wabaId);
+      cache.__modelosMeta = { em: Date.now(), aprovados: lista.filter((t) => t.status === "APPROVED").map((t) => t.name) };
+    } catch {
+      return false;
+    }
+  }
+  return cache.__modelosMeta.aprovados.includes(nome);
+}
+
 /** Passo do agendador (a cada 10 min). */
 export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
   if (rodando || !env("SHOPIFY_ADMIN_TOKEN")) return null;
@@ -547,7 +565,11 @@ export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
     const b0 = await lerBase();
     const of0 = oficialDe(b0.config);
     const sombra0 = viaOficial(b0, "carrinho_cupom") ? of0.sombra : b0.config.modoSombra;
-    for (const ck of carrinhosParaCupom(b0, checkouts, pedidos, agora)) {
+    const candidatos = carrinhosParaCupom(b0, checkouts, pedidos, agora);
+    // De verdade, só com o modelo aprovado: senão cria cupom pra uma mensagem que a Meta recusa
+    const modeloOk = sombra0 || !candidatos.length || !viaOficial(b0, "carrinho_cupom") || (await modeloAprovado(b0, "carrinho_cupom"));
+    if (!modeloOk) console.log("[crm] 2º aviso do carrinho esperando a Meta aprovar o modelo");
+    for (const ck of modeloOk ? candidatos : []) {
       const id = idCurto(ck.id);
       const codigo = gerarCodigo(b0);
       b0.codigos.push({ codigo, clienteId: "", valor: 0, criadoEm: "", validade: "" }); // não repete no mesmo passo

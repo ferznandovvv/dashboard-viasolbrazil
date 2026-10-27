@@ -609,6 +609,22 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Modelo próprio do Pix vencido aprovado (fala do pedido e do Pix, não de carrinho largado)
+    id: "pix-vencido-modelo-proprio",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "pix_expirado");
+      if (m) m.template = { nome: "via_sol_pix_vencido", idioma: "pt_BR", parametros: ["primeiro", "pedido"], botaoLink: true };
+    },
+  },
+  {
+    // 2º aviso do carrinho ligado: em sombra simula; de verdade, espera o modelo aprovado
+    id: "carrinho-cupom-liga",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "carrinho_cupom");
+      if (m) m.ativo = true;
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

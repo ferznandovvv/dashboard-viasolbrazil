@@ -52,7 +52,8 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
   {
     campanha: "pix_expirado",
     nome: "via_sol_pix_vencido",
-    categoria: "UTILITY",
+    // Pedido como utilidade, a Meta aprovou como marketing
+    categoria: "MARKETING",
     corpo:
       "Olá, {{1}}. O Pix do seu pedido {{2}} na Via Sol venceu antes do pagamento, então o pedido não foi concluído. As mesmas peças estão no carrinho do botão abaixo, caso queira finalizar. Em caso de dúvida, responda esta mensagem.",
     exemplo: ["Ana", "#12345"],

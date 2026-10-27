@@ -600,8 +600,8 @@ export const MODELOS_PADRAO: Modelo[] = [
   },
   {
     campanha: "carrinho_cupom",
-    // Liga quando a Meta aprovar o modelo via_sol_carrinho_cupom
-    ativo: false,
+    // Fora do modo sombra só sai (e só cria cupom) com o modelo aprovado na Meta
+    ativo: true,
     variacoes: [
       "Oi {primeiro}! Seu carrinho com {itens} ainda está guardado na Via Sol ☀️ Pra te ajudar a decidir, liberamos {oferta} de desconto com o cupom {codigo}, válido por 48 horas. É só abrir o link que o desconto já entra no carrinho: {link} Qualquer dúvida, responde aqui.",
     ],
@@ -622,7 +622,7 @@ export const MODELOS_PADRAO: Modelo[] = [
     variacoes: [
       "Oi {primeiro}! O Pix do seu pedido {pedido} na Via Sol venceu antes do pagamento ☀️ Se ainda quiser {itens}, montei o carrinho de novo pra você, é só abrir e finalizar: {link} Qualquer dúvida de tamanho ou pagamento, responde aqui que a gente te ajuda.",
     ],
-    template: { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["primeiro", "itens"], botaoLink: true },
+    template: { nome: "via_sol_pix_vencido", idioma: "pt_BR", parametros: ["primeiro", "pedido"], botaoLink: true },
   },
   {
     campanha: "boas_vindas",
