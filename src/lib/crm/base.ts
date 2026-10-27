@@ -579,6 +579,17 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Meta aprovou o lembrete de vencimento como utilidade (R$ 0,04 em vez de R$ 0,35)
+    id: "vencimento-utilidade-2026-10-27",
+    aplicar: (b) => {
+      for (const m of b.modelos) {
+        if (m.campanha === "cashback_vencendo" || m.campanha === "cashback_vencendo_urgente") {
+          m.template = { nome: "via_sol_saldo_vencimento", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade"], botaoLink: true, botaoVar: "whatsLoja" };
+        }
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

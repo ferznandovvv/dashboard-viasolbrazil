@@ -649,7 +649,7 @@ export const MODELOS_PADRAO: Modelo[] = [
       "Oi {primeiro}, {vendedora} aqui, da Via Sol {loja} ☀️ Lembra do seu cashback de {valor}? Ele vence em {validade}. Quer que eu te mande umas fotos das novidades pra você escolher com calma?",
       "{primeiro}, tudo bem? Passando pra lembrar que você tem {valor} de cashback aqui na Via Sol {loja}, válido até {validade} 🧡 Quer que eu separe algo do seu tamanho pra você vir ver?",
     ],
-    template: { nome: "via_sol_cashback_vencendo", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
+    template: { nome: "via_sol_saldo_vencimento", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "cashback_vencendo_urgente",
@@ -658,7 +658,7 @@ export const MODELOS_PADRAO: Modelo[] = [
       "{primeiro}, é a {vendedora} 🧡 Seu cashback de {valor} vence em {validade}, daqui a pouquinho. Não queria que você perdesse. Se não der pra passar na loja, me responde que eu vejo um jeito de te ajudar a usar.",
       "Oi {primeiro}! Último lembrete da {vendedora}: {valor} de cashback no seu nome vencendo dia {validade} ☀️ Dá tempo de usar ainda, te espero na Via Sol {loja}.",
     ],
-    template: { nome: "via_sol_cashback_vencendo", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
+    template: { nome: "via_sol_saldo_vencimento", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "aniversario",
