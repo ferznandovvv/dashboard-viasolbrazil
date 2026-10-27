@@ -621,6 +621,14 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
   const valorCompra = lerValor(compra);
   const teto = sel ? (sel.multiploCompra > 0 ? valorCompra / sel.multiploCompra : sel.maxPctDaCompra > 0 ? (valorCompra * sel.maxPctDaCompra) / 100 : sel.saldo) : 0;
   const podeUsar = sel ? Math.floor(Math.min(sel.saldo, valorCompra ? teto : sel.saldo) * 100) / 100 : 0;
+  // Compra que usa o cashback inteiro (pela regra do múltiplo ou do % máximo)
+  const compraPraTudo = sel
+    ? sel.multiploCompra > 0
+      ? Math.ceil(sel.saldo * sel.multiploCompra * 100) / 100
+      : sel.maxPctDaCompra > 0
+        ? Math.ceil(((sel.saldo * 100) / sel.maxPctDaCompra) * 100) / 100
+        : 0
+    : 0;
 
   return (
     <div className="crm-fundo" onClick={fechar} onKeyDown={(e) => e.key === "Escape" && fechar()}>
@@ -664,6 +672,11 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
             </div>
             {sel.saldo > 0 && (
               <>
+                {compraPraTudo > 0 && (
+                  <p className="lp-regra">
+                    Pra usar os {reais(sel.saldo)} inteiros, a compra precisa ser de pelo menos <b>{reais(compraPraTudo)}</b>.
+                  </p>
+                )}
                 <label className="crm-campo">
                   <span>Valor da compra</span>
                   <input value={compra} onChange={(e) => setCompra(e.target.value)} inputMode="decimal" placeholder="R$ 0,00" autoFocus />
@@ -672,6 +685,11 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
                   <p className="lp-regra">
                     Nesta compra dá pra usar até <b>{reais(podeUsar)}</b>
                     {sel.multiploCompra > 0 && podeUsar < sel.saldo ? ` (a compra precisa ser ${sel.multiploCompra}x o cashback usado)` : ""}.
+                    {podeUsar < sel.saldo && compraPraTudo > valorCompra ? (
+                      <>
+                        {" "}Faltam <b>{reais(compraPraTudo - valorCompra)}</b> em peças pra usar tudo.
+                      </>
+                    ) : null}
                   </p>
                 )}
                 <label className="crm-campo">
