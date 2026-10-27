@@ -24,13 +24,22 @@ export function slugDaLoja(loja: string): string {
 export const caminhoDaLoja = (loja: string) => `/w/${slugDaLoja(loja)}`;
 export const ATENDIMENTO = "atendimento";
 
-/** Final do link do botão pra loja (sem a barra), se o redirecionamento dela já existe com o número certo. */
+/**
+ * Pra onde o /w/<loja> aponta: o WhatsApp da loja, o da loja que manda por ela
+ * ou, enquanto a loja está sem número, o de atendimento. Quando o número da
+ * loja aparece, o redirecionamento é corrigido e até os botões já mandados
+ * passam a abrir o WhatsApp da loja.
+ */
+export function destinoDaLoja(base: BaseCrm, loja: string): string | undefined {
+  const n = base.config.numeros.find((x) => x.loja === loja);
+  const dono = n?.mandarPor ? base.config.numeros.find((x) => x.loja === n.mandarPor) : undefined;
+  return n?.telefone ?? dono?.telefone ?? oficialDe(base.config).whatsAtendimento;
+}
+
+/** Final do link do botão pra loja (sem a barra), se o redirecionamento dela já existe. */
 export function sufixoWhatsLoja(base: BaseCrm, loja: string | undefined): string | undefined {
   const feitos = base.config.linksLoja ?? {};
-  const n = base.config.numeros.find((x) => x.loja === loja);
-  const dono = n && !n.telefone && n.mandarPor ? base.config.numeros.find((x) => x.loja === n.mandarPor) : undefined;
-  const alvo = n?.telefone ? n : dono?.telefone ? dono : undefined;
-  if (alvo && feitos[alvo.loja] === alvo.telefone) return caminhoDaLoja(alvo.loja).slice(1);
+  if (loja && feitos[loja]) return caminhoDaLoja(loja).slice(1);
   const at = oficialDe(base.config).whatsAtendimento;
   if (at && feitos[ATENDIMENTO] === at) return caminhoDaLoja(ATENDIMENTO).slice(1);
   return undefined;
@@ -66,7 +75,11 @@ export async function garantirLinksDasLojas(): Promise<Record<string, string>> {
   if (!env("SHOPIFY_ADMIN_TOKEN")) return {};
   const b = await lerBase();
   const feitos = b.config.linksLoja ?? {};
-  const pedir: [string, string][] = b.config.numeros.filter((n) => n.telefone && feitos[n.loja] !== n.telefone).map((n) => [n.loja, n.telefone!]);
+  const pedir: [string, string][] = [];
+  for (const n of b.config.numeros) {
+    const alvo = destinoDaLoja(b, n.loja);
+    if (alvo && feitos[n.loja] !== alvo) pedir.push([n.loja, alvo]);
+  }
   const at = oficialDe(b.config).whatsAtendimento;
   if (at && feitos[ATENDIMENTO] !== at) pedir.push([ATENDIMENTO, at]);
   const r: Record<string, string> = {};
