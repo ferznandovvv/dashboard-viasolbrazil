@@ -19,10 +19,11 @@
 
 import { env } from "../env";
 import "../credenciais";
-import { alterarBase } from "./base";
+import { alterarBase, lerBase } from "./base";
 import { salvarCliente } from "./clientes";
 import { enfileirar, viaOficial } from "./mensagens";
-import { conferirCupons, desativarCupons, escoposShopify } from "./cupomShopify";
+import { conferirCupons, criarCupomCarrinho, desativarCupons, escoposShopify } from "./cupomShopify";
+import { gerarCodigo } from "./cashback";
 
 /** Confere uma vez por processo as permissões do app da Shopify e guarda na base. */
 let escoposConferidos = false;
@@ -244,20 +245,69 @@ export interface ResultadoEcommerce {
   erro?: string;
 }
 
-/** Junta o que importa de checkouts e pedidos e põe/cancela mensagens. Separado da busca para testar. */
-export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Pedido[], agora = Date.now()): ResultadoEcommerce {
-  const of = oficialDe(b.config);
-  const r: ResultadoEcommerce = { carrinhos: 0, pixPendentes: 0, enfileiradas: 0, canceladas: 0, recuperadas: 0, motivos: {} };
-  const motivo = (m: string) => (r.motivos[m] = (r.motivos[m] ?? 0) + 1);
-  const minutos = (iso: string) => (agora - Date.parse(iso)) / 60000;
-
-  // Pedidos por telefone/e-mail (pra saber se o carrinho virou compra)
+/** "Ela fez pedido depois de `desde`?" pelo telefone ou e-mail, nos pedidos lidos. */
+function indicePedidos(pedidos: Pedido[]) {
   const pedidosDe = new Map<string, Pedido[]>();
   for (const p of pedidos) {
     for (const k of [telefoneDe(p), emailDe(p)]) if (k) (pedidosDe.get(k) ?? pedidosDe.set(k, []).get(k)!).push(p);
   }
   const pedidoDepois = (tel: string | undefined, email: string | undefined, desde: string) =>
     [tel, email].flatMap((k) => (k ? (pedidosDe.get(k) ?? []) : [])).find((p) => !p.cancelledAt && Date.parse(p.createdAt) >= Date.parse(desde) - 5 * 60000);
+  return { pedidosDe, pedidoDepois };
+}
+
+/** Janela pra mandar o 2º aviso depois do 1º: passou do prazo, mas não muito (senão é carrinho velho). */
+const FOLGA_2O_AVISO_H = 12;
+const VALIDADE_CUPOM_CARRINHO_H = 48;
+
+/**
+ * Carrinhos que já podem receber o 2º aviso (com cupom): o 1º saiu (ou foi
+ * simulado, em sombra) há `carrinhoCupomHoras`, ela não respondeu, não comprou
+ * e ainda não recebeu o 2º. Usado antes (pra criar os cupons na Shopify) e
+ * dentro de aplicarEcommerce (pra enfileirar só o que tem cupom).
+ */
+export function carrinhosParaCupom(b: BaseCrm, checkouts: Checkout[], pedidos: Pedido[], agora = Date.now()): Checkout[] {
+  const of = oficialDe(b.config);
+  const pct = of.carrinhoCupomPct ?? 0;
+  if (pct <= 0 || !b.modelos.find((m) => m.campanha === "carrinho_cupom")?.ativo) return [];
+  const horas = of.carrinhoCupomHoras ?? 24;
+  const { pedidoDepois } = indicePedidos(pedidos);
+  const sombra = viaOficial(b, "carrinho_cupom") ? of.sombra : b.config.modoSombra;
+  const saiu = new Set<string>(["enviada", "entregue", "lida", ...(sombra ? ["simulada"] : [])]);
+  return checkouts.filter((ck) => {
+    if (ck.completedAt) return false;
+    const id = idCurto(ck.id);
+    const primeiro = b.mensagens.find((m) => m.chave === `carrinho-${id}` && saiu.has(m.status));
+    if (!primeiro) return false;
+    const h = (agora - Date.parse(primeiro.enviadoEm ?? primeiro.criadoEm)) / 3600000;
+    if (h < horas || h > horas + FOLGA_2O_AVISO_H) return false;
+    if (b.mensagens.some((m) => m.chave === `carrinho2-${id}`)) return false;
+    if (pedidoDepois(telefoneDe(ck), emailDe(ck), ck.createdAt)) return false;
+    return true;
+  });
+}
+
+/** Link do botão: aplica o cupom e volta pro carrinho dela. */
+export function linkComCupom(urlBase: string, codigo: string, carrinho: string): string {
+  let volta = "/cart";
+  try {
+    const u = new URL(carrinho);
+    volta = `${u.pathname}${u.search}`;
+  } catch {
+    /* fica no /cart */
+  }
+  return `${urlBase.replace(/\/+$/, "")}/discount/${encodeURIComponent(codigo)}?redirect=${encodeURIComponent(volta)}`;
+}
+
+/** Junta o que importa de checkouts e pedidos e põe/cancela mensagens. Separado da busca para testar. */
+export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Pedido[], agora = Date.now(), cupons: Record<string, string> = {}): ResultadoEcommerce {
+  const of = oficialDe(b.config);
+  const r: ResultadoEcommerce = { carrinhos: 0, pixPendentes: 0, enfileiradas: 0, canceladas: 0, recuperadas: 0, motivos: {} };
+  const motivo = (m: string) => (r.motivos[m] = (r.motivos[m] ?? 0) + 1);
+  const minutos = (iso: string) => (agora - Date.parse(iso)) / 60000;
+
+  // Pedidos por telefone/e-mail (pra saber se o carrinho virou compra)
+  const { pedidosDe, pedidoDepois } = indicePedidos(pedidos);
 
   // 1. Carrinho abandonado
   const naoAntes = new Date(agora - of.carrinhoIntervaloDias * 86400000).toISOString();
@@ -298,6 +348,33 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
     });
     if (e.mensagem) r.enfileiradas++;
     else motivo(`carrinho: ${e.motivo}`);
+  }
+
+  // 1b. 2º aviso do carrinho, com cupom (o cupom já foi criado na Shopify, ou é simulado)
+  const of2 = oficialDe(b.config);
+  for (const ck of carrinhosParaCupom(b, checkouts, pedidos, agora)) {
+    const id = idCurto(ck.id);
+    const codigo = cupons[id];
+    if (!codigo) {
+      motivo("carrinho 2º aviso: sem cupom");
+      continue;
+    }
+    const tel = telefoneDe(ck);
+    if (!tel) continue;
+    const e = enfileirar(b, {
+      cliente: clienteDo(b, ck, tel),
+      campanha: "carrinho_cupom",
+      chave: `carrinho2-${id}`,
+      variaveis: {
+        valor: parseFloat(ck.totalPriceSet.shopMoney.amount),
+        itens: resumoItens(ck.lineItems.nodes),
+        oferta: `${of2.carrinhoCupomPct}%`,
+        codigo,
+        link: linkComCupom(of2.urlBase, codigo, ck.abandonedCheckoutUrl),
+      },
+    });
+    if (e.mensagem) r.enfileiradas++;
+    else motivo(`carrinho 2º aviso: ${e.motivo}`);
   }
 
   // 2. Pix (ou outro pagamento) pendente
@@ -405,8 +482,8 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
         m.erro = erro;
         r.canceladas++;
       }
-    } else if (m.chave.startsWith("carrinho-")) {
-      const ck = porCheckout.get(m.chave.slice(9));
+    } else if (m.chave.startsWith("carrinho-") || m.chave.startsWith("carrinho2-")) {
+      const ck = porCheckout.get(m.chave.slice(m.chave.indexOf("-") + 1));
       const cli = b.clientes.find((c) => c.id === m.clienteId);
       if (ck?.completedAt || (ck && pedidoDepois(cli?.telefone, cli?.email?.toLowerCase(), ck.createdAt))) {
         m.status = "cancelada";
@@ -447,7 +524,8 @@ export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
   await conferirEscopos();
   try {
     const agora = Date.now();
-    const desde = new Date(agora - 26 * 3600000).toISOString();
+    // 2 dias: o 2º aviso do carrinho sai 24 h depois do 1º
+    const desde = new Date(agora - 50 * 3600000).toISOString();
     const desdePedidos = new Date(agora - 4 * 86400000).toISOString();
     let checkouts: Checkout[] = [];
     let pedidos: Pedido[] = [];
@@ -463,12 +541,41 @@ export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
     if (erro) {
       return guardar({ carrinhos: 0, pixPendentes: 0, enfileiradas: 0, canceladas: 0, recuperadas: 0, motivos: {}, erro, em: new Date().toISOString() });
     }
+    // 2º aviso do carrinho: cria o cupom na Shopify antes (em sombra, só um código de mentira)
+    const cupons: Record<string, string> = {};
+    const criados: { codigo: string; checkout: string; pct: number; ate: string; shopifyId?: string }[] = [];
+    const b0 = await lerBase();
+    const of0 = oficialDe(b0.config);
+    const sombra0 = viaOficial(b0, "carrinho_cupom") ? of0.sombra : b0.config.modoSombra;
+    for (const ck of carrinhosParaCupom(b0, checkouts, pedidos, agora)) {
+      const id = idCurto(ck.id);
+      const codigo = gerarCodigo(b0);
+      b0.codigos.push({ codigo, clienteId: "", valor: 0, criadoEm: "", validade: "" }); // não repete no mesmo passo
+      const ate = new Date(agora + VALIDADE_CUPOM_CARRINHO_H * 3600000).toISOString();
+      if (sombra0) {
+        cupons[id] = codigo;
+        continue;
+      }
+      const res = await criarCupomCarrinho(codigo, of0.carrinhoCupomPct ?? 10, ate);
+      if (!res.id) {
+        console.error(`[crm] cupom do carrinho ${id}: ${res.erro}`);
+        continue;
+      }
+      cupons[id] = codigo;
+      criados.push({ codigo, checkout: id, pct: of0.carrinhoCupomPct ?? 10, ate, shopifyId: res.id });
+    }
     const { r, desativar } = await alterarBase((b) => {
-      const r = aplicarEcommerce(b, checkouts, pedidos, agora);
+      const r = aplicarEcommerce(b, checkouts, pedidos, agora, cupons);
+      const desativar: string[] = [];
+      for (const c of criados) {
+        const m = b.mensagens.find((x) => x.chave === `carrinho2-${c.checkout}`);
+        if (m && m.status !== "cancelada") (b.cuponsCarrinho ??= []).push({ ...c, criadoEm: new Date().toISOString() });
+        else if (c.shopifyId) desativar.push(c.shopifyId); // não entrou na fila: o cupom não vale
+      }
       // Cupom de cashback do site: baixa de quem usou no site, e desativa o que não vale mais
       const c = conferirCupons(b, pedidos);
       if (c.baixas) console.log(`[crm] cupons do site usados: ${c.baixas}`);
-      return { r, desativar: c.desativar };
+      return { r, desativar: [...c.desativar, ...desativar] };
     });
     if (desativar.length) await desativarCupons(desativar);
     guardar({ ...r, em: new Date().toISOString() });
@@ -505,7 +612,7 @@ export function resumoEcommerce(b: BaseCrm, dias = 7): ResumoEcommerce {
   };
   for (const m of b.mensagens) {
     if (m.criadoEm < desde || !CAMPANHAS_SITE.includes(m.campanha)) continue;
-    if (m.campanha === "carrinho_abandonado") conta(car, m);
+    if (m.campanha === "carrinho_abandonado" || m.campanha === "carrinho_cupom") conta(car, m);
     if (m.campanha === "pix_pendente" || m.campanha === "pix_expirado") conta(pix, m);
   }
   return {

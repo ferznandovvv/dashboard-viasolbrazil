@@ -83,6 +83,41 @@ export async function criarCupom(c: Cliente, codigo: string, valor: number, vali
   return { erro: /access|scope|permission/i.test(ultimoErro) ? `sem permissão de cupom (write_discounts): ${ultimoErro}` : ultimoErro };
 }
 
+/**
+ * Cupom do 2º aviso de carrinho: % em tudo, uma vez, válido até `ate`. Vale pra
+ * qualquer cadastro (muita gente fecha como convidada), mas o uso único segura.
+ * Não junta com outro cupom.
+ */
+export async function criarCupomCarrinho(codigo: string, pct: number, ate: string): Promise<{ id?: string; erro?: string }> {
+  const base = {
+    title: `Carrinho ${codigo} (${pct}%)`,
+    code: codigo,
+    startsAt: new Date().toISOString(),
+    endsAt: ate,
+    customerGets: { value: { percentage: pct / 100 }, items: { all: true } },
+    usageLimit: 1,
+    combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
+  };
+  let ultimoErro = "";
+  for (const [i, versao] of VERSOES.entries()) {
+    const d = i === 0 ? { ...base, context: { all: "ALL" } } : { ...base, customerSelection: { all: true } };
+    try {
+      const r = await shopify(CRIAR, { d }, versao);
+      if (r.errors?.length) {
+        ultimoErro = r.errors.map((e) => e.message).join("; ");
+        continue;
+      }
+      const p = r.data?.discountCodeBasicCreate as { codeDiscountNode?: { id: string }; userErrors: { message: string }[] } | undefined;
+      if (p?.userErrors?.length) return { erro: p.userErrors.map((e) => e.message).join("; ") };
+      if (p?.codeDiscountNode?.id) return { id: p.codeDiscountNode.id };
+      ultimoErro = "resposta sem id";
+    } catch (e) {
+      ultimoErro = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { erro: ultimoErro };
+}
+
 export async function desativarCupom(id: string): Promise<{ ok: boolean; erro?: string }> {
   try {
     const r = await shopify(`mutation D($id: ID!) { discountCodeDeactivate(id: $id) { codeDiscountNode { id } userErrors { message } } }`, { id }, VERSOES[0]);

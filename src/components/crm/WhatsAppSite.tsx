@@ -168,6 +168,8 @@ export function WhatsAppSite({ d, aoMudar }: { d: DadosConfig; aoMudar: () => Pr
           <Campo rotulo="Carrinho: mensagem depois de parado há" valor={of.carrinhoMinutos} onChange={num("carrinhoMinutos")} sufixo="min" dica="O que mais converte é entre 30 min e 2 h" />
           <Campo rotulo="Carrinho: valor mínimo" valor={of.carrinhoMinimo} onChange={num("carrinhoMinimo")} prefixo="R$" />
           <Campo rotulo="Carrinho: no máximo um a cada" valor={of.carrinhoIntervaloDias} onChange={num("carrinhoIntervaloDias")} sufixo="dias" dica="Quem abandona carrinho toda semana não recebe toda vez" />
+          <Campo rotulo="Carrinho, 2º aviso: cupom de" valor={of.carrinhoCupomPct ?? 10} onChange={num("carrinhoCupomPct")} sufixo="%" dica="Só pra quem não comprou depois do 1º aviso. Uso único, vale 48 h. 0 = não manda" />
+          <Campo rotulo="Carrinho, 2º aviso: depois do 1º" valor={of.carrinhoCupomHoras ?? 24} onChange={num("carrinhoCupomHoras")} sufixo="h" />
           <Campo rotulo="Pix: lembrete depois de" valor={of.pixMinutos} onChange={num("pixMinutos")} sufixo="min" dica="Confira em quanto tempo o Pix do seu checkout expira" />
           <Campo rotulo="Teto de mensagens por dia" valor={of.tetoDia} onChange={num("tetoDia")} dica="A Meta começa com limite de 250 pessoas/dia e sobe sozinho com o uso" />
           <Campo rotulo="Link do botão começa com" valor={of.urlBase} onChange={txt("urlBase")} texto />

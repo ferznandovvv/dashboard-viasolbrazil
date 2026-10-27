@@ -155,6 +155,7 @@ export type TipoCampanha =
   | "pos_venda"
   | "boas_vindas"
   | "carrinho_abandonado"
+  | "carrinho_cupom"
   | "pix_pendente"
   | "pix_expirado"
   | "avulsa";
@@ -170,13 +171,14 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
   { id: "carrinho_abandonado", nome: "Carrinho abandonado (site)", dica: "Deixou o telefone no checkout e não fechou: uma mensagem, com o link do carrinho", marketing: false },
+  { id: "carrinho_cupom", nome: "Carrinho abandonado, 2º aviso com cupom (site)", dica: "Recebeu o 1º aviso e não comprou em 24 h: cupom de desconto só dela, uso único, válido por 48 h", marketing: false },
   { id: "pix_pendente", nome: "Pix não pago (site)", dica: "Fez o pedido no Pix e não pagou: manda o código copia e cola, antes de o Pix vencer", marketing: false },
   { id: "pix_expirado", nome: "Pix vencido (site)", dica: "O Pix venceu sem pagar e ela não comprou de novo: manda o carrinho montado pra refazer o pedido", marketing: false },
   { id: "avulsa", nome: "Avulsa", dica: "Mandada à mão para um segmento", marketing: true },
 ];
 
 /** Campanhas do e-commerce: nascem de uma ação dela no site, não de compra na loja. */
-export const CAMPANHAS_SITE: TipoCampanha[] = ["carrinho_abandonado", "pix_pendente", "pix_expirado"];
+export const CAMPANHAS_SITE: TipoCampanha[] = ["carrinho_abandonado", "carrinho_cupom", "pix_pendente", "pix_expirado"];
 
 /** Teto do dia de um número: o dele (ou o geral), limitado pelo teto temporário enquanto valer. */
 export function tetoDoNumero(cfg: Pick<ConfigCrm, "tetoDiaPorNumero" | "tetoTemporario">, n: { tetoDia?: number } | undefined, hoje: string): number {
@@ -234,6 +236,9 @@ export interface ConfigOficial {
   carrinhoSoComAceite: boolean;
   /** Não manda outro carrinho pra mesma pessoa antes disso */
   carrinhoIntervaloDias: number;
+  /** 2º aviso do carrinho: % do cupom (0 = não manda) e horas depois do 1º aviso */
+  carrinhoCupomPct?: number;
+  carrinhoCupomHoras?: number;
   /** Pix: minutos depois do pedido (o Pix da PagBrasil vence em 30); `pagamentoTodos` inclui boleto e outros pendentes */
   pixMinutos: number;
   pagamentoTodos: boolean;
@@ -260,6 +265,8 @@ export const OFICIAL_PADRAO: ConfigOficial = {
   carrinhoMinimo: 0,
   carrinhoSoComAceite: false,
   carrinhoIntervaloDias: 7,
+  carrinhoCupomPct: 10,
+  carrinhoCupomHoras: 24,
   pixMinutos: 10,
   pagamentoTodos: false,
   urlBase: "https://viasolbrazil.com.br/",
@@ -526,6 +533,8 @@ export interface BaseCrm {
   vendas: Venda[];
   cashback: MovimentoCashback[];
   codigos: CodigoResgate[];
+  /** Cupons do 2º aviso de carrinho (criados na Shopify na hora do aviso) */
+  cuponsCarrinho?: { codigo: string; checkout: string; pct: number; criadoEm: string; ate: string; shopifyId?: string }[];
   mensagens: Mensagem[];
   recebidas: Recebida[];
   atendimento: Atendimento[];
@@ -588,6 +597,15 @@ export const MODELOS_PADRAO: Modelo[] = [
       "{primeiro}, aqui é da Via Sol ☀️ Seu carrinho com {itens} ficou guardado. Pra finalizar a compra é só abrir: {link} Qualquer dúvida de tamanho, é só me chamar por aqui.",
     ],
     template: { nome: "via_sol_carrinho", idioma: "pt_BR", parametros: ["primeiro", "itens"], botaoLink: true },
+  },
+  {
+    campanha: "carrinho_cupom",
+    // Liga quando a Meta aprovar o modelo via_sol_carrinho_cupom
+    ativo: false,
+    variacoes: [
+      "Oi {primeiro}! Seu carrinho com {itens} ainda está guardado na Via Sol ☀️ Pra te ajudar a decidir, liberamos {oferta} de desconto com o cupom {codigo}, válido por 48 horas. É só abrir o link que o desconto já entra no carrinho: {link} Qualquer dúvida, responde aqui.",
+    ],
+    template: { nome: "via_sol_carrinho_cupom", idioma: "pt_BR", parametros: ["primeiro", "itens", "oferta", "codigo"], botaoLink: true },
   },
   {
     campanha: "pix_pendente",

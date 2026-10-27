@@ -599,6 +599,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // 2º aviso do carrinho (com cupom) sai pelo oficial, como o 1º
+    id: "carrinho-cupom-v1",
+    aplicar: (b) => {
+      const of = b.config.oficial;
+      if (of?.campanhas && !of.campanhas.includes("carrinho_cupom")) of.campanhas.push("carrinho_cupom");
+      const m = MODELOS_PADRAO.find((x) => x.campanha === "carrinho_cupom");
+      if (m && !b.modelos.some((x) => x.campanha === "carrinho_cupom")) b.modelos.push(structuredClone(m));
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

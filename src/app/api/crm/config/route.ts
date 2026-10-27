@@ -321,6 +321,8 @@ export async function POST(req: NextRequest) {
           carrinhoMinimo: num(o.carrinhoMinimo, atual.carrinhoMinimo),
           carrinhoSoComAceite: o.carrinhoSoComAceite !== undefined ? Boolean(o.carrinhoSoComAceite) : atual.carrinhoSoComAceite,
           carrinhoIntervaloDias: num(o.carrinhoIntervaloDias, atual.carrinhoIntervaloDias, 0, 90),
+          carrinhoCupomPct: num(o.carrinhoCupomPct, atual.carrinhoCupomPct ?? 10, 0, 50),
+          carrinhoCupomHoras: num(o.carrinhoCupomHoras, atual.carrinhoCupomHoras ?? 24, 1, 72),
           pixMinutos: num(o.pixMinutos, atual.pixMinutos, 10, 1380),
           pagamentoTodos: o.pagamentoTodos !== undefined ? Boolean(o.pagamentoTodos) : atual.pagamentoTodos,
           urlBase: typeof o.urlBase === "string" && /^https:\/\/[^\s]+$/.test(o.urlBase.trim()) ? o.urlBase.trim() : atual.urlBase,

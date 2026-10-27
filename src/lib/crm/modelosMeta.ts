@@ -31,6 +31,16 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     botao: { texto: "Finalizar compra", exemploSufixo: "1234567/checkouts/ac/abc123/recover?key=xyz" },
   },
   {
+    campanha: "carrinho_cupom",
+    nome: "via_sol_carrinho_cupom",
+    categoria: "MARKETING",
+    corpo:
+      "Oi {{1}}! Seu carrinho com {{2}} ainda está guardado na Via Sol ☀️ Pra te ajudar a decidir, liberamos {{3}} de desconto com o cupom {{4}}, válido por 48 horas. É só tocar no botão que o desconto já entra no carrinho. Qualquer dúvida, responde aqui.",
+    exemplo: ["Ana", "Biquíni Marina e mais 1 peça", "10%", "VS7K2M"],
+    rodape: SAIR,
+    botao: { texto: "Usar o desconto", exemploSufixo: "discount/VS7K2M?redirect=%2Fcart" },
+  },
+  {
     campanha: "pix_pendente",
     nome: "via_sol_pix_pendente",
     categoria: "UTILITY",

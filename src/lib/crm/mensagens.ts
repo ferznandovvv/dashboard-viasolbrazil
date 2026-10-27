@@ -70,6 +70,8 @@ export function valorDaVariavel(chave: string, cliente: Cliente, v: Variaveis): 
       return v.whatsLoja ?? "";
     case "loja":
       return v.loja ?? "";
+    case "oferta":
+      return v.oferta ?? "";
     default:
       return "";
   }
@@ -222,7 +224,7 @@ export interface PedidoFila {
 }
 
 /** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
-const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas", "carrinho_abandonado", "pix_pendente", "pix_expirado"];
+const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas", "carrinho_abandonado", "carrinho_cupom", "pix_pendente", "pix_expirado"];
 
 /**
  * A mensagem conta para limite e repetição? Cancelada e erro não. Simulada
@@ -267,7 +269,7 @@ export function motivoBloqueio(base: BaseCrm, c: Cliente, campanha: TipoCampanha
   // Carrinho e Pix nascem do que ela acabou de fazer no site (deixou o telefone no checkout):
   // não dependem do aceite de marketing, a não ser que a configuração peça
   const doSite = CAMPANHAS_SITE.includes(campanha);
-  const exigeAceite = !doSite || (campanha === "carrinho_abandonado" && oficialDe(base.config).carrinhoSoComAceite);
+  const exigeAceite = !doSite || ((campanha === "carrinho_abandonado" || campanha === "carrinho_cupom") && oficialDe(base.config).carrinhoSoComAceite);
   if (exigeAceite && !c.optIn) return "sem aceite";
   if (ehMarketing(campanha) && c.semResposta >= base.config.maxSemResposta) return "sem resposta nas últimas campanhas";
   if (!FORA_DO_LIMITE.includes(campanha) && mensagensNoMes(base, c.id) >= base.config.maxMensagensMes) return "já recebeu o máximo do mês";
@@ -390,6 +392,7 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
 
 const ROTULO_TESTE: Partial<Record<TipoCampanha, string>> = {
   carrinho_abandonado: "Carrinho abandonado",
+  carrinho_cupom: "Carrinho, 2º aviso com cupom",
   pix_pendente: "Pix não pago",
   pix_expirado: "Pix vencido",
   cashback_creditado: "Cashback da loja",
@@ -429,8 +432,9 @@ export function mensagensDeTeste(base: BaseCrm): { campanha: TipoCampanha; rotul
       compraMinima: compraMinimaPara(base, valor),
       codigo: "TESTE",
       itens: "Biquíni Marina e mais 1 peça",
+      oferta: "10%",
       pedido: "#TESTE",
-      link: `${site}/collections/all`,
+      link: campanha === "carrinho_cupom" ? `${site}/discount/TESTE?redirect=%2Fcollections%2Fall` : `${site}/collections/all`,
       lojaProxima: campanha === "cashback_site_perto" ? "Fiusa" : undefined,
     };
     v.whatsLoja = sufixoWhatsLoja(base, v.lojaProxima ?? loja);
