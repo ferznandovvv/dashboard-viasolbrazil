@@ -625,6 +625,15 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // WhatsApp de Centro e Praia Grande (página Nossas Lojas do site): o botão
+    // "Falar com a loja" abre o celular da loja mesmo com a WA-AKG desligada
+    id: "telefone-centro-pg-2026-10-27",
+    aplicar: (b) => {
+      const tel: Record<string, string> = { Centro: "5516981969435", "Praia Grande": "5513991384794" };
+      for (const n of b.config.numeros) if (tel[n.loja] && !n.telefone) n.telefone = tel[n.loja];
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
