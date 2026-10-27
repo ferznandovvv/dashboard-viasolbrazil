@@ -60,13 +60,14 @@ export async function configurarWebhooks(): Promise<Record<string, string>> {
   // Número de cada loja (pro botão "Falar com a loja" da API oficial): lê da WA-AKG quando falta
   if (adaptador?.meuNumero) {
     const achados: Record<string, string> = {};
-    for (const n of base.config.numeros.filter((x) => x.sessao && !x.telefone)) {
+    // Conectada manda: se o número da sessão é outro (loja trocou de chip), corrige
+    for (const n of base.config.numeros.filter((x) => x.sessao)) {
       const tel = await adaptador.meuNumero(n.sessao);
-      if (tel) achados[n.loja] = tel;
+      if (tel && tel !== n.telefone) achados[n.loja] = tel;
     }
     if (Object.keys(achados).length)
       await alterarBase((b) => {
-        for (const n of b.config.numeros) if (!n.telefone && achados[n.loja]) n.telefone = achados[n.loja];
+        for (const n of b.config.numeros) if (achados[n.loja]) n.telefone = achados[n.loja];
       });
   }
   // Link curto /w/<loja> na Shopify pro botão "Falar com a loja" da API oficial
