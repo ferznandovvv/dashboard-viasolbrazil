@@ -293,6 +293,8 @@ export function linkComCupom(urlBase: string, codigo: string, carrinho: string):
   let volta = "/cart";
   try {
     const u = new URL(carrinho);
+    // O checkout também aceita ?discount=CÓDIGO: vai pelos dois caminhos
+    u.searchParams.set("discount", codigo);
     volta = `${u.pathname}${u.search}`;
   } catch {
     /* fica no /cart */
