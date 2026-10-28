@@ -196,6 +196,24 @@ export function linkRefazer(urlBase: string, p: Pedido): string | undefined {
   return `${urlBase.replace(/\/+$/, "")}/cart/${itens.map((i) => `${idCurto(i.variant!.id)}:${i.quantity}`).join(",")}`;
 }
 
+/**
+ * Página do site (pages/pix) que mostra o código copia e cola, o QR e até que
+ * horas vale: a página do pedido da Shopify não mostra o Pix, e pelo número
+ * oficial não dá pra mandar o código numa mensagem solta.
+ */
+export function linkPagarPix(urlBase: string, codigo: string, pedido: string, valor: number, expira?: number, refazer?: string): string {
+  const q = new URLSearchParams({ c: codigo, p: pedido, v: `R$ ${valor.toFixed(2).replace(".", ",")}` });
+  if (expira) q.set("e", String(expira));
+  if (refazer) {
+    try {
+      q.set("r", new URL(refazer).pathname);
+    } catch {
+      /* sem link de refazer */
+    }
+  }
+  return `${urlBase.replace(/\/+$/, "")}/pages/pix?${q.toString()}`;
+}
+
 /** Folga antes de o Pix vencer: menos que isso não adianta mandar o código. */
 const FOLGA_PIX_MIN = 4;
 const PAGO = new Set(["PAID", "PARTIALLY_REFUNDED", "PARTIALLY_PAID", "AUTHORIZED"]);
@@ -427,7 +445,7 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
         cliente: clienteDo(b, p, tel),
         campanha: "pix_pendente",
         chave,
-        variaveis: { valor, pedido: p.name, link: p.statusPageUrl, expira: pix.hora },
+        variaveis: { valor, pedido: p.name, link: linkPagarPix(of.urlBase, pix.codigo, p.name, valor, pix.expira, linkRefazer(of.urlBase, p)), expira: pix.hora },
         complemento: pix.codigo,
       });
       if (e.mensagem) r.enfileiradas++;

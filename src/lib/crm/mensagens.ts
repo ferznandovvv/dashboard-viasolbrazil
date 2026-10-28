@@ -434,7 +434,12 @@ export function mensagensDeTeste(base: BaseCrm): { campanha: TipoCampanha; rotul
       itens: "Biquíni Marina e mais 1 peça",
       oferta: "10%",
       pedido: "#TESTE",
-      link: campanha === "carrinho_cupom" ? `${site}/discount/TESTE?redirect=%2Fcollections%2Fall` : `${site}/collections/all`,
+      link:
+        campanha === "carrinho_cupom"
+          ? `${site}/discount/TESTE?redirect=%2Fcollections%2Fall`
+          : campanha === "pix_pendente"
+            ? `${site}/pages/pix?c=00020101021226910014br.gov.bcb.pix2569TESTE5204000053039865406043.355802BR&p=%23TESTE&v=R%24%2043%2C35&e=${Date.now() + 30 * 60000}`
+            : `${site}/collections/all`,
       lojaProxima: campanha === "cashback_site_perto" ? "Fiusa" : undefined,
     };
     v.whatsLoja = sufixoWhatsLoja(base, v.lojaProxima ?? loja);
