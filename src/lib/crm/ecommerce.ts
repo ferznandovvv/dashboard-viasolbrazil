@@ -512,6 +512,20 @@ export function aplicarEcommerce(b: BaseCrm, checkouts: Checkout[], pedidos: Ped
       r.recuperadas++;
     }
   }
+  // Uma venda conta uma vez só: fica com a última mensagem antes dela (ex.: o 2º aviso do carrinho, não os dois)
+  const donos = new Map<string, Mensagem>();
+  for (const m of b.mensagens) {
+    if (!m.resultado || !CAMPANHAS_SITE.includes(m.campanha)) continue;
+    const outro = donos.get(m.resultado.pedido);
+    if (!outro) {
+      donos.set(m.resultado.pedido, m);
+      continue;
+    }
+    const quando = (x: Mensagem) => x.enviadoEm ?? x.criadoEm;
+    const [fica, sai] = quando(m) > quando(outro) ? [m, outro] : [outro, m];
+    sai.resultado = undefined;
+    donos.set(fica.resultado!.pedido, fica);
+  }
   return r;
 }
 
