@@ -57,6 +57,17 @@ export async function configurarWebhooks(): Promise<Record<string, string>> {
   const base = await lerBase();
   const adaptador = adaptadorDe(base.config);
   const r: Record<string, string> = {};
+  // Sessão parada (STOPPED: a WA-AKG reiniciou e não liga sozinha) volta na hora.
+  // Desconectada (LOGGED_OUT) não: essa precisa do QR.
+  if (adaptador?.iniciar) {
+    for (const n of base.config.numeros.filter((x) => x.ativo && x.sessao)) {
+      const sit = await adaptador.situacao(n.sessao);
+      if (!sit.conectado && /^STOPPED\b/i.test(sit.detalhe ?? "")) {
+        const ok = await adaptador.iniciar(n.sessao);
+        console.log(`[crm] sessão ${n.loja} estava parada na WA-AKG: ${ok.ok ? "liguei de novo" : ok.detalhe}`);
+      }
+    }
+  }
   // Número de cada loja (pro botão "Falar com a loja" da API oficial): lê da WA-AKG quando falta
   if (adaptador?.meuNumero) {
     const achados: Record<string, string> = {};
