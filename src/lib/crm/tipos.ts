@@ -578,10 +578,11 @@ export interface ClienteResumo extends Cliente {
 /** Cidade de cada loja, para avisar a cliente do site que tem loja perto dela. */
 export const LOJA_CIDADE: Record<string, string> = {
   Centro: "Franca",
-  Fiusa: "Franca",
   "Loja de Fábrica": "Franca",
   "Rio de Janeiro": "Rio de Janeiro",
   "Ribeirão Preto": "Ribeirão Preto",
+  // Fiusa (antiga Franca Shopping) fica em Ribeirão; a cliente de lá continua indo pra loja do Centro de Ribeirão
+  Fiusa: "Ribeirão Preto",
   "SP — Itaim": "São Paulo",
   "Belo Horizonte": "Belo Horizonte",
   "Praia Grande": "Praia Grande",
