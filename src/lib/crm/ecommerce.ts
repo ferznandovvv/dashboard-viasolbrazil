@@ -682,3 +682,92 @@ export function resumoEcommerce(b: BaseCrm, dias = 7): ResumoEcommerce {
   };
 }
 
+
+export interface LinhaSite {
+  campanha: string;
+  nome: string;
+  /** Mensagens que saíram de verdade no mês */
+  enviadas: number;
+  simuladas: number;
+  /** Pedidos pagos atribuídos (cada pedido conta uma vez, pro último aviso antes dele) */
+  vendas: number;
+  valor: number;
+  /** Desconto dado (cupom), quando a mensagem leva cupom */
+  desconto?: number;
+}
+
+export interface ResumoSiteMes {
+  mes: string;
+  /** Todos os pedidos pagos do site no mês */
+  pedidos: number;
+  faturado: number;
+  /** O que veio das mensagens (soma das linhas) */
+  vendasRecuperadas: number;
+  valorRecuperado: number;
+  linhas: LinhaSite[];
+  ultimo: (ResultadoEcommerce & { em: string }) | null;
+  sombra: boolean;
+}
+
+/** Site no mês: quanto vendeu e quanto veio de cada mensagem (carrinho, Pix, cashback do site). */
+export function resumoSiteMes(b: BaseCrm, hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)): ResumoSiteMes {
+  const inicio = `${hoje.slice(0, 7)}-01`;
+  const desde = new Date(`${inicio}T00:00:00-03:00`).toISOString();
+  const of = oficialDe(b.config);
+  let pedidos = 0;
+  let faturado = 0;
+  for (const v of b.vendas) {
+    if (v.loja !== LOJA_OFICIAL || v.data.slice(0, 10) < inicio || v.valor - (v.devolvido ?? 0) < 0.01) continue;
+    pedidos++;
+    faturado += v.valor - (v.devolvido ?? 0);
+  }
+  const saiu = (m: Mensagem) => !["simulada", "cancelada", "erro", "fila", "enviando"].includes(m.status);
+  const nomes: [string, string][] = [
+    ["carrinho_abandonado", "Carrinho abandonado (1º aviso)"],
+    ["carrinho_cupom", "Carrinho, 2º aviso com cupom"],
+    ["pix_pendente", "Pix não pago"],
+    ["pix_expirado", "Pix vencido"],
+  ];
+  const linhas: LinhaSite[] = nomes.map(([campanha, nome]) => {
+    const l: LinhaSite = { campanha, nome, enviadas: 0, simuladas: 0, vendas: 0, valor: 0 };
+    for (const m of b.mensagens) {
+      if (m.campanha !== campanha || m.criadoEm < desde) continue;
+      if (m.status === "simulada") l.simuladas++;
+      else if (saiu(m)) l.enviadas++;
+      // Compra depois de mensagem simulada não foi a mensagem
+      if (m.resultado && saiu(m)) {
+        l.vendas++;
+        l.valor += m.resultado.valor;
+      }
+    }
+    return l;
+  });
+  // Cupom do 2º aviso: 10% do pedido (o que o cupom tirou)
+  const cupom = linhas.find((l) => l.campanha === "carrinho_cupom")!;
+  if (cupom.vendas) cupom.desconto = Math.round(((cupom.valor * (of.carrinhoCupomPct ?? 10)) / (100 - (of.carrinhoCupomPct ?? 10))) * 100) / 100;
+  // Cashback do site: aviso com cupom; venda = cupom usado no site no mês
+  const cb: LinhaSite = { campanha: "cashback_site", nome: "Cashback do site (cupom)", enviadas: 0, simuladas: 0, vendas: 0, valor: 0, desconto: 0 };
+  for (const m of b.mensagens) {
+    if ((m.campanha !== "cashback_site_perto" && m.campanha !== "cashback_site_longe") || m.criadoEm < desde) continue;
+    if (m.status === "simulada") cb.simuladas++;
+    else if (saiu(m)) cb.enviadas++;
+  }
+  for (const k of b.codigos) {
+    if (!k.movimentoId || k.usadoNaLoja !== LOJA_OFICIAL || !k.usadoEm || k.usadoEm < desde) continue;
+    cb.vendas++;
+    cb.valor += k.compraValor ?? 0;
+    cb.desconto! += k.valor;
+  }
+  linhas.push(cb);
+  for (const l of linhas) l.valor = Math.round(l.valor);
+  return {
+    mes: inicio,
+    pedidos,
+    faturado: Math.round(faturado),
+    vendasRecuperadas: linhas.reduce((s, l) => s + l.vendas, 0),
+    valorRecuperado: linhas.reduce((s, l) => s + l.valor, 0),
+    linhas,
+    ultimo: memoria.__ultimoEcommerce ?? null,
+    sombra: viaOficial(b, "carrinho_abandonado") ? of.sombra : b.config.modoSombra,
+  };
+}

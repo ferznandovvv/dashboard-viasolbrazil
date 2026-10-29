@@ -18,6 +18,9 @@ export interface CashbackMes {
   resgates: number;
   /** Valor das compras em que ela usou (venda dela no mesmo dia, na mesma loja) */
   comprasComCashback: number;
+  /** Quantas vendas usaram cashback (cliente + dia + loja) e quantas vendas houve no mês */
+  vendasComCashback: number;
+  vendasMes: number;
   /** Vence nos próximos 10 dias, sem ter sido usado */
   vencendo10d: number;
   clientesVencendo: number;
@@ -33,6 +36,9 @@ export interface CashbackLoja {
   usado: number;
   resgates: number;
   comprasComCashback: number;
+  vendasComCashback: number;
+  /** Todas as vendas da loja no mês (pra ver quanto o cashback pesa) */
+  vendasMes: number;
   vencendo10d: number;
   clientesVencendo: number;
   /** Saldo ainda válido, pela loja da compra que gerou o crédito */
@@ -49,8 +55,13 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
   let expirado = 0;
   let compras = 0;
   const vendasDoDia = new Map<string, number>();
+  const vendasNaLoja = new Map<string, number>();
+  let vendasMes = 0;
   for (const v of b.vendas) {
-    if (!v.clienteId || v.data.slice(0, 10) < inicio || !contaComoCompra(v)) continue;
+    if (v.data.slice(0, 10) < inicio || !contaComoCompra(v)) continue;
+    vendasMes++;
+    vendasNaLoja.set(v.loja, (vendasNaLoja.get(v.loja) ?? 0) + 1);
+    if (!v.clienteId) continue;
     const k = `${v.clienteId}|${v.data.slice(0, 10)}|${v.loja}`;
     vendasDoDia.set(k, (vendasDoDia.get(k) ?? 0) + valorLiquido(v));
   }
@@ -59,7 +70,7 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
     const nome = loja || "Sem loja";
     let l = lojas.get(nome);
     if (!l) {
-      l = { loja: nome, creditado: 0, creditos: 0, usado: 0, resgates: 0, comprasComCashback: 0, vencendo10d: 0, clientesVencendo: 0, emAberto: 0, vencendoClientes: new Set() };
+      l = { loja: nome, creditado: 0, creditos: 0, usado: 0, resgates: 0, comprasComCashback: 0, vendasComCashback: 0, vendasMes: vendasNaLoja.get(nome) ?? 0, vencendo10d: 0, clientesVencendo: 0, emAberto: 0, vencendoClientes: new Set() };
       lojas.set(nome, l);
     }
     return l;
@@ -83,6 +94,7 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
         contadas.add(k);
         compras += vendasDoDia.get(k) ?? 0;
         daLoja(m.loja).comprasComCashback += vendasDoDia.get(k) ?? 0;
+        daLoja(m.loja).vendasComCashback++;
       }
     } else if (m.tipo === "expiracao") expirado += -m.valor;
   }
@@ -114,6 +126,8 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
     usado: arred(usado),
     resgates,
     comprasComCashback: arred(compras),
+    vendasComCashback: contadas.size,
+    vendasMes,
     vencendo10d: arred(vencendo),
     clientesVencendo,
     expirado: arred(expirado),

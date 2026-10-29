@@ -1713,3 +1713,24 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 
 /* Resultado de uma ação da configuração, logo abaixo do botão */
 .cfg-resultado { margin-top: 8px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent, #c8743a) 14%, transparent); font-size: 13px; line-height: 1.4; }
+
+/* Resultado do cashback e do site (Visão geral do CRM) */
+.res-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 10px; margin: 2px 0 16px; }
+.res-kpi { background: var(--page); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.res-kpi .k-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.res-kpi .k-valor { font-family: var(--font-serif); font-size: 28px; font-weight: 600; line-height: 1.15; margin: 6px 0 4px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.res-kpi.destaque { border-color: color-mix(in srgb, var(--brand) 45%, var(--border)); }
+.res-kpi.destaque .k-valor { color: var(--brand); }
+.res-kpi .k-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
+.res-tbl { font-size: 13.5px; }
+.res-tbl tbody th, .res-tbl tfoot th { text-align: left; font-weight: 600; color: var(--text-primary); }
+.res-tbl td, .res-tbl tbody th, .res-tbl tfoot th { padding-top: 9px; padding-bottom: 9px; vertical-align: middle; }
+.res-tbl small { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+.res-tbl tfoot td, .res-tbl tfoot th { border-top: 2px solid var(--baseline); font-weight: 700; }
+.res-tbl tfoot small { font-weight: 400; }
+.res-nota { font-size: 12px; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
+.secao-titulo { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin: 30px 2px 10px; font-family: var(--font-sans); }
+@media (max-width: 560px) {
+  .res-kpi .k-valor { font-size: 24px; }
+  .res-tbl { font-size: 12.5px; }
+}
