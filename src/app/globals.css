@@ -1723,7 +1723,9 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .res-kpi.destaque .k-valor { color: var(--brand); }
 .res-kpi .k-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
 .res-tbl { font-size: 13.5px; }
-.res-tbl tbody th, .res-tbl tfoot th { text-align: left; font-weight: 600; color: var(--text-primary); }
+.res-tbl tbody th, .res-tbl tfoot th { text-align: left; font-weight: 600; color: var(--text-primary); text-transform: none; letter-spacing: 0; font-size: 13.5px; }
+.res-tbl th.n, .res-tbl td.n { width: 17%; min-width: 110px; }
+.res-tbl tbody th { border-top: 1px solid var(--border); padding-left: 8px; padding-right: 8px; white-space: normal; }
 .res-tbl td, .res-tbl tbody th, .res-tbl tfoot th { padding-top: 9px; padding-bottom: 9px; vertical-align: middle; }
 .res-tbl small { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
 .res-tbl tfoot td, .res-tbl tfoot th { border-top: 2px solid var(--baseline); font-weight: 700; }

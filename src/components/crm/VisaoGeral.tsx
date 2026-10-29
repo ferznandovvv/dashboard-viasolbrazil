@@ -899,7 +899,14 @@ function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: Vo
               <tr key={loja}>
                 <th scope="row">{loja}</th>
                 <td className="n">
-                  {cb?.vendasComCashback ? (
+                  {cb?.vendasComCashback && !cb.comprasComCashback ? (
+                    <>
+                      <span className="muted">–</span>
+                      <small>
+                        {cb.vendasComCashback} {cb.vendasComCashback === 1 ? "uso" : "usos"} sem a venda do dia
+                      </small>
+                    </>
+                  ) : cb?.vendasComCashback ? (
                     <>
                       <b>{reais(cb.comprasComCashback)}</b>
                       <small>
@@ -997,7 +1004,7 @@ function SiteMes({ s }: { s: ResumoSiteMes }) {
               <tr key={l.campanha}>
                 <th scope="row">
                   {l.nome}
-                  {l.simuladas > 0 && <small>{l.simuladas} simuladas</small>}
+                  {s.sombra && l.simuladas > 0 && <small>{l.simuladas} simuladas</small>}
                 </th>
                 <td className="n">{l.enviadas}</td>
                 <td className="n">
