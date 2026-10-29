@@ -191,6 +191,8 @@ export interface DashboardData {
     avgPieces: number;
     /** Lojas em que ela vendeu no período */
     stores: string[];
+    /** Só na linha "sem vendedora": as notas, para conferir na TOTVS */
+    notas?: { label: string; createdAt: string; total: number; customer?: string }[];
   }[];
   /** Vendas por dia da semana × hora */
   hours: { dow: number; hour: number; revenue: number; orders: number }[];

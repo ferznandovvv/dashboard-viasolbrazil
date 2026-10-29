@@ -428,6 +428,29 @@ export default function Dashboard() {
                 {v.stores.length === 1 ? `${v.stores[0]} · ` : `${v.stores.join(", ")} · `}
                 ticket {brl.format(v.avgTicket)} · {v.avgPieces.toFixed(1)} peças/venda
               </span>
+              {v.notas && v.notas.length > 0 && (
+                <details className="rank-notas">
+                  <summary>{v.notas.length === 1 ? "Ver a nota sem vendedora" : `Ver as ${v.notas.length} notas sem vendedora`}</summary>
+                  <ul tabIndex={0} aria-label="Notas sem vendedora">
+                    {v.notas.map((n) => (
+                      <li key={`${n.label}-${n.createdAt}`}>
+                        <span>
+                          {new Date(n.createdAt).toLocaleString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            timeZone: "America/Sao_Paulo",
+                          })}
+                        </span>
+                        <b>Nota {n.label}</b>
+                        <span className="rank-notas-cli">{n.customer ?? ""}</span>
+                        <span className="num">{brl.format(n.total)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           ))}
         </div>

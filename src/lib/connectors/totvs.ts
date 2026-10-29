@@ -537,7 +537,8 @@ function variante(opts: OpcoesTotvs): string {
 }
 
 const PREFIXO = "totvs/mes-";
-const PREFIXO_DIA = "totvsdia/";
+// v2: relida uma vez para pegar as vendedoras corrigidas na TOTVS depois de guardadas
+const PREFIXO_DIA = "totvsdia2/";
 // v2: vendedora pela venda de antes da devolução (a v1 pegava a venda nova da troca)
 const PREFIXO_DIA_DEV = "totvsdevdia2/";
 const PREFIXO_PROD = "totvsprod/";
@@ -587,6 +588,8 @@ const diaDaNota = (o: NormalizedOrder) => o.createdAt.slice(0, 10);
 /**
  * Mês ainda em aberto: cada dia fechado é guardado no Blob separadamente e os
  * últimos 3 dias são sempre buscados de novo, porque ainda recebem ajuste.
+ * Nota mais antiga do mês alterada nesses dias (vendedora corrigida, nota
+ * cancelada) vem junto na mesma consulta e substitui a guardada.
  * Só vale para a busca leve de todas as filiais, que é o caminho quente.
  */
 async function mesEmAberto(
@@ -608,7 +611,7 @@ async function mesEmAberto(
   const guardados = await lerBlobs<NormalizedOrder[]>(prefixoDia, cacheaveis);
   const faltando = cacheaveis.filter((d) => !guardados.has(d));
 
-  const orders: NormalizedOrder[] = [];
+  let orders: NormalizedOrder[] = [];
   for (const d of cacheaveis) {
     const salvo = guardados.get(d);
     if (salvo) {
@@ -637,9 +640,40 @@ async function mesEmAberto(
   }
 
   if (recentes.length) {
-    const r = await buscarTotvs(recentes[0], fim, hoje, opts);
+    // A janela de alteração é a dos últimos dias, mas vale qualquer emissão do mês
+    const r = await buscarTotvs(inicio, fim, hoje, opts, recentes[0]);
     if (r.error) erro = erro ?? r.error;
-    else orders.push(...r.orders);
+    else {
+      const novas = r.orders.filter((o) => diaDaNota(o) > corte);
+      const alteradas = new Map(r.orders.filter((o) => diaDaNota(o) <= corte).map((o) => [o.id, o]));
+      const saem = new Set(r.descartadas ?? []);
+      const mudaram = new Set<string>();
+      const atualizadas: NormalizedOrder[] = [];
+      for (const o of orders) {
+        const nova = alteradas.get(o.id);
+        if (saem.has(o.id) && !nova) {
+          mudaram.add(diaDaNota(o));
+          continue;
+        }
+        if (nova) {
+          alteradas.delete(o.id);
+          if (JSON.stringify(nova) !== JSON.stringify(o)) mudaram.add(diaDaNota(o));
+        }
+        atualizadas.push(nova ?? o);
+      }
+      // Nota antiga que não estava guardada (passou a contar só agora)
+      for (const o of alteradas.values()) {
+        atualizadas.push(o);
+        mudaram.add(diaDaNota(o));
+      }
+      orders = atualizadas;
+      await Promise.all(
+        Array.from(mudaram)
+          .filter((d) => cacheaveis.includes(d))
+          .map((d) => gravarBlob(prefixoDia, d, orders.filter((o) => diaDaNota(o) === d)))
+      );
+      orders.push(...novas);
+    }
   }
 
   return { channel: "lojas", connected: true, error: erro, orders };
@@ -713,14 +747,18 @@ async function porMeses(from: string, to: string, opts: OpcoesTotvs): Promise<Ch
 /**
  * `from`/`to` recortam a data de emissão; `changeAte` estende a janela de
  * alteração, porque a API só filtra por alteração e uma nota do fim do mês
- * costuma ser alterada no mês seguinte.
+ * costuma ser alterada no mês seguinte. `changeDe` começa a janela de
+ * alteração depois da emissão, para achar só as notas mexidas há pouco.
+ * `descartadas` são as notas do recorte que não contam (cancelada, por
+ * exemplo): se estavam guardadas, saem.
  */
 async function buscarTotvs(
   from: string,
   to: string,
   changeAte = to,
-  opts: OpcoesTotvs = {}
-): Promise<ChannelResult> {
+  opts: OpcoesTotvs = {},
+  changeDe = from
+): Promise<ChannelResult & { descartadas?: string[] }> {
   const orders: NormalizedOrder[] = [];
   try {
     const hoje = new Date().toISOString().slice(0, 10);
@@ -743,12 +781,16 @@ async function buscarTotvs(
     });
 
     const devs: { o: NormalizedOrder; pessoa?: string; itens: string[] }[] = [];
+    const descartadas: string[] = [];
     const coletar = (itens: TotvsInvoice[]) => {
       for (const inv of itens) {
         const data = (inv.invoiceDate ?? "").slice(0, 10);
         if (data < from || data > to) continue;
         if (opts.devolucoes) {
-          if (!isDevolucao(inv)) continue;
+          if (!isDevolucao(inv)) {
+            descartadas.push(`dev-${inv.branchCode}-${inv.invoiceSequence}`);
+            continue;
+          }
           const loja = LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`;
           const o: NormalizedOrder = {
             channel: "lojas",
@@ -779,7 +821,10 @@ async function buscarTotvs(
           });
           continue;
         }
-        if (!isVenda(inv)) continue;
+        if (!isVenda(inv)) {
+          descartadas.push(`${inv.branchCode}-${inv.invoiceSequence}`);
+          continue;
+        }
         const loja = LOJAS[inv.branchCode] ?? `Filial ${inv.branchCode}`;
         orders.push({
           channel: "lojas",
@@ -809,7 +854,7 @@ async function buscarTotvs(
       }
     };
 
-    for (const j of janelas(from, changeAte > hoje ? hoje : changeAte)) {
+    for (const j of janelas(changeDe, changeAte > hoje ? hoje : changeAte)) {
       medidas.paginas += 1;
       const primeira = await totvsFetch(INVOICES, corpo(j, 1));
       if (primeira.status !== 200) {
@@ -837,7 +882,7 @@ async function buscarTotvs(
 
     if (devs.length) await vendedoraDaVendaOriginal(devs);
     await nomearVendedoras(orders);
-    return { channel: "lojas", connected: true, orders };
+    return { channel: "lojas", connected: true, orders, descartadas };
   } catch (e) {
     return {
       channel: "lojas",

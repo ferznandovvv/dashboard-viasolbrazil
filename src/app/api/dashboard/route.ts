@@ -505,7 +505,14 @@ export async function GET(req: NextRequest) {
   const SEM_VEND = "Sem vendedora no caixa";
   const vendMap = new Map<
     string,
-    { name: string; revenue: number; orders: number; pieces: number; stores: Set<string> }
+    {
+      name: string;
+      revenue: number;
+      orders: number;
+      pieces: number;
+      stores: Set<string>;
+      notas?: { label: string; createdAt: string; total: number; customer?: string }[];
+    }
   >();
   for (const o of current) {
     if (o.channel !== "lojas") continue;
@@ -519,6 +526,11 @@ export async function GET(req: NextRequest) {
     e.orders += contaComoPedido(o) ? 1 : 0;
     e.pieces += o.qty ?? 0;
     if (o.store) e.stores.add(o.store);
+    // Quais notas ficaram sem vendedora, para a loja conferir uma a uma
+    if (!o.seller && contaComoPedido(o)) {
+      e.notas ??= [];
+      if (e.notas.length < 150) e.notas.push({ label: o.label, createdAt: o.createdAt, total: o.total, customer: o.customer });
+    }
     vendMap.set(nome, e);
   }
   const sellers = Array.from(vendMap.values())
@@ -530,6 +542,7 @@ export async function GET(req: NextRequest) {
       avgTicket: v.orders ? v.revenue / v.orders : 0,
       avgPieces: v.orders ? v.pieces / v.orders : 0,
       stores: Array.from(v.stores).sort(),
+      ...(v.notas ? { notas: v.notas } : {}),
     }))
     // A linha das vendas sem identificação fica sempre por último, para não
     // disputar posição com quem tem nome

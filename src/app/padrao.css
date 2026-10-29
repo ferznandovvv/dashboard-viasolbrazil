@@ -363,3 +363,17 @@ tr.venda-aberta td { border-bottom-color: transparent; background: var(--page); 
 /* No celular a tabela rola para o lado: o detalhe fica preso à largura visível */
 .orders-table-wrap { container-type: inline-size; }
 .venda-det-linha .venda-det { position: sticky; left: var(--e-3); max-width: calc(100cqw - 2 * var(--e-3)); }
+
+/* ——— Vendas: notas sem vendedora, para conferir na TOTVS ——— */
+.rank-notas { margin-top: var(--e-1); font-size: var(--fs-2); }
+.rank-notas summary { cursor: pointer; color: var(--brand); font-weight: 600; min-height: 28px; display: inline-flex; align-items: center; }
+.rank-notas ul { list-style: none; margin: var(--e-1) 0 var(--e-2); max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-1); }
+.rank-notas li { display: grid; grid-template-columns: 96px 110px minmax(0, 1fr) auto; gap: var(--e-2); padding: 6px var(--e-3); border-top: 1px solid var(--grid); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.rank-notas li:first-child { border-top: 0; }
+.rank-notas li b { color: var(--text-primary); font-weight: 600; }
+.rank-notas-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-notas .num { text-align: right; color: var(--text-primary); }
+@media (max-width: 640px) {
+  .rank-notas li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .rank-notas-cli { display: none; }
+}
