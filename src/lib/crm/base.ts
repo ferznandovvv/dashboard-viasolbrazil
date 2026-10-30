@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { type BaseCrm, CONFIG_PADRAO, MODELOS_PADRAO, oficialDe } from "./tipos";
 import { normalizarTelefone } from "./telefone";
+import { pedeParaSair } from "./sair";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm");
 const ARQUIVO = join(PASTA, "base.json");
@@ -638,6 +639,23 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     id: "sessoes-de-volta-2026-10-27",
     aplicar: (b) => {
       for (const n of b.config.numeros) delete n.ligarEm;
+    },
+  },
+  {
+    // SAIR que não era pedido de sair ("me tira uma dúvida", propaganda com "digite SAIR"):
+    // volta a poder receber, e o cadastro dela também
+    id: "sair-falso-2026-10-30",
+    aplicar: (b) => {
+      for (const [tel, x] of Object.entries(b.naoContatar ?? {})) {
+        if (!x.texto || pedeParaSair(x.texto)) continue;
+        delete b.naoContatar![tel];
+        for (const c of b.clientes) {
+          if (c.telefone !== tel || !c.optOut) continue;
+          if (c.optOutEm && Math.abs(Date.parse(c.optOutEm) - Date.parse(x.em)) > 6 * 3600000) continue;
+          c.optOut = false;
+          delete c.optOutEm;
+        }
+      }
     },
   },
   {

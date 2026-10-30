@@ -6,6 +6,7 @@
  * Roda a cada 20 segundos pelo agendador quando o sistema está na máquina.
  */
 
+import { pedeParaSair } from "./sair";
 import { adaptadorDe } from "./envio/adaptador";
 import { CloudApi } from "./envio/cloudApi";
 import { alterarBase, hojeSp, lerBase, primeiroNome } from "./base";
@@ -309,19 +310,6 @@ export interface EventoRecebido {
  * lista", "não quero mais receber", "parem de mandar"). "Cancelar a compra"
  * ou "pare aí na frente" não contam.
  */
-export function pedeParaSair(texto?: string): boolean {
-  const t = (texto ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!t) return false;
-  if (/(quero sair|sair da (lista|lista de transmissao)|me (tira|tire|retira|retire|remove|remova|exclui|exclua|descadastra)|descadastr|nao (quero|desejo) (mais )?(receber|mensage)|(para|param|parar|pare|parem) de (me )?(mandar|enviar)|nao (me )?(mand|envi)(e|em) mais|remov(e|er|a) (meu|o meu) (numero|contato)|nao tenho interesse)/.test(t)) return true;
-  const sobra = t.replace(/\b(por favor|pfv|pf|obrigad[ao]s?|obg|ok|ta|eu|quero|so)\b/g, " ").replace(/\s+/g, " ").trim();
-  return /^(sair|sai|parar|pare|stop|cancelar|descadastrar|remover|chega)$/.test(sobra);
-}
 
 /**
  * A mensagem já está no atendimento? Pelo código do WhatsApp; para as gravadas
@@ -489,3 +477,5 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
   }
   return feito;
 }
+
+export { pedeParaSair };
