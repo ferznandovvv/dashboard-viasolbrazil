@@ -88,9 +88,9 @@ export async function criarCupom(c: Cliente, codigo: string, valor: number, vali
  * qualquer cadastro (muita gente fecha como convidada), mas o uso único segura.
  * Não junta com outro cupom.
  */
-export async function criarCupomCarrinho(codigo: string, pct: number, ate: string): Promise<{ id?: string; erro?: string }> {
+export async function criarCupomCarrinho(codigo: string, pct: number, ate: string, titulo = `Carrinho ${codigo} (${pct}%)`): Promise<{ id?: string; erro?: string }> {
   const base = {
-    title: `Carrinho ${codigo} (${pct}%)`,
+    title: titulo,
     code: codigo,
     startsAt: new Date().toISOString(),
     endsAt: ate,
@@ -262,7 +262,8 @@ export function conferirCupons(b: BaseCrm, pedidos: PedidoComCupom[]): { baixas:
       k.usadoNaLoja = "Site";
       k.compraValor = parseFloat(p.totalPriceSet.shopMoney.amount);
       nossos.delete(k.codigo);
-      b.cashback.push({ id: novoId(), clienteId: k.clienteId, tipo: "resgate", valor: -k.valor, loja: "Site", codigo: k.codigo, obs: `Cupom usado no site, pedido ${p.name}`, criadoEm: new Date().toISOString(), por: "site" });
+      // Cupom de oferta (aniversário) não mexe no cashback
+      if (k.valor > 0) b.cashback.push({ id: novoId(), clienteId: k.clienteId, tipo: "resgate", valor: -k.valor, loja: "Site", codigo: k.codigo, obs: `Cupom usado no site, pedido ${p.name}`, criadoEm: new Date().toISOString(), por: "site" });
       baixas++;
     }
   }
@@ -297,4 +298,43 @@ export async function desativarCupons(ids: string[]): Promise<number> {
     });
   }
   return n;
+}
+
+/**
+ * Código de oferta (aniversário) vale também no site: cria o cupom na Shopify
+ * com o mesmo código, % em tudo, uma vez, até a validade. Usado na loja, o
+ * cupom é desativado na conferência dos pedidos (como o do cashback).
+ */
+export async function garantirCuponsDeOferta(): Promise<number> {
+  if (!env("SHOPIFY_ADMIN_TOKEN")) return 0;
+  const trava = globalThis as unknown as { __cuponsOferta?: boolean };
+  if (trava.__cuponsOferta) return 0;
+  trava.__cuponsOferta = true;
+  try {
+    const b = await lerBase();
+    const hoje = hojeSp();
+    const simuladas = new Set(b.mensagens.filter((m) => m.status === "simulada").map((m) => m.id));
+    const falta = b.codigos.filter(
+      (k) => (k.campanha === "aniversario" || k.campanha === "aniversario_site") && k.oferta && !k.shopifyId && !k.usadoEm && k.validade >= hoje && !(k.mensagemId && simuladas.has(k.mensagemId))
+    );
+    let n = 0;
+    for (const k of falta) {
+      const pct = Number(k.oferta!.match(/(\d+(?:[.,]\d+)?)\s*%/)?.[1]?.replace(",", "."));
+      if (!pct) continue;
+      const nome = b.clientes.find((c) => c.id === k.clienteId)?.nome.split(/\s+/)[0] ?? "";
+      const r = await criarCupomCarrinho(k.codigo, pct, `${k.validade}T23:59:59-03:00`, `Aniversário ${nome} ${k.codigo} (${pct}%)`);
+      if (!r.id) {
+        console.error(`[crm] cupom de aniversário ${k.codigo}: ${r.erro}`);
+        continue;
+      }
+      await alterarBase((bb) => {
+        const kk = bb.codigos.find((x) => x.codigo === k.codigo);
+        if (kk) kk.shopifyId = r.id;
+      });
+      n++;
+    }
+    return n;
+  } finally {
+    trava.__cuponsOferta = false;
+  }
 }

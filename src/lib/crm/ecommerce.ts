@@ -22,7 +22,7 @@ import "../credenciais";
 import { alterarBase, lerBase } from "./base";
 import { salvarCliente } from "./clientes";
 import { enfileirar, viaOficial } from "./mensagens";
-import { conferirCupons, criarCupomCarrinho, desativarCupons, escoposShopify } from "./cupomShopify";
+import { conferirCupons, criarCupomCarrinho, desativarCupons, escoposShopify, garantirCuponsDeOferta } from "./cupomShopify";
 import { gerarCodigo } from "./cashback";
 import { CloudApi } from "./envio/cloudApi";
 
@@ -574,6 +574,7 @@ export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
   if (rodando || !env("SHOPIFY_ADMIN_TOKEN")) return null;
   rodando = true;
   await conferirEscopos();
+  await garantirCuponsDeOferta().catch(() => 0);
   try {
     const agora = Date.now();
     // 2 dias: o 2º aviso do carrinho sai 24 h depois do 1º

@@ -5,7 +5,7 @@
 
 import { alterarBase, diasEntre, hojeSp, lerBase, novoId, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
-import { JUNTO, campanhaDoCredito, creditosParaAviso, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
+import { JUNTO, campanhaDoCredito, creditosParaAviso, garantirCuponsDeOferta, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
 import { resumir } from "./clientes";
 import { assinatura, compraMinimaPara, conta as contaNoLimite, ehMarketing, enfileirar, renderizar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
@@ -199,10 +199,12 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
       // A partir do dia 1 (a chave por ano garante uma vez só); quem já fez aniversário quando a campanha ligou fica de fora
       if (c.nascimento.slice(5, 7) !== mes || c.nascimento.slice(8, 10) < hoje.slice(8, 10)) continue;
     } else if (c.nascimento.slice(5) !== mmdd) continue;
-    // O código vale no caixa: cliente só do site, sem loja na cidade, fica de fora
+    // O código vale na loja e no site. Cliente só do site, sem loja na cidade, recebe o aviso do site
     const lojaAniv = c.lojaOrigem === "Site" || !c.lojaOrigem ? lojaNaCidade(c) : c.lojaOrigem;
-    if (!lojaAniv) continue;
-    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: lojaAniv, variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
+    const chave = `aniv-${c.id}-${hoje.slice(0, 4)}`;
+    if (lojaAniv) tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: lojaAniv, variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave }));
+    // (sai 15 min depois: dá tempo de o cupom ser criado na Shopify)
+    else tentar("aniversario_site", enfileirar(b, { cliente: c, campanha: "aniversario_site", loja: "Site", variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave, naoAntesDe: new Date(Date.now() + 15 * 60000).toISOString() }));
   }
 
   // Pós-venda
@@ -245,8 +247,11 @@ export async function rodarAutomacoes(forcar = false): Promise<ResultadoAutomaco
   const hoje = hojeSp();
   // Cupons do site na Shopify antes: o aviso leva o código
   if (forcar || (await lerBase()).config.ultimaAutomacao !== hoje) await prepararCuponsSite(lojaNaCidade).catch((e) => console.error("[crm] cupons do site:", e instanceof Error ? e.message : e));
-  return alterarBase((b) => {
+  const r = await alterarBase((b) => {
     if (!forcar && b.config.ultimaAutomacao === hoje) return null;
     return rodarAutomacoesEm(b, hoje);
   });
+  // Código de aniversário vale no site também
+  await garantirCuponsDeOferta().catch((e) => console.error("[crm] cupons de aniversário:", e instanceof Error ? e.message : e));
+  return r;
 }

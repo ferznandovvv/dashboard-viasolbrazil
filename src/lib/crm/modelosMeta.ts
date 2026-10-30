@@ -71,13 +71,23 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
   },
   {
     campanha: "aniversario",
-    nome: "via_sol_aniversario",
+    nome: "via_sol_aniversario_loja",
     categoria: "MARKETING",
     corpo:
-      "Oi {{1}}, aqui é a {{2}}, da Via Sol {{3}} ☀️ É o mês do seu aniversário e a gente separou um presente: {{4}} em qualquer compra na loja até o fim do mês. É só falar o código {{5}} no caixa. Feliz aniversário! 🎉",
+      "Oi {{1}}, aqui é a {{2}}, da Via Sol {{3}} ☀️ É o mês do seu aniversário e a gente separou um presente: {{4}} em qualquer compra até o fim do mês, na loja ou no site. É só usar o código {{5}} no caixa ou no checkout do site. Feliz aniversário! 🎉",
     exemplo: ["Ana", "Valeska", "Fiusa", "15% de desconto", "K7M2QX"],
     rodape: SAIR,
     botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
+  {
+    campanha: "aniversario_site",
+    nome: "via_sol_aniversario_site",
+    categoria: "MARKETING",
+    corpo:
+      "Oi {{1}}! É o mês do seu aniversário e a Via Sol separou um presente: {{2}} em qualquer compra no site até o fim do mês, com o código {{3}}. É só tocar no botão que o desconto já entra no carrinho. Feliz aniversário! 🎉",
+    exemplo: ["Ana", "15% de desconto", "K7M2QX"],
+    rodape: SAIR,
+    botao: { texto: "Usar no site", base: "https://viasolbrazil.com.br/discount/", exemploSufixo: "K7M2QX" },
   },
   // Cashback das lojas: assina a vendedora e o botão abre o WhatsApp da loja, pra conversa seguir com ela.
   // A Meta não aceita wa.me no botão: vai viasolbrazil.com.br/w/<loja>, que redireciona (linkLoja.ts)

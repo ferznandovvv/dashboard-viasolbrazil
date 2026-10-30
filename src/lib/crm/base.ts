@@ -677,10 +677,28 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
       const m = b.modelos.find((x) => x.campanha === "aniversario");
       if (m) {
         m.ativo = true;
-        m.template = { nome: "via_sol_aniversario", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "oferta", "codigo"], botaoLink: true, botaoVar: "whatsLoja" };
+        m.template = { nome: "via_sol_aniversario_loja", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "oferta", "codigo"], botaoLink: true, botaoVar: "whatsLoja" };
       }
       const of = b.config.oficial;
       if (of?.campanhas && !of.campanhas.includes("aniversario")) of.campanhas.push("aniversario");
+    },
+  },
+  {
+    // Aniversário de cliente só do site (sem loja na cidade): código vale no site
+    id: "aniversario-site-v1",
+    aplicar: (b) => {
+      const of = b.config.oficial;
+      if (of?.campanhas && !of.campanhas.includes("aniversario_site")) of.campanhas.push("aniversario_site");
+      const m = MODELOS_PADRAO.find((x) => x.campanha === "aniversario_site");
+      if (m && !b.modelos.some((x) => x.campanha === "aniversario_site")) b.modelos.push(structuredClone(m));
+    },
+  },
+  {
+    // Modelo do aniversário fala que o código vale na loja e no site
+    id: "aniversario-loja-e-site",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "aniversario");
+      if (m?.template) m.template.nome = "via_sol_aniversario_loja";
     },
   },
   {

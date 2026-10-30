@@ -155,6 +155,7 @@ export type TipoCampanha =
   | "cashback_vencendo"
   | "cashback_vencendo_urgente"
   | "aniversario"
+  | "aniversario_site"
   | "reativacao"
   | "pos_venda"
   | "boas_vindas"
@@ -173,7 +174,8 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
   { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
   { id: "cashback_repescagem", nome: "Repescagem do cashback", dica: "Cashback que venceu sem uso volta por 7 dias (uma vez só), quando você manda a repescagem num mês fraco", marketing: false },
-  { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta", marketing: true },
+  { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta; o código vale na loja e no site", marketing: true },
+  { id: "aniversario_site", nome: "Aniversário (cliente do site, sem loja perto)", dica: "Mesma oferta, com o código pra usar no site", marketing: true },
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
   { id: "carrinho_abandonado", nome: "Carrinho abandonado (site)", dica: "Deixou o telefone no checkout e não fechou: uma mensagem, com o link do carrinho", marketing: false },
@@ -596,6 +598,14 @@ export const LOJA_CIDADE: Record<string, string> = {
 
 export const MODELOS_PADRAO: Modelo[] = [
   {
+    campanha: "aniversario_site",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}! É o mês do seu aniversário e a Via Sol separou um presente: {oferta} em qualquer compra no site até o fim do mês, com o código {codigo}. Feliz aniversário! 🎉",
+    ],
+    template: { nome: "via_sol_aniversario_site", idioma: "pt_BR", parametros: ["primeiro", "oferta", "codigo"], botaoLink: true, botaoVar: "codigo" },
+  },
+  {
     campanha: "cashback_repescagem",
     ativo: true,
     // Pela API oficial sai o modelo via_sol_cashback_reativado; este texto vale pelo número da loja
@@ -699,10 +709,10 @@ export const MODELOS_PADRAO: Modelo[] = [
     campanha: "aniversario",
     ativo: true,
     variacoes: [
-      "{primeiro}, mês do seu aniversário chegou! 🎉 Aqui é a {vendedora}, da Via Sol {loja}. Pra comemorar, durante todo o mês você tem {oferta} em qualquer peça da loja. É só falar o código {codigo} no caixa. Te espero!",
-      "Oi {primeiro}, é a {vendedora}, da Via Sol {loja} ☀️ Esse mês é o seu, então separei um presente: {oferta} em qualquer compra até o fim do mês. Seu código é {codigo}, é só mostrar pra gente no caixa. Feliz aniversário adiantado!",
+      "{primeiro}, mês do seu aniversário chegou! 🎉 Aqui é a {vendedora}, da Via Sol {loja}. Pra comemorar, durante todo o mês você tem {oferta} em qualquer peça, aqui na loja ou no site. É só usar o código {codigo} no caixa ou no checkout. Te espero!",
+      "Oi {primeiro}, é a {vendedora}, da Via Sol {loja} ☀️ Esse mês é o seu, então separei um presente: {oferta} em qualquer compra até o fim do mês, na loja ou no site. Seu código é {codigo}, é só mostrar no caixa ou usar no checkout. Feliz aniversário adiantado!",
     ],
-    template: { nome: "via_sol_aniversario", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "oferta", "codigo"], botaoLink: true, botaoVar: "whatsLoja" },
+    template: { nome: "via_sol_aniversario_loja", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "oferta", "codigo"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "pos_venda",

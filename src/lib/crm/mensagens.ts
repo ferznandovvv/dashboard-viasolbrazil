@@ -280,7 +280,7 @@ export function motivoBloqueio(base: BaseCrm, c: Cliente, campanha: TipoCampanha
 /** Até quando vale o código da oferta: aniversário, o mês todo; o resto, 45 dias. */
 function validadeDaOferta(campanha: TipoCampanha): string {
   const hoje = hojeSp();
-  if (campanha !== "aniversario") return somarDias(hoje, 45);
+  if (campanha !== "aniversario" && campanha !== "aniversario_site") return somarDias(hoje, 45);
   const [a, m] = hoje.split("-").map(Number);
   return somarDias(`${m === 12 ? a + 1 : a}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`, -1);
 }
