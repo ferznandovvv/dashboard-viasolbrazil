@@ -659,6 +659,31 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Repescagem do cashback: modelo novo e sai pelo número oficial
+    id: "repescagem-v1",
+    aplicar: (b) => {
+      const of = b.config.oficial;
+      if (of?.campanhas && !of.campanhas.includes("cashback_repescagem")) of.campanhas.push("cashback_repescagem");
+      const m = MODELOS_PADRAO.find((x) => x.campanha === "cashback_repescagem");
+      if (m && !b.modelos.some((x) => x.campanha === "cashback_repescagem")) b.modelos.push(structuredClone(m));
+    },
+  },
+  {
+    // Aniversário ligado com 15%, pelo número oficial (Ribeirão e Fiusa pelo número delas)
+    id: "aniversario-15-2026-10-30",
+    aplicar: (b) => {
+      b.config.aniversarioOferta = "15% de desconto";
+      b.config.aniversarioQuando = "inicio_mes";
+      const m = b.modelos.find((x) => x.campanha === "aniversario");
+      if (m) {
+        m.ativo = true;
+        m.template = { nome: "via_sol_aniversario", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "oferta", "codigo"], botaoLink: true, botaoVar: "whatsLoja" };
+      }
+      const of = b.config.oficial;
+      if (of?.campanhas && !of.campanhas.includes("aniversario")) of.campanhas.push("aniversario");
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

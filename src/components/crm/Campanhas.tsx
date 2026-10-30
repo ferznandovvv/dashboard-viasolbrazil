@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CampanhaManual, FaixaCliente, FiltroCampanha } from "@/lib/crm/tipos";
 import type { Previa, ResultadoCampanha } from "@/lib/crm/campanhas";
+import type { PreviaRepescagem } from "@/lib/crm/repescagem";
 import { api, brl, dataHora } from "./comum";
 import { Chips, SeletorFaixas } from "./faixa";
 import { Mensagens } from "./Mensagens";
@@ -133,6 +134,8 @@ export function Campanhas({ lojas, filtroInicial, limparFiltroInicial, irPara, r
         <Mensagens recarregar={recarregar} />
       ) : (
         <>
+          <Repescagem aoFazer={carregar} />
+
           <section className="cp-ideias">
             <h2 className="cp-titulo">Começar por uma ideia</h2>
             <div className="cp-ideias-grade">
@@ -178,6 +181,107 @@ export function Campanhas({ lojas, filtroInicial, limparFiltroInicial, irPara, r
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Repescagem do cashback: pra usar no mês fraco. Mostra quanto venceu sem uso
+ * e quem recebe antes de reativar; cada cashback vencido volta uma vez só.
+ */
+function Repescagem({ aoFazer }: { aoFazer: () => Promise<void> }) {
+  const [dias, setDias] = useState(60);
+  const [minimo, setMinimo] = useState(10);
+  const [p, setP] = useState<PreviaRepescagem | null>(null);
+  const [indo, setIndo] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [erro, setErro] = useState("");
+  const carregar = useCallback(async () => {
+    setP(await api<PreviaRepescagem>("/api/crm/campanhas", { method: "POST", body: JSON.stringify({ acao: "repescagem-previa", dias, minimo }) }));
+  }, [dias, minimo]);
+  useEffect(() => {
+    carregar().catch(() => setP(null));
+  }, [carregar]);
+  const ate = p ? `${p.validade.slice(8, 10)}/${p.validade.slice(5, 7)}` : "";
+  const fazer = async () => {
+    if (!p?.clientes) return;
+    if (!window.confirm(`Reativar ${brl.format(p.valor)} de cashback de ${p.clientes} clientes até ${ate} e mandar o aviso pra elas?`)) return;
+    setIndo(true);
+    setMsg("");
+    setErro("");
+    try {
+      const r = await api<{ detalhe: string }>("/api/crm/campanhas", { method: "POST", body: JSON.stringify({ acao: "repescagem", dias, minimo }) });
+      setMsg(r.detalhe);
+      await carregar();
+      await aoFazer();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setIndo(false);
+    }
+  };
+  return (
+    <section className="card rp-card">
+      <div className="fin-cab">
+        <h2>Repescagem do cashback</h2>
+        <div className="seg">
+          {[30, 60, 90].map((n) => (
+            <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>
+              vencido em {n} dias
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted pg-nota">
+        Pra mês fraco: o cashback que venceu sem uso volta por 7 dias, e a cliente recebe o aviso pelo número oficial. Cada cashback vencido volta uma vez só (o que voltou e venceu de novo não volta mais). Use de vez em quando: se virar sempre, o prazo do cashback perde a força.
+      </p>
+      {!p ? (
+        <div className="muted">Carregando…</div>
+      ) : (
+        <>
+          <div className="res-kpis">
+            <div className="res-kpi destaque">
+              <div className="k-label">Clientes que recebem</div>
+              <div className="k-valor">{p.clientes}</div>
+              <div className="k-sub">valendo até {ate}</div>
+            </div>
+            <div className="res-kpi">
+              <div className="k-label">Cashback que volta</div>
+              <div className="k-valor">{brl.format(p.valor)}</div>
+              <div className="k-sub">só vira desconto se ela comprar</div>
+            </div>
+            <div className="res-kpi">
+              <div className="k-label">Valor mínimo por cliente</div>
+              <div className="k-valor rp-min">
+                R${" "}
+                <input type="number" min={0} step={5} value={minimo} onChange={(e) => setMinimo(Math.max(0, Number(e.target.value) || 0))} aria-label="Valor mínimo de cashback por cliente" />
+              </div>
+              <div className="k-sub">abaixo disso não vale a mensagem</div>
+            </div>
+          </div>
+          {p.porLoja.length > 0 && (
+            <p className="rp-lojas">
+              {p.porLoja.map((l) => (
+                <span key={l.loja}>
+                  <b>{l.loja}</b> {l.clientes} · {brl.format(l.valor)}
+                </span>
+              ))}
+            </p>
+          )}
+          {p.fora.length > 0 && <p className="muted rp-fora">Ficam de fora: {p.fora.map((f) => `${f.n} ${f.motivo}`).join(", ")}.</p>}
+          {p.ultima && <p className="muted rp-fora">Última repescagem: {dataHora(p.ultima.em)}, {p.ultima.clientes} clientes, {brl.format(p.ultima.valor)}.</p>}
+          <div className="rp-acao">
+            <button className="crm-btn" disabled={!p.clientes || indo} onClick={fazer}>
+              {indo ? "Reativando…" : p.clientes ? `Reativar e avisar ${p.clientes} ${p.clientes === 1 ? "cliente" : "clientes"}` : "Nada pra reativar agora"}
+            </button>
+            {(msg || erro) && (
+              <div className={erro ? "login-error" : "cfg-resultado"} role="status">
+                {erro || msg}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

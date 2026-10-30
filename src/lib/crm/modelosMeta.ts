@@ -59,6 +59,26 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     exemplo: ["Ana", "#12345"],
     botao: { texto: "Abrir carrinho", exemploSufixo: "cart/45678901234:1" },
   },
+  {
+    campanha: "cashback_repescagem",
+    nome: "via_sol_cashback_reativado",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. O cashback de {{2}} da sua conta Via Sol, que tinha vencido, foi reativado e vale até {{3}}. Ele pode ser usado em compras a partir de {{4}}, informando seu CPF no caixa.",
+    exemplo: ["Ana", "R$ 30,00", "07/12", "R$ 150,00"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
+  {
+    campanha: "aniversario",
+    nome: "via_sol_aniversario",
+    categoria: "MARKETING",
+    corpo:
+      "Oi {{1}}, aqui é a {{2}}, da Via Sol {{3}} ☀️ É o mês do seu aniversário e a gente separou um presente: {{4}} em qualquer compra na loja até o fim do mês. É só falar o código {{5}} no caixa. Feliz aniversário! 🎉",
+    exemplo: ["Ana", "Valeska", "Fiusa", "15% de desconto", "K7M2QX"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
   // Cashback das lojas: assina a vendedora e o botão abre o WhatsApp da loja, pra conversa seguir com ela.
   // A Meta não aceita wa.me no botão: vai viasolbrazil.com.br/w/<loja>, que redireciona (linkLoja.ts)
   {

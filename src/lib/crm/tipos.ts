@@ -81,6 +81,10 @@ export interface MovimentoCashback {
   por?: string;
   /** Estorno por devolução ou nota cancelada: id do registro em `devolucoes` */
   devolucaoId?: string;
+  /** Expiração: o crédito que venceu */
+  creditoId?: string;
+  /** Crédito da repescagem: a expiração que ele reativou (cada uma só uma vez) */
+  repescagemDe?: string;
 }
 
 /**
@@ -158,6 +162,7 @@ export type TipoCampanha =
   | "carrinho_cupom"
   | "pix_pendente"
   | "pix_expirado"
+  | "cashback_repescagem"
   | "avulsa";
 
 export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[] = [
@@ -167,6 +172,7 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "cashback_site_longe", nome: "Cashback creditado (site, sem loja perto)", dica: "Compra no site de quem mora longe das lojas: vai o código do cupom pra usar no site", marketing: false },
   { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
   { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
+  { id: "cashback_repescagem", nome: "Repescagem do cashback", dica: "Cashback que venceu sem uso volta por 7 dias (uma vez só), quando você manda a repescagem num mês fraco", marketing: false },
   { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta", marketing: true },
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
   { id: "reativacao", nome: "Reativação", dica: "Boa cliente sem comprar há meses", marketing: true },
@@ -590,6 +596,15 @@ export const LOJA_CIDADE: Record<string, string> = {
 
 export const MODELOS_PADRAO: Modelo[] = [
   {
+    campanha: "cashback_repescagem",
+    ativo: true,
+    // Pela API oficial sai o modelo via_sol_cashback_reativado; este texto vale pelo número da loja
+    variacoes: [
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Seu cashback de {valor} tinha vencido, mas liberamos ele de novo pra você, só até {validade}. Vale em compras a partir de {compraMinima}. Quando vier, me avisa, vou adorar te receber 🧡",
+    ],
+    template: { nome: "via_sol_cashback_reativado", idioma: "pt_BR", parametros: ["primeiro", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
+  },
+  {
     campanha: "carrinho_abandonado",
     ativo: true,
     // Espelho do modelo via_sol_carrinho (o texto que vale é o aprovado na Meta)
@@ -687,6 +702,7 @@ export const MODELOS_PADRAO: Modelo[] = [
       "{primeiro}, mês do seu aniversário chegou! 🎉 Aqui é a {vendedora}, da Via Sol {loja}. Pra comemorar, durante todo o mês você tem {oferta} em qualquer peça da loja. É só falar o código {codigo} no caixa. Te espero!",
       "Oi {primeiro}, é a {vendedora}, da Via Sol {loja} ☀️ Esse mês é o seu, então separei um presente: {oferta} em qualquer compra até o fim do mês. Seu código é {codigo}, é só mostrar pra gente no caixa. Feliz aniversário adiantado!",
     ],
+    template: { nome: "via_sol_aniversario", idioma: "pt_BR", parametros: ["primeiro", "vendedora", "loja", "oferta", "codigo"], botaoLink: true, botaoVar: "whatsLoja" },
   },
   {
     campanha: "pos_venda",

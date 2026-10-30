@@ -1736,3 +1736,10 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
   .res-kpi .k-valor { font-size: 24px; }
   .res-tbl { font-size: 12.5px; }
 }
+/* Repescagem do cashback */
+.rp-card .seg button { white-space: nowrap; }
+.rp-min { display: flex; align-items: baseline; gap: 6px; }
+.rp-min input { width: 90px; font: inherit; color: inherit; background: transparent; border: 0; border-bottom: 1px dashed var(--baseline); padding: 0; }
+.rp-lojas { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; margin: 0 0 8px; color: var(--text-secondary); }
+.rp-fora { font-size: 12.5px; margin: 0 0 6px; }
+.rp-acao { margin-top: 12px; display: grid; gap: 10px; justify-items: start; }

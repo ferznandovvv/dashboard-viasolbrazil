@@ -110,6 +110,8 @@ export function expirarCreditos(base: BaseCrm, hoje = hojeSp()): number {
         criadoEm: new Date().toISOString(),
         obs: `Crédito de ${c.criadoEm.slice(0, 10)} venceu em ${c.validade}`,
         por: "sistema",
+        creditoId: c.movimentoId,
+        loja: base.cashback.find((m) => m.id === c.movimentoId)?.loja,
       });
       n++;
     }

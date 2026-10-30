@@ -224,7 +224,7 @@ export interface PedidoFila {
 }
 
 /** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
-const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "boas_vindas", "carrinho_abandonado", "carrinho_cupom", "pix_pendente", "pix_expirado"];
+const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "cashback_repescagem", "boas_vindas", "carrinho_abandonado", "carrinho_cupom", "pix_pendente", "pix_expirado"];
 
 /**
  * A mensagem conta para limite e repetição? Cancelada e erro não. Simulada
@@ -243,7 +243,8 @@ export function viaOficial(base: BaseCrm, campanha: TipoCampanha, loja?: string)
   const of = oficialDe(base.config);
   if (!of.campanhas.includes(campanha)) return false;
   // Lojas que seguem pelo número próprio (as que respondem bem e não tiveram problema)
-  if (!CAMPANHAS_SITE.includes(campanha) && loja && (of.lojasPeloNumero ?? []).includes(loja)) return false;
+  // (a repescagem vale só 7 dias: vai toda pelo oficial, que não tem limite de 15 por dia)
+  if (!CAMPANHAS_SITE.includes(campanha) && campanha !== "cashback_repescagem" && loja && (of.lojasPeloNumero ?? []).includes(loja)) return false;
   if (of.token && of.phoneNumberId) return true;
   // Campanha das lojas marcada pro oficial, mas a Meta ainda não está pronta: segue pelo número da loja
   if (!CAMPANHAS_SITE.includes(campanha)) return false;
@@ -276,6 +277,14 @@ export function motivoBloqueio(base: BaseCrm, c: Cliente, campanha: TipoCampanha
   return undefined;
 }
 
+/** Até quando vale o código da oferta: aniversário, o mês todo; o resto, 45 dias. */
+function validadeDaOferta(campanha: TipoCampanha): string {
+  const hoje = hojeSp();
+  if (campanha !== "aniversario") return somarDias(hoje, 45);
+  const [a, m] = hoje.split("-").map(Number);
+  return somarDias(`${m === 12 ? a + 1 : a}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`, -1);
+}
+
 /** Põe na fila (ou, em modo sombra, registra como simulada). Devolve a mensagem ou o motivo de não ter entrado. */
 export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem; motivo?: string } {
   const c = p.cliente;
@@ -303,7 +312,7 @@ export function enfileirar(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   let codigo: string | undefined;
   if (p.oferta) {
     codigo = gerarCodigo(base);
-    base.codigos.push({ codigo, clienteId: c.id, valor: 0, oferta: p.oferta, campanha: p.campanha, mensagemId: id, criadoEm: new Date().toISOString(), validade: somarDias(hojeSp(), 45) });
+    base.codigos.push({ codigo, clienteId: c.id, valor: 0, oferta: p.oferta, campanha: p.campanha, mensagemId: id, criadoEm: new Date().toISOString(), validade: validadeDaOferta(p.campanha) });
   }
   const ref = lojaRef ?? loja;
   const texto = p.texto?.trim()
@@ -357,14 +366,22 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
   if (dona) lojaRef = dona;
   const base0: Variaveis = { loja: lojaRef, vendedora: assinatura(base, lojaRef), compraMinima: compraMinimaPara(base, p.variaveis?.valor) };
   const v: Variaveis = { ...base0, ...p.variaveis, ...(dona ? { loja: dona, vendedora: assinatura(base, dona) } : {}) };
+  // Oferta (aniversário, reativação): código único que a vendedora digita no caixa
+  const idMsg = novoId();
+  let codigo: string | undefined;
+  if (p.oferta) {
+    codigo = gerarCodigo(base);
+    v.codigo = codigo;
+  }
   // Botão: link curto do site (/w/<loja>) que redireciona pro WhatsApp da loja (a Meta não aceita wa.me no botão)
   v.whatsLoja ??= sufixoWhatsLoja(base, v.lojaProxima ?? lojaRef);
   const t = modelo.template;
   const botao = t?.botaoLink ? (t.botaoVar && t.botaoVar !== "link" ? valorDaVariavel(t.botaoVar, c, v) : sufixoDoLink(v.link)) : undefined;
   if (!of.sombra && t?.botaoLink && !botao) return { motivo: t.botaoVar === "whatsLoja" ? `sem o link do WhatsApp da loja ${v.lojaProxima ?? lojaRef} (número em Configurar › Números)` : "sem o link do botão" };
   const texto = renderizar(modelo.variacoes.find((x) => x.trim()) ?? "", c, lojaRef, v);
+  if (codigo) base.codigos.push({ codigo, clienteId: c.id, valor: 0, oferta: p.oferta, campanha: p.campanha, mensagemId: idMsg, criadoEm: new Date().toISOString(), validade: validadeDaOferta(p.campanha) });
   const m: Mensagem = {
-    id: novoId(),
+    id: idMsg,
     clienteId: c.id,
     telefone: c.telefone!,
     campanha: p.campanha,

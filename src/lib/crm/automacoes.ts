@@ -191,13 +191,18 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
   const mmdd = hoje.slice(5);
   const mes = hoje.slice(5, 7);
   const inicioDoMes = b.config.aniversarioQuando === "inicio_mes";
+  // Começo do mês: no fim do mês não manda (o código valeria só uns dias)
+  const fimDoMes = inicioDoMes && Number(hoje.slice(8, 10)) > 24;
   for (const c of b.clientes) {
-    if (!c.nascimento || !participa(c.id)) continue;
+    if (!c.nascimento || !participa(c.id) || fimDoMes) continue;
     if (inicioDoMes) {
       // A partir do dia 1 (a chave por ano garante uma vez só); quem já fez aniversário quando a campanha ligou fica de fora
       if (c.nascimento.slice(5, 7) !== mes || c.nascimento.slice(8, 10) < hoje.slice(8, 10)) continue;
     } else if (c.nascimento.slice(5) !== mmdd) continue;
-    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: c.lojaOrigem === "Site" ? lojaNaCidade(c) : c.lojaOrigem, variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
+    // O código vale no caixa: cliente só do site, sem loja na cidade, fica de fora
+    const lojaAniv = c.lojaOrigem === "Site" || !c.lojaOrigem ? lojaNaCidade(c) : c.lojaOrigem;
+    if (!lojaAniv) continue;
+    tentar("aniversario", enfileirar(b, { cliente: c, campanha: "aniversario", loja: lojaAniv, variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave: `aniv-${c.id}-${hoje.slice(0, 4)}` }));
   }
 
   // Pós-venda
