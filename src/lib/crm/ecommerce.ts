@@ -25,6 +25,7 @@ import { enfileirar, viaOficial } from "./mensagens";
 import { conferirCupons, criarCupomCarrinho, desativarCupons, escoposShopify, garantirCuponsDeOferta } from "./cupomShopify";
 import { gerarCodigo } from "./cashback";
 import { CloudApi } from "./envio/cloudApi";
+import { conferirIndicacoesSite } from "./indicacao";
 
 /** Confere uma vez por processo as permissões do app da Shopify e guarda na base. */
 let escoposConferidos = false;
@@ -629,6 +630,23 @@ export async function conferirEcommerce(): Promise<ResultadoEcommerce | null> {
         if (m && m.status !== "cancelada") (b.cuponsCarrinho ??= []).push({ ...c, criadoEm: new Date().toISOString() });
         else if (c.shopifyId) desativar.push(c.shopifyId); // não entrou na fila: o cupom não vale
       }
+      // Indique uma amiga no site: pedido pago com o código de uma cliente
+      conferirIndicacoesSite(
+        b,
+        pedidos
+          .filter((p) => !p.cancelledAt && PAGO.has(p.displayFinancialStatus ?? "") && p.discountCodes?.length)
+          .map((p) => ({
+            vendaId: `shopify-${idCurto(p.id)}`,
+            pedido: p.name,
+            criadoEm: p.createdAt,
+            valor: parseFloat(p.totalPriceSet.shopMoney.amount),
+            codigos: p.discountCodes ?? [],
+            telefone: telefoneDe(p),
+            email: emailDe(p),
+            nome: (p.customer?.displayName || p.shippingAddress?.name || "").trim() || undefined,
+            clienteShopify: p.customer ? idCurto(p.customer.id) : undefined,
+          }))
+      );
       // Cupom de cashback do site: baixa de quem usou no site, e desativa o que não vale mais
       const c = conferirCupons(b, pedidos);
       if (c.baixas) console.log(`[crm] cupons do site usados: ${c.baixas}`);

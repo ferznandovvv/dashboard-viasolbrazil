@@ -14,6 +14,8 @@ import { creditosAbertos, resgatar, saldoDe, usarOferta } from "@/lib/crm/cashba
 import { resumir, salvarCliente } from "@/lib/crm/clientes";
 import { enfileirar } from "@/lib/crm/mensagens";
 import { formatarTelefone, normalizarTelefone } from "@/lib/crm/telefone";
+import { codigoDeIndicacao, indicadoraDoCodigo, registrarNaLoja, valeNaLoja } from "@/lib/crm/indicacao";
+import { indicacaoDe } from "@/lib/crm/tipos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,10 +27,13 @@ export const maxDuration = 60;
  */
 const foraDaLoja = (loja: string) => NextResponse.json({ erro: `Seu usuário não tem acesso à loja ${loja}.` }, { status: 403 });
 
-function fichaCurta(base: Awaited<ReturnType<typeof lerBase>>, id: string) {
+function fichaCurta(base: Awaited<ReturnType<typeof lerBase>>, id: string, loja?: string) {
   const c = base.clientes.find((x) => x.id === id)!;
   const r = resumir(base, c);
+  const ind = indicacaoDe(base.config);
   return {
+    // Indique uma amiga: o código dela (se já tem) e as regras, nas lojas onde vale
+    indicacao: loja && valeNaLoja(base, loja) ? { codigo: c.codigoIndicacao, pctAmiga: ind.pctAmiga, valor: ind.valorIndicadora } : undefined,
     id: c.id,
     nome: c.nome,
     telefone: formatarTelefone(c.telefone),
@@ -112,28 +117,58 @@ export async function GET(req: NextRequest) {
     const t = q.toLowerCase();
     lista = base.clientes.filter((c) => c.nome.toLowerCase().includes(t)).slice(0, 10);
   }
-  return NextResponse.json({ lojas: permitidas, clientes: lista.slice(0, 10).map((c) => fichaCurta(base, c.id)) });
+  const lojaQ = req.nextUrl.searchParams.get("loja") ?? undefined;
+  return NextResponse.json({ lojas: permitidas, clientes: lista.slice(0, 10).map((c) => fichaCurta(base, c.id, lojaQ)) });
 }
 
 type Pedido =
   | { acao: "cadastrar"; nome: string; telefone: string; nascimento?: string; cpf?: string; loja: string; optIn: boolean }
   | { acao: "resgatar"; clienteId: string; valor: number; valorCompra?: number; loja: string; codigo?: string }
-  | { acao: "codigo"; codigo: string }
+  | { acao: "codigo"; codigo: string; loja?: string }
+  | { acao: "indicacao"; codigo: string; loja: string; telefone: string; nome?: string; cpf?: string; valorCompra?: number }
+  | { acao: "meu-codigo"; clienteId: string; loja: string }
   | { acao: "usar-oferta"; codigo: string; loja: string; valorCompra?: number };
 
 export async function POST(req: NextRequest) {
   const permitidas = await lojasPermitidas(req);
   if (!permitidas) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
   const p = (await req.json().catch(() => ({}))) as Pedido;
-  if ("loja" in p && !permitidas.includes(p.loja)) return foraDaLoja(p.loja);
+  if ("loja" in p && p.loja && !permitidas.includes(p.loja)) return foraDaLoja(p.loja);
   try {
     if (p.acao === "codigo") {
       const base = await lerBase();
       const cod = base.codigos.find((x) => x.codigo === p.codigo.trim().toUpperCase());
-      if (!cod) return NextResponse.json({ erro: "Código não encontrado." }, { status: 404 });
+      if (!cod) {
+        // Código de indicação de uma cliente (indique uma amiga)
+        const ind = indicadoraDoCodigo(base, p.codigo);
+        if (ind) {
+          if (p.loja && !valeNaLoja(base, p.loja)) return NextResponse.json({ erro: `Esse é o código de indicação da ${ind.nome.split(" ")[0]}, mas o indique uma amiga ainda não está ligado nesta loja.` }, { status: 400 });
+          const cfg = indicacaoDe(base.config);
+          return NextResponse.json({ indicacao: { indicadora: ind.nome, pctAmiga: cfg.pctAmiga, valor: cfg.valorIndicadora, carenciaDias: cfg.carenciaDias } });
+        }
+        return NextResponse.json({ erro: "Código não encontrado." }, { status: 404 });
+      }
       if (cod.usadoEm) return NextResponse.json({ erro: "Esse código já foi usado." }, { status: 400 });
       if (cod.validade < hojeSp()) return NextResponse.json({ erro: "Esse código venceu." }, { status: 400 });
       return NextResponse.json({ codigo: cod, cliente: fichaCurta(base, cod.clienteId) });
+    }
+    if (p.acao === "indicacao") {
+      const ind = await alterarBase((b) => registrarNaLoja(b, { ...p, por: `caixa ${p.loja}` }));
+      const base = await lerBase();
+      const cfg = indicacaoDe(base.config);
+      const quem = base.clientes.find((c) => c.id === ind.indicadoraId)?.nome.split(" ")[0] ?? "Quem indicou";
+      return NextResponse.json({ ok: true, detalhe: `Indicação registrada. Pode dar ${cfg.pctAmiga}% de desconto na nota. ${quem} ganha R$ ${cfg.valorIndicadora} de cashback quando a compra for confirmada (em ${cfg.carenciaDias} dias).` });
+    }
+    if (p.acao === "meu-codigo") {
+      const r = await alterarBase((b) => {
+        if (!valeNaLoja(b, p.loja)) throw new Error("O indique uma amiga ainda não está ligado nesta loja.");
+        const c = b.clientes.find((x) => x.id === p.clienteId);
+        if (!c) throw new Error("Cliente não encontrada.");
+        const codigo = codigoDeIndicacao(b, c);
+        c.indicacaoDivulgadaEm ??= new Date().toISOString();
+        return codigo;
+      });
+      return NextResponse.json({ codigo: r });
     }
     if (p.acao === "usar-oferta") {
       const r = await alterarBase((b) => usarOferta(b, p.codigo, p.loja, p.valorCompra));

@@ -4,7 +4,7 @@ import { lerFaixa } from "@/lib/crm/atendimento";
 import { configurarWebhooks, urlDoWebhook, webhookQueVale } from "@/lib/crm/webhookAuto";
 import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
-import { CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type ConfigCrm, type ConfigOficial, type Modelo, type TemplateMeta } from "@/lib/crm/tipos";
+import { indicacaoDe, CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type ConfigCrm, type ConfigOficial, type Modelo, type TemplateMeta } from "@/lib/crm/tipos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
 import { CloudApi } from "@/lib/crm/envio/cloudApi";
 import { normalizarTelefone } from "@/lib/crm/telefone";
@@ -262,6 +262,22 @@ export async function POST(req: NextRequest) {
           avisoVencimentoDias: num(c.avisoVencimentoDias, atual.avisoVencimentoDias, 1, 60),
           avisoVencimentoUrgenteDias: num(c.avisoVencimentoUrgenteDias, atual.avisoVencimentoUrgenteDias, 0, 30),
           aniversarioOferta: typeof c.aniversarioOferta === "string" ? c.aniversarioOferta.trim() : atual.aniversarioOferta,
+          indicacao: c.indicacao
+            ? (() => {
+                const a = indicacaoDe(atual);
+                const i = c.indicacao;
+                return {
+                  ativo: i.ativo !== undefined ? Boolean(i.ativo) : a.ativo,
+                  lojas: Array.isArray(i.lojas) ? i.lojas.map(String) : a.lojas,
+                  pctAmiga: num(i.pctAmiga, a.pctAmiga, 1, 50),
+                  valorIndicadora: num(i.valorIndicadora, a.valorIndicadora, 1, 500),
+                  maxMes: num(i.maxMes, a.maxMes, 1, 50),
+                  carenciaDias: num(i.carenciaDias, a.carenciaDias, 0, 30),
+                  conviteDias: num(i.conviteDias, a.conviteDias, 1, 60),
+                  conviteMinimo: num(i.conviteMinimo, a.conviteMinimo, 0, 100000),
+                };
+              })()
+            : atual.indicacao,
           aniversarioQuando: c.aniversarioQuando === "dia" || c.aniversarioQuando === "inicio_mes" ? c.aniversarioQuando : atual.aniversarioQuando,
           reativacaoFaixas: Array.isArray(c.reativacaoFaixas)
             ? c.reativacaoFaixas

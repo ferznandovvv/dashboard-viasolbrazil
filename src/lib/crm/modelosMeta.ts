@@ -89,6 +89,26 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     rodape: SAIR,
     botao: { texto: "Usar no site", base: "https://viasolbrazil.com.br/discount/", exemploSufixo: "K7M2QX" },
   },
+  {
+    campanha: "indicacao_convite",
+    nome: "via_sol_indique_amiga",
+    categoria: "MARKETING",
+    corpo:
+      "Oi {{1}}! Quer indicar a Via Sol pra uma amiga? ☀️ Com o seu código {{2}}, ela ganha {{3}} na primeira compra, na loja ou no site, e você ganha {{4}} de cashback quando ela comprar. É só passar o código pra ela!",
+    exemplo: ["Ana", "ANA7K2", "10% de desconto", "R$ 30,00"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
+  {
+    campanha: "indicacao_premio",
+    nome: "via_sol_indicacao_cashback",
+    categoria: "UTILITY",
+    corpo:
+      "Olá, {{1}}. Sua amiga {{2}} comprou com o seu código de indicação e você ganhou {{3}} de cashback na Via Sol, válido até {{4}}. Ele vale em compras a partir de {{5}}, informando seu CPF no caixa.",
+    exemplo: ["Ana", "Carla", "R$ 30,00", "07/12", "R$ 150,00"],
+    rodape: SAIR,
+    botao: { texto: "Falar com a loja", exemploSufixo: "w/fiusa" },
+  },
   // Cashback das lojas: assina a vendedora e o botão abre o WhatsApp da loja, pra conversa seguir com ela.
   // A Meta não aceita wa.me no botão: vai viasolbrazil.com.br/w/<loja>, que redireciona (linkLoja.ts)
   {

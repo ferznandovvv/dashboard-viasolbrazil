@@ -33,7 +33,65 @@ export interface Cliente {
   atualizadoEm: string;
   /** Observação livre da vendedora */
   obs?: string;
+  /** Indique uma amiga: código pessoal (vale na loja e no site) e o cupom dele na Shopify */
+  codigoIndicacao?: string;
+  indicacaoDivulgadaEm?: string;
+  indicacaoShopifyId?: string;
 }
+
+/**
+ * Indique uma amiga: a amiga comprou com o código de uma cliente. Quem indicou
+ * ganha o cashback depois da carência (se a compra não voltou).
+ */
+export interface Indicacao {
+  id: string;
+  codigo: string;
+  indicadoraId: string;
+  amigaId?: string;
+  amigaNome?: string;
+  amigaTelefone?: string;
+  amigaCpf?: string;
+  amigaEmail?: string;
+  canal: "loja" | "site";
+  loja: string;
+  /** Pedido do site (shopify-<id>) ou venda da loja, quando achada */
+  vendaId?: string;
+  pedido?: string;
+  valorCompra?: number;
+  em: string;
+  /** A partir de quando o cashback pode ser creditado (carência pra devolução) */
+  liberaEm: string;
+  status: "pendente" | "creditada" | "recusada" | "sem_venda";
+  motivo?: string;
+  creditoId?: string;
+  registradaPor?: string;
+}
+
+export interface ConfigIndicacao {
+  ativo: boolean;
+  /** Onde vale ("Site" inclui o cupom na Shopify) */
+  lojas: string[];
+  pctAmiga: number;
+  valorIndicadora: number;
+  maxMes: number;
+  carenciaDias: number;
+  /** Convite: dias depois da compra e valor mínimo da compra */
+  conviteDias: number;
+  conviteMinimo: number;
+}
+
+export const INDICACAO_PADRAO: ConfigIndicacao = {
+  ativo: false,
+  lojas: [],
+  pctAmiga: 10,
+  valorIndicadora: 30,
+  maxMes: 5,
+  carenciaDias: 7,
+  conviteDias: 10,
+  conviteMinimo: 200,
+};
+
+export const indicacaoDe = (cfg: Pick<ConfigCrm, "indicacao">): ConfigIndicacao => ({ ...INDICACAO_PADRAO, ...cfg.indicacao });
 
 export interface Venda {
   id: string;
@@ -164,6 +222,8 @@ export type TipoCampanha =
   | "pix_pendente"
   | "pix_expirado"
   | "cashback_repescagem"
+  | "indicacao_convite"
+  | "indicacao_premio"
   | "avulsa";
 
 export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketing: boolean }[] = [
@@ -174,6 +234,8 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
   { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
   { id: "cashback_repescagem", nome: "Repescagem do cashback", dica: "Cashback que venceu sem uso volta por 7 dias (uma vez só), quando você manda a repescagem num mês fraco", marketing: false },
+  { id: "indicacao_convite", nome: "Indique uma amiga: convite", dica: "Uns dias depois de uma compra boa: o código dela, a amiga ganha desconto e ela ganha cashback", marketing: true },
+  { id: "indicacao_premio", nome: "Indique uma amiga: ganhou", dica: "A amiga comprou com o código e passou a carência: avisa o cashback que ela ganhou", marketing: false },
   { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta; o código vale na loja e no site", marketing: true },
   { id: "aniversario_site", nome: "Aniversário (cliente do site, sem loja perto)", dica: "Mesma oferta, com o código pra usar no site", marketing: true },
   { id: "pos_venda", nome: "Pós-venda", dica: "Alguns dias depois da compra", marketing: false },
@@ -425,6 +487,8 @@ export interface NumeroWhatsapp {
 }
 
 export interface ConfigCrm {
+  /** Indique uma amiga */
+  indicacao?: ConfigIndicacao;
   /** Percentual de cashback sobre a compra (ex.: 5) */
   cashbackPct: number;
   /** Validade do crédito em dias */
@@ -541,6 +605,7 @@ export interface BaseCrm {
   vendas: Venda[];
   cashback: MovimentoCashback[];
   codigos: CodigoResgate[];
+  indicacoes?: Indicacao[];
   /** Cupons do 2º aviso de carrinho (criados na Shopify na hora do aviso) */
   cuponsCarrinho?: { codigo: string; checkout: string; pct: number; criadoEm: string; ate: string; shopifyId?: string }[];
   mensagens: Mensagem[];
@@ -597,6 +662,22 @@ export const LOJA_CIDADE: Record<string, string> = {
 };
 
 export const MODELOS_PADRAO: Modelo[] = [
+  {
+    campanha: "indicacao_convite",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}, aqui é a {vendedora}, da Via Sol {loja} ☀️ Quer indicar a Via Sol pra uma amiga? Com o seu código {codigo}, ela ganha {oferta} na primeira compra, aqui na loja ou no site, e você ganha {valor} de cashback quando ela comprar. É só passar o código pra ela!",
+    ],
+    template: { nome: "via_sol_indique_amiga", idioma: "pt_BR", parametros: ["primeiro", "codigo", "oferta", "valor"], botaoLink: true, botaoVar: "whatsLoja" },
+  },
+  {
+    campanha: "indicacao_premio",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}! Sua amiga {amiga} comprou com o seu código e você ganhou {valor} de cashback na Via Sol, válido até {validade} ☀️ Vale em compras a partir de {compraMinima}. Obrigada pela indicação 🧡",
+    ],
+    template: { nome: "via_sol_indicacao_cashback", idioma: "pt_BR", parametros: ["primeiro", "amiga", "valor", "validade", "compraMinima"], botaoLink: true, botaoVar: "whatsLoja" },
+  },
   {
     campanha: "aniversario_site",
     ativo: true,

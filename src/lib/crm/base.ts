@@ -702,6 +702,19 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Indique uma amiga: modelos novos, pelo número oficial (fica desligado até escolher as lojas)
+    id: "indicacao-v1",
+    aplicar: (b) => {
+      const of = b.config.oficial;
+      for (const camp of ["indicacao_convite", "indicacao_premio"] as const) {
+        if (of?.campanhas && !of.campanhas.includes(camp)) of.campanhas.push(camp);
+        const m = MODELOS_PADRAO.find((x) => x.campanha === camp);
+        if (m && !b.modelos.some((x) => x.campanha === camp)) b.modelos.push(structuredClone(m));
+      }
+      b.indicacoes ??= [];
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

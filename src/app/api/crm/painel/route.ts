@@ -12,6 +12,7 @@ import { envioPorNumero } from "@/lib/crm/envioPainel";
 import { resumoEcommerce, resumoSiteMes } from "@/lib/crm/ecommerce";
 import { cashbackDoMes, voltaramPorLoja } from "@/lib/crm/resumoMes";
 import { listarCampanhas } from "@/lib/crm/campanhas";
+import { resumoIndicacoes } from "@/lib/crm/indicacao";
 import { CAMPANHAS_SITE, oficialDe, type TipoCampanha } from "@/lib/crm/tipos";
 
 export const dynamic = "force-dynamic";
@@ -76,6 +77,7 @@ export async function GET(req: NextRequest) {
     envioNumeros: envioPorNumero(base).map((n) => ({ ...n, conectado: n.provedor === "oficial" ? null : (lojas.find((l) => l.loja === n.loja)?.conectado ?? null) })),
     ecommerce: resumoEcommerce(base, 7),
     siteMes: resumoSiteMes(base),
+    indicacoes: resumoIndicacoes(base),
     cashbackMes: cashbackDoMes(base),
     voltaram: voltaramPorLoja(base),
     // Retorno de cada campanha nos últimos 30 dias (só as que mandaram ou simularam algo)

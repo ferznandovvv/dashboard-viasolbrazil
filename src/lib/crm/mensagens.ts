@@ -15,6 +15,8 @@ export interface Variaveis {
   loja?: string;
   /** Oferta da campanha (aniversário, reativação) */
   oferta?: string;
+  /** Indique uma amiga: primeiro nome da amiga que comprou */
+  amiga?: string;
   /** Loja na cidade da cliente (cashback do site) */
   lojaProxima?: string;
   /** Cidade escrita bonito (a do cadastro pode vir sem acento) */
@@ -72,6 +74,8 @@ export function valorDaVariavel(chave: string, cliente: Cliente, v: Variaveis): 
       return v.loja ?? "";
     case "oferta":
       return v.oferta ?? "";
+    case "amiga":
+      return v.amiga ?? "sua amiga";
     default:
       return "";
   }
@@ -127,6 +131,7 @@ export function renderizar(texto: string, cliente: Cliente, loja: string, v: Var
     .replace(/\{validade\}/g, v.validade ? dataBr(v.validade) : "")
     .replace(/\{codigo\}/g, v.codigo ?? "")
     .replace(/\{oferta\}/g, v.oferta ?? "")
+    .replace(/\{amiga\}/g, v.amiga ?? "sua amiga")
     .replace(/\{lojaProxima\}/g, v.lojaProxima ?? v.loja ?? loja)
     .replace(/\{cidade\}/g, v.cidade ?? cliente.cidade ?? "")
     .replace(/\{vendedora\}/g, v.vendedora ?? "equipe")
@@ -224,7 +229,7 @@ export interface PedidoFila {
 }
 
 /** Campanhas que não contam no limite mensal: são consequência direta de uma compra dela. */
-const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "cashback_repescagem", "boas_vindas", "carrinho_abandonado", "carrinho_cupom", "pix_pendente", "pix_expirado"];
+const FORA_DO_LIMITE: TipoCampanha[] = ["cashback_creditado", "cashback_site_perto", "cashback_site_longe", "cashback_repescagem", "indicacao_premio", "boas_vindas", "carrinho_abandonado", "carrinho_cupom", "pix_pendente", "pix_expirado"];
 
 /**
  * A mensagem conta para limite e repetição? Cancelada e erro não. Simulada

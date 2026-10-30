@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigCrm, Modelo, NumeroWhatsapp } from "@/lib/crm/tipos";
+import { INDICACAO_PADRAO, type ConfigCrm, type Modelo, type NumeroWhatsapp } from "@/lib/crm/tipos";
 import { type DadosConfig, type Resumo, api, brl } from "./comum";
 import { Fontes } from "./Fontes";
 import { Importar } from "./Importar";
@@ -158,6 +158,8 @@ export function Configurar({ r, recarregar }: { r: Resumo; recarregar: () => Pro
                 </label>
               </div>
             </section>
+
+            <ConfigIndique cfg={cfg} setCfg={setCfg} />
 
             <section className="card cfg-card">
               <h2>Reativação</h2>
@@ -684,5 +686,47 @@ function ReiniciarWhats() {
       </div>
       <small>{msg || "Use depois de mudar a configuração dela ou se ela travar. As conversas perdidas nesse meio tempo o painel busca sozinho."}</small>
     </div>
+  );
+}
+
+/** Indique uma amiga: liga por loja (e no site), valores e convite. */
+function ConfigIndique({ cfg, setCfg }: { cfg: ConfigCrm; setCfg: (c: ConfigCrm) => void }) {
+  const ind = { ...INDICACAO_PADRAO, ...cfg.indicacao };
+  const mudar = (x: Partial<typeof ind>) => setCfg({ ...cfg, indicacao: { ...ind, ...x } });
+  const num = (k: keyof typeof ind) => (e: React.ChangeEvent<HTMLInputElement>) => mudar({ [k]: Number(e.target.value.replace(",", ".")) || 0 } as Partial<typeof ind>);
+  const lojas = Array.from(new Set(cfg.numeros.map((x) => x.loja).filter((l) => l !== "Loja de Fábrica")));
+  return (
+    <section className="card cfg-card">
+      <h2>Indique uma amiga</h2>
+      <div className="muted" style={{ marginBottom: 10 }}>
+        Cada cliente tem um código. A amiga ganha desconto na primeira compra (no caixa, a vendedora usa &quot;Cliente tem um código&quot;; no site, vira cupom) e quem indicou ganha cashback depois da carência, se a compra não voltou. Comece por uma loja.
+      </div>
+      <label className="cfg-check">
+        <input type="checkbox" checked={ind.ativo} onChange={(e) => mudar({ ativo: e.target.checked })} />
+        <span>
+          <b>Ligado</b>
+          <small>Só vale nas lojas marcadas abaixo</small>
+        </span>
+      </label>
+      <div className="cfg-campo">
+        <span>Onde vale</span>
+        <div className="cfg-lojas">
+          {lojas.map((l) => (
+            <label key={l} className="cfg-check-mini">
+              <input type="checkbox" checked={ind.lojas.includes(l)} onChange={(e) => mudar({ lojas: e.target.checked ? [...ind.lojas, l] : ind.lojas.filter((x) => x !== l) })} />
+              {l}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="cfg-grid">
+        <Campo rotulo="Desconto da amiga (1ª compra)" sufixo="%" valor={ind.pctAmiga} onChange={num("pctAmiga")} />
+        <Campo rotulo="Cashback de quem indicou" prefixo="R$" valor={ind.valorIndicadora} onChange={num("valorIndicadora")} dica="Usar segue a regra de sempre (compra mínima)" />
+        <Campo rotulo="Máximo de amigas por mês" valor={ind.maxMes} onChange={num("maxMes")} />
+        <Campo rotulo="Carência antes de pagar" sufixo="dias" valor={ind.carenciaDias} onChange={num("carenciaDias")} dica="Tempo pra troca ou devolução" />
+        <Campo rotulo="Convite: dias depois da compra" valor={ind.conviteDias} onChange={num("conviteDias")} />
+        <Campo rotulo="Convite: só compra a partir de" prefixo="R$" valor={ind.conviteMinimo} onChange={num("conviteMinimo")} />
+      </div>
+    </section>
   );
 }

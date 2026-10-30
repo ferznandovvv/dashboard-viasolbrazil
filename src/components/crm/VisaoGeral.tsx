@@ -9,6 +9,7 @@ import type { LinhaEnvio } from "@/lib/crm/envioPainel";
 import type { ResumoEcommerce, ResumoSiteMes } from "@/lib/crm/ecommerce";
 import type { CashbackMes, VoltaramLoja } from "@/lib/crm/resumoMes";
 import type { ResultadoCampanha } from "@/lib/crm/campanhas";
+import type { ResumoIndicacoes } from "@/lib/crm/indicacao";
 
 type Loja = CardLoja & { conectado: boolean | null; detalheNumero?: string; peloWhats: { vendas: number; valor: number; pctVendas: number | null } };
 
@@ -43,6 +44,7 @@ interface Painel {
   envioNumeros?: (LinhaEnvio & { conectado: boolean | null })[];
   ecommerce?: ResumoEcommerce;
   siteMes?: ResumoSiteMes;
+  indicacoes?: ResumoIndicacoes;
   cashbackMes?: CashbackMes;
   voltaram?: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> };
   retorno?: { id: string; nome: string; manual: boolean; r: ResultadoCampanha }[];
@@ -270,6 +272,7 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
 
       {p.cashbackMes && <ResultadoCashback c={p.cashbackMes} v={p.voltaram} emAberto={r.base.saldoTotal} />}
       {p.siteMes && <SiteMes s={p.siteMes} />}
+      {p.indicacoes && (p.indicacoes.ativo || p.indicacoes.ultimas.length > 0) && <Indicacoes r={p.indicacoes} />}
       {p.retorno && p.retorno.length > 0 && <Retorno linhas={p.retorno} />}
       <ConferenciaCashback />
 
@@ -1069,6 +1072,111 @@ function Retorno({ linhas }: { linhas: { id: string; nome: string; manual: boole
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+const ROTULO_IND: Record<string, string> = { pendente: "esperando a carência", creditada: "cashback pago", recusada: "não valeu", sem_venda: "venda não achada" };
+
+/** Indique uma amiga no mês: quantas vieram, quanto venderam, quanto custou; e as que precisam de olho. */
+function Indicacoes({ r }: { r: ResumoIndicacoes }) {
+  const mes = nomeDoMes(r.mes);
+  const [msg, setMsg] = useState("");
+  const [feitas, setFeitas] = useState<Set<string>>(new Set());
+  const resolver = async (id: string, acao: "indicacao-aprovar" | "indicacao-recusar") => {
+    try {
+      const j = await api<{ detalhe: string }>("/api/crm/campanhas", { method: "POST", body: JSON.stringify({ acao, id }) });
+      setMsg(j.detalhe);
+      setFeitas(new Set([...feitas, id]));
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro");
+    }
+  };
+  return (
+    <section className="card">
+      <h2>Indique uma amiga em {mes}</h2>
+      {!r.ativo && <p className="muted pg-nota">Desligado. Liga em Configurar › Campanhas, escolhendo as lojas.</p>}
+      {r.ativo && <p className="muted pg-nota">Vale em: {r.lojas.join(", ") || "nenhuma loja marcada"}.</p>}
+      <div className="res-kpis">
+        <div className="res-kpi destaque">
+          <div className="k-label">Amigas que compraram</div>
+          <div className="k-valor">{r.compraram}</div>
+          <div className="k-sub">{r.pendentes ? `${r.pendentes} esperando a carência` : "clientes novas"}</div>
+        </div>
+        <div className="res-kpi">
+          <div className="k-label">Vendas das amigas</div>
+          <div className="k-valor">{reais(r.vendas)}</div>
+          <div className="k-sub">primeira compra</div>
+        </div>
+        <div className="res-kpi">
+          <div className="k-label">Cashback pago</div>
+          <div className="k-valor">{reais(r.cashback)}</div>
+          <div className="k-sub">pra quem indicou{r.recusadas ? ` · ${r.recusadas} não valeram` : ""}</div>
+        </div>
+      </div>
+      {r.conferir.filter((i) => !feitas.has(i.id)).length > 0 && (
+        <>
+          <h3 className="cap-sub">Pra conferir: a venda da amiga não apareceu</h3>
+          <ul className="pend-lista">
+            {r.conferir
+              .filter((i) => !feitas.has(i.id))
+              .map((i) => (
+                <li key={i.id} className="pend">
+                  <div className="pend-quem">
+                    <span className="pend-loja">{i.loja}</span>
+                    <b>{i.amigaNome ?? "Amiga"}</b>
+                    <small>{i.amigaTelefone ? formatarTelefone(i.amigaTelefone) : ""} · indicada por {i.indicadora ?? "?"}</small>
+                  </div>
+                  <p className="pend-texto">
+                    Registrada no caixa em {dataHora(i.em)}
+                    {i.valorCompra ? `, compra de ${reais(i.valorCompra)}` : ""}. A venda não apareceu na TOTVS com esse celular.
+                  </p>
+                  <div className="pend-tempo">
+                    <button className="mini" onClick={() => resolver(i.id, "indicacao-aprovar")}>
+                      Pagar cashback
+                    </button>
+                    <button className="mini ghost" onClick={() => resolver(i.id, "indicacao-recusar")}>
+                      Recusar
+                    </button>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+      {msg && <div className="cfg-resultado" role="status">{msg}</div>}
+      {r.ultimas.length > 0 && (
+        <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Últimas indicações" style={{ marginTop: 12 }}>
+          <table className="prod-tbl res-tbl">
+            <thead>
+              <tr>
+                <th scope="col">Amiga</th>
+                <th scope="col">Indicada por</th>
+                <th scope="col" className="n">Compra</th>
+                <th scope="col">Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.ultimas.map((i) => (
+                <tr key={i.id}>
+                  <th scope="row">
+                    {i.amigaNome ?? "Amiga"}
+                    <small>
+                      {i.loja} · {dataBr(i.em.slice(0, 10))}
+                    </small>
+                  </th>
+                  <td>{i.indicadora ?? "–"}</td>
+                  <td className="n">{i.valorCompra ? reais(i.valorCompra) : "–"}</td>
+                  <td>
+                    {ROTULO_IND[i.status]}
+                    {i.motivo && i.status !== "creditada" ? <small>{i.motivo}</small> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

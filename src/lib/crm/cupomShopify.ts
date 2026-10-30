@@ -19,7 +19,7 @@ import { alterarBase, hojeSp, lerBase, novoId, somarDias } from "./base";
 import { motivoBloqueio, viaOficial } from "./mensagens";
 import { creditosAbertos, gerarCodigo } from "./cashback";
 import { creditoLiquidoDaVenda } from "./devolucoes";
-import { oficialDe, type BaseCrm, type Cliente, type MovimentoCashback, type TipoCampanha, type Venda } from "./tipos";
+import { indicacaoDe, oficialDe, type BaseCrm, type Cliente, type MovimentoCashback, type TipoCampanha, type Venda } from "./tipos";
 
 const VERSOES = ["2026-10", "2025-01"];
 
@@ -336,5 +336,62 @@ export async function garantirCuponsDeOferta(): Promise<number> {
     return n;
   } finally {
     trava.__cuponsOferta = false;
+  }
+}
+
+/**
+ * Indique uma amiga no site: o código de cada cliente que já recebeu (convite
+ * ou mostrado no caixa) vira cupom de % na Shopify, uma vez por cliente. O
+ * "só primeira compra" e o limite do mês são conferidos depois, na hora de
+ * pagar o cashback de quem indicou.
+ */
+export async function garantirCuponsIndicacao(): Promise<number> {
+  if (!env("SHOPIFY_ADMIN_TOKEN")) return 0;
+  const trava = globalThis as unknown as { __cuponsIndic?: boolean };
+  if (trava.__cuponsIndic) return 0;
+  trava.__cuponsIndic = true;
+  try {
+    const b = await lerBase();
+    const cfg = indicacaoDe(b.config);
+    if (!cfg.ativo || !cfg.lojas.includes("Site")) return 0;
+    const falta = b.clientes.filter((c) => c.codigoIndicacao && c.indicacaoDivulgadaEm && !c.indicacaoShopifyId).slice(0, 50);
+    let n = 0;
+    for (const c of falta) {
+      const base = {
+        title: `Indicação ${c.nome.split(/\s+/)[0]} ${c.codigoIndicacao} (${cfg.pctAmiga}%)`,
+        code: c.codigoIndicacao,
+        startsAt: new Date().toISOString(),
+        customerGets: { value: { percentage: cfg.pctAmiga / 100 }, items: { all: true } },
+        appliesOncePerCustomer: true,
+        usageLimit: 50,
+        combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
+      };
+      let id: string | undefined;
+      for (const [i, versao] of VERSOES.entries()) {
+        const d = i === 0 ? { ...base, context: { all: "ALL" } } : { ...base, customerSelection: { all: true } };
+        try {
+          const r = await shopify(CRIAR, { d }, versao);
+          if (r.errors?.length) continue;
+          const p = r.data?.discountCodeBasicCreate as { codeDiscountNode?: { id: string }; userErrors: { message: string }[] } | undefined;
+          if (p?.userErrors?.length) {
+            console.error(`[crm] cupom de indicação ${c.codigoIndicacao}: ${p.userErrors.map((e) => e.message).join("; ")}`);
+            break;
+          }
+          id = p?.codeDiscountNode?.id;
+          if (id) break;
+        } catch {
+          /* tenta a outra versão */
+        }
+      }
+      if (!id) continue;
+      await alterarBase((bb) => {
+        const cc = bb.clientes.find((x) => x.id === c.id);
+        if (cc) cc.indicacaoShopifyId = id;
+      });
+      n++;
+    }
+    return n;
+  } finally {
+    trava.__cuponsIndic = false;
   }
 }

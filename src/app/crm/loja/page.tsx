@@ -68,6 +68,7 @@ interface FichaCashback {
   creditos: { valor: number; validade: string }[];
   multiploCompra: number;
   maxPctDaCompra: number;
+  indicacao?: { codigo?: string; pctAmiga: number; valor: number };
 }
 
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: v >= 1000 ? 0 : 2 });
@@ -99,6 +100,7 @@ export default function PainelDaLoja() {
   const [erro, setErro] = useState("");
   const [pronto, setPronto] = useState(false);
   const [cashback, setCashback] = useState(false);
+  const [codigo, setCodigo] = useState(false);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -199,6 +201,11 @@ export default function PainelDaLoja() {
               Cliente veio usar o cashback
             </button>
           )}
+          {p && (
+            <button className="crm-btn ghost lp-btn-cashback" onClick={() => setCodigo(true)}>
+              Cliente tem um código
+            </button>
+          )}
           {lojas.length > 1 && (
             <select className="fin-select" value={loja} onChange={(e) => escolher(e.target.value)} aria-label="Trocar loja">
               {lojas.map((l) => (
@@ -217,6 +224,7 @@ export default function PainelDaLoja() {
         <Conteudo p={p} buscar={buscar} />
       )}
       {cashback && p && <UsarCashback loja={loja} buscar={buscar} fechar={() => setCashback(false)} />}
+      {codigo && p && <CodigoNaLoja loja={loja} buscar={buscar} fechar={() => setCodigo(false)} />}
     </main>
   );
 }
@@ -611,12 +619,12 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
       return;
     }
     const t = setTimeout(() => {
-      buscar<{ clientes: FichaCashback[] }>(`/api/crm/loja?q=${encodeURIComponent(q)}`)
+      buscar<{ clientes: FichaCashback[] }>(`/api/crm/loja?q=${encodeURIComponent(q)}&loja=${encodeURIComponent(loja)}`)
         .then((r) => setLista(r.clientes))
         .catch((e) => setErro(e.message));
     }, 300);
     return () => clearTimeout(t);
-  }, [q, buscar]);
+  }, [q, buscar, loja]);
 
   const valorCompra = lerValor(compra);
   const teto = sel ? (sel.multiploCompra > 0 ? valorCompra / sel.multiploCompra : sel.maxPctDaCompra > 0 ? (valorCompra * sel.maxPctDaCompra) / 100 : sel.saldo) : 0;
@@ -670,6 +678,7 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
               <b>{reais(sel.saldo)}</b>
               <small>{sel.creditos.length ? `de cashback, o primeiro vence em ${sel.creditos[0].validade.slice(8, 10)}/${sel.creditos[0].validade.slice(5, 7)}` : "sem cashback válido"}</small>
             </div>
+            {sel.indicacao && <CodigoIndicacao ficha={sel} loja={loja} buscar={buscar} />}
             {sel.saldo > 0 && (
               <>
                 {compraPraTudo > 0 && (
@@ -721,6 +730,199 @@ function UsarCashback({ loja, buscar, fechar }: { loja: string; buscar: Buscar; 
             <button className="link" onClick={() => setSel(null)} style={{ marginTop: 10 }}>
               buscar outra cliente
             </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Na ficha da cliente: o código dela pra indicar amigas (cria na hora, se ainda não tem). */
+function CodigoIndicacao({ ficha, loja, buscar }: { ficha: FichaCashback; loja: string; buscar: Buscar }) {
+  const [cod, setCod] = useState(ficha.indicacao?.codigo ?? "");
+  const [erro, setErro] = useState("");
+  const ind = ficha.indicacao!;
+  const gerar = async () => {
+    setErro("");
+    try {
+      const r = await buscar<{ codigo: string }>("/api/crm/loja", { acao: "meu-codigo", clienteId: ficha.id, loja });
+      setCod(r.codigo);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    }
+  };
+  return (
+    <div className="lp-indica">
+      <div>
+        <span>Indique uma amiga</span>
+        {cod ? <b>{cod}</b> : <button className="link" onClick={gerar}>mostrar o código dela</button>}
+      </div>
+      <small>
+        A amiga ganha {ind.pctAmiga}% na primeira compra (loja ou site) e {ficha.nome.split(" ")[0]} ganha {reais(ind.valor)} de cashback quando ela comprar.
+      </small>
+      {erro && <small className="login-error">{erro}</small>}
+    </div>
+  );
+}
+
+interface RespCodigo {
+  codigo?: { codigo: string; valor: number; oferta?: string; validade: string; clienteId: string };
+  cliente?: FichaCashback;
+  indicacao?: { indicadora: string; pctAmiga: number; valor: number; carenciaDias: number };
+}
+
+/**
+ * A cliente chegou com um código: aniversário (oferta), cashback do site ou
+ * indicação de uma amiga. O painel diz o que é e o que fazer.
+ */
+function CodigoNaLoja({ loja, buscar, fechar }: { loja: string; buscar: Buscar; fechar: () => void }) {
+  const [texto, setTexto] = useState("");
+  const [r, setR] = useState<RespCodigo | null>(null);
+  const [compra, setCompra] = useState("");
+  const [tel, setTel] = useState("");
+  const [nome, setNome] = useState("");
+  const [erro, setErro] = useState("");
+  const [feito, setFeito] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const valorCompra = lerValor(compra);
+
+  const conferir = async () => {
+    setErro("");
+    setR(null);
+    setOcupado(true);
+    try {
+      setR(await buscar<RespCodigo>("/api/crm/loja", { acao: "codigo", codigo: texto, loja }));
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setOcupado(false);
+    }
+  };
+  const fazer = async (corpo: object, msg: (j: Record<string, unknown>) => string) => {
+    setErro("");
+    setOcupado(true);
+    try {
+      const j = await buscar<Record<string, unknown>>("/api/crm/loja", corpo);
+      setFeito(msg(j));
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro");
+    } finally {
+      setOcupado(false);
+    }
+  };
+  const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+  return (
+    <div className="crm-fundo" onClick={fechar} onKeyDown={(e) => e.key === "Escape" && fechar()}>
+      <div className="crm-janela" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Código da cliente">
+        <div className="fin-cab">
+          <h2>Código da cliente</h2>
+          <button className="link" onClick={fechar}>
+            fechar
+          </button>
+        </div>
+        {feito ? (
+          <>
+            <div className="crm-aviso">{feito}</div>
+            <button className="crm-btn grande" onClick={fechar}>
+              Pronto
+            </button>
+          </>
+        ) : (
+          <>
+            <form
+              className="lp-cod-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (texto.trim()) conferir();
+              }}
+            >
+              <label className="crm-campo">
+                <span>Código que ela recebeu (aniversário, cashback ou de uma amiga)</span>
+                <input value={texto} onChange={(e) => setTexto(e.target.value.toUpperCase())} autoFocus autoCapitalize="characters" placeholder="ex.: K7M2QX" />
+              </label>
+              <button className="crm-btn" disabled={!texto.trim() || ocupado}>
+                {ocupado && !r ? "Conferindo…" : "Conferir"}
+              </button>
+            </form>
+
+            {r?.codigo?.oferta && r.cliente && (
+              <>
+                <div className="lp-saldo">
+                  <span>{r.cliente.nome}</span>
+                  <b>{r.codigo.oferta}</b>
+                  <small>código de presente, vale até {dm(r.codigo.validade)}</small>
+                </div>
+                <label className="crm-campo">
+                  <span>Valor da compra</span>
+                  <input value={compra} onChange={(e) => setCompra(e.target.value)} inputMode="decimal" placeholder="R$ 0,00" />
+                </label>
+                <p className="lp-regra">Dê o desconto na nota e marque o código como usado (ele deixa de valer, inclusive no site).</p>
+                <button
+                  className="crm-btn grande"
+                  disabled={ocupado}
+                  onClick={() => fazer({ acao: "usar-oferta", codigo: r.codigo!.codigo, loja, valorCompra: valorCompra || undefined }, () => `Código ${r.codigo!.codigo} usado. ${r.codigo!.oferta} pra ${r.cliente!.nome.split(" ")[0]}.`)}
+                >
+                  Marcar como usado
+                </button>
+              </>
+            )}
+
+            {r?.codigo && !r.codigo.oferta && r.cliente && (
+              <>
+                <div className="lp-saldo">
+                  <span>{r.cliente.nome}</span>
+                  <b>{reais(r.codigo.valor)}</b>
+                  <small>código de cashback, vale até {dm(r.codigo.validade)}</small>
+                </div>
+                <label className="crm-campo">
+                  <span>Valor da compra</span>
+                  <input value={compra} onChange={(e) => setCompra(e.target.value)} inputMode="decimal" placeholder="R$ 0,00" />
+                </label>
+                <button
+                  className="crm-btn grande"
+                  disabled={ocupado || !valorCompra}
+                  onClick={() =>
+                    fazer({ acao: "resgatar", clienteId: r.cliente!.id, valor: r.codigo!.valor, valorCompra, loja, codigo: r.codigo!.codigo }, (j) => `Baixa de ${reais(r.codigo!.valor)} feita. Sobrou ${reais(Number(j.saldo) || 0)} de cashback.`)
+                  }
+                >
+                  Dar baixa de {reais(r.codigo.valor)}
+                </button>
+              </>
+            )}
+
+            {r?.indicacao && (
+              <>
+                <div className="lp-saldo">
+                  <span>Indicação da {r.indicacao.indicadora}</span>
+                  <b>{r.indicacao.pctAmiga}% de desconto</b>
+                  <small>só na primeira compra da amiga</small>
+                </div>
+                <label className="crm-campo">
+                  <span>Celular da amiga</span>
+                  <input value={tel} onChange={(e) => setTel(e.target.value)} inputMode="tel" placeholder="(16) 99999-8888" />
+                </label>
+                <label className="crm-campo">
+                  <span>Nome da amiga</span>
+                  <input value={nome} onChange={(e) => setNome(e.target.value)} />
+                </label>
+                <label className="crm-campo">
+                  <span>Valor da compra</span>
+                  <input value={compra} onChange={(e) => setCompra(e.target.value)} inputMode="decimal" placeholder="R$ 0,00" />
+                </label>
+                <p className="lp-regra">
+                  O painel confere se ela é cliente nova. Use o mesmo celular no cadastro da venda: é por ele que a {r.indicacao.indicadora.split(" ")[0]} recebe os {reais(r.indicacao.valor)} em {r.indicacao.carenciaDias} dias.
+                </p>
+                <button
+                  className="crm-btn grande"
+                  disabled={ocupado || tel.replace(/\D/g, "").length < 10}
+                  onClick={() => fazer({ acao: "indicacao", codigo: texto, loja, telefone: tel, nome, valorCompra: valorCompra || undefined }, (j) => String(j.detalhe ?? "Indicação registrada."))}
+                >
+                  Registrar e dar o desconto
+                </button>
+              </>
+            )}
+            {erro && <div className="login-error">{erro}</div>}
           </>
         )}
       </div>

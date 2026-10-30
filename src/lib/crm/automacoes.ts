@@ -5,7 +5,8 @@
 
 import { alterarBase, diasEntre, hojeSp, lerBase, novoId, somarDias } from "./base";
 import { creditosAbertos, expirarCreditos, vencendoAte } from "./cashback";
-import { JUNTO, campanhaDoCredito, creditosParaAviso, garantirCuponsDeOferta, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
+import { JUNTO, campanhaDoCredito, creditosParaAviso, garantirCuponsDeOferta, garantirCuponsIndicacao, prepararCuponsSite, sombraDaCampanha } from "./cupomShopify";
+import { convitesIndicacao, liberarIndicacoes } from "./indicacao";
 import { resumir } from "./clientes";
 import { assinatura, compraMinimaPara, conta as contaNoLimite, ehMarketing, enfileirar, renderizar } from "./mensagens";
 import { LOJA_CIDADE, type BaseCrm, type Cliente } from "./tipos";
@@ -207,6 +208,10 @@ export function rodarAutomacoesEm(b: BaseCrm, hoje = hojeSp()): ResultadoAutomac
     else tentar("aniversario_site", enfileirar(b, { cliente: c, campanha: "aniversario_site", loja: "Site", variaveis: { oferta: b.config.aniversarioOferta }, oferta: b.config.aniversarioOferta, chave, naoAntesDe: new Date(Date.now() + 15 * 60000).toISOString() }));
   }
 
+  // Indique uma amiga: paga quem indicou (passada a carência) e convida quem comprou bem
+  liberarIndicacoes(b, hoje);
+  convitesIndicacao(b, hoje, (c, loja) => (loja === "Site" ? (lojaNaCidade(c) ?? "Site") : loja), (res) => tentar("indicacao_convite", res as Parameters<typeof tentar>[1]));
+
   // Pós-venda
   const diaPos = somarDias(hoje, -b.config.posVendaDias);
   for (const v of b.vendas) {
@@ -253,5 +258,6 @@ export async function rodarAutomacoes(forcar = false): Promise<ResultadoAutomaco
   });
   // Código de aniversário vale no site também
   await garantirCuponsDeOferta().catch((e) => console.error("[crm] cupons de aniversário:", e instanceof Error ? e.message : e));
+  await garantirCuponsIndicacao().catch((e) => console.error("[crm] cupons de indicação:", e instanceof Error ? e.message : e));
   return r;
 }

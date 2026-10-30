@@ -3,6 +3,7 @@ import { alterarBase, lerBase } from "@/lib/crm/base";
 import { type PedidoCampanha, cancelarCampanha, criarCampanha, listarCampanhas, previa } from "@/lib/crm/campanhas";
 import type { FiltroCampanha } from "@/lib/crm/tipos";
 import { fazerRepescagem, previaRepescagem } from "@/lib/crm/repescagem";
+import { creditarIndicacao } from "@/lib/crm/indicacao";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -17,7 +18,8 @@ type Pedido =
   | ({ acao: "criar" } & PedidoCampanha)
   | { acao: "cancelar"; id: string }
   | { acao: "repescagem-previa"; dias?: number; minimo?: number }
-  | { acao: "repescagem"; dias?: number; minimo?: number };
+  | { acao: "repescagem"; dias?: number; minimo?: number }
+  | { acao: "indicacao-aprovar" | "indicacao-recusar"; id: string };
 
 const filtroLimpo = (f: Partial<FiltroCampanha> | undefined): FiltroCampanha => {
   const num = (v: unknown) => (Number(v) > 0 ? Number(v) : undefined);
@@ -54,6 +56,19 @@ export async function POST(req: NextRequest) {
           ? `Pronto: ${r.clientes} ${r.clientes === 1 ? "cliente teve" : "clientes tiveram"} o cashback reativado (${r.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}) e os avisos entraram na fila.${fora ? ` Ficaram de fora: ${fora}.` : ""}`
           : `Ninguém pra reativar agora.${fora ? ` Ficaram de fora: ${fora}.` : ""}`,
       });
+    }
+    if (p.acao === "indicacao-aprovar" || p.acao === "indicacao-recusar") {
+      const r = await alterarBase((b) => {
+        const ind = (b.indicacoes ?? []).find((i) => i.id === p.id);
+        if (!ind || (ind.status !== "sem_venda" && ind.status !== "pendente")) throw new Error("Essa indicação já foi resolvida.");
+        if (p.acao === "indicacao-aprovar") creditarIndicacao(b, ind);
+        else {
+          ind.status = "recusada";
+          ind.motivo = "recusada no painel";
+        }
+        return ind.status as string;
+      });
+      return NextResponse.json({ ok: true, detalhe: r === "creditada" ? "Cashback creditado e aviso na fila." : "Indicação recusada." });
     }
     if (p.acao === "cancelar") return NextResponse.json({ canceladas: await alterarBase((b) => cancelarCampanha(b, p.id)) });
     return NextResponse.json({ erro: "Ação desconhecida." }, { status: 400 });
