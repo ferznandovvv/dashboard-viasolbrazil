@@ -205,6 +205,18 @@ export async function diagnostico(token: string, igId: string, appSecret: string
     tenta("negocios", "/me/businesses", { fields: "id,name", limit: "20" }),
     tenta("ig", `/${igId}`, { fields: "id,username,name" }),
     tenta("live", `/${igId}/live_media`, { fields: "id" }),
+    tenta("paginaDaConta", `/${igId}`, { fields: "id,username,business_discovery.username(viasolbrazil){id}" }),
+    tenta("pagina194", "/194190540438357", { fields: "id,name,instagram_business_account{id,username},connected_instagram_account{id,username}" }),
   ]);
-  return { ...Object.fromEntries(r), raiox: appSecret ? await raioXToken(token, appSecret) : "sem segredo" };
+  // Envio de teste com um comentário inexistente: o tipo do erro diz se o caminho aceita DM
+  const envio = async (caminho: string) => {
+    try {
+      await chamar(caminho, token, { base: GRAPH_FB, method: "POST", body: { recipient: { comment_id: "0" }, message: { text: "teste" } } });
+      return "aceitou";
+    } catch (e) {
+      return `ERRO: ${e instanceof Error ? e.message : String(e)}${e instanceof ErroIg ? ` (${e.codigo}/${e.sub})` : ""}`;
+    }
+  };
+  const envios = { [`${igId}/messages`]: await envio(`/${igId}/messages`), "me/messages": await envio("/me/messages") };
+  return { ...Object.fromEntries(r), envios, raiox: appSecret ? await raioXToken(token, appSecret) : "sem segredo" };
 }
