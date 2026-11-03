@@ -67,10 +67,10 @@ export async function marcarPorEmail(arquivo: string, tag: string): Promise<void
       let ids: string[] = [];
       try {
         const q = lote.map((e) => `email:"${e}"`).join(" OR ");
-        const d = await gql(`query($q: String!) { customers(first: 100, query: $q) { nodes { id email tags } } }`, { q });
-        const nodes = ((d.customers as { nodes: { id: string; email: string | null; tags: string[] }[] }) ?? { nodes: [] }).nodes;
+        const d = await gql(`query($q: String!) { customers(first: 100, query: $q) { nodes { id defaultEmailAddress { emailAddress } tags } } }`, { q });
+        const nodes = ((d.customers as { nodes: { id: string; defaultEmailAddress: { emailAddress: string } | null; tags: string[] }[] }) ?? { nodes: [] }).nodes;
         const doLote = new Set(lote);
-        const certos = nodes.filter((n) => n.email && doLote.has(n.email.toLowerCase()));
+        const certos = nodes.filter((n) => n.defaultEmailAddress && doLote.has(n.defaultEmailAddress.emailAddress.toLowerCase()));
         progressoMarcar.achadas += certos.length;
         progressoMarcar.jaTinham += certos.filter((n) => n.tags.includes(tag)).length;
         ids = certos.filter((n) => !n.tags.includes(tag)).map((n) => n.id);
