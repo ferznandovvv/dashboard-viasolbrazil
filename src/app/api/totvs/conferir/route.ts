@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LOJAS, type TotvsInvoice, fetchTotvsSales, isDevolucao, isVenda, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { LOJAS, SITUACOES_DE_VENDA, type TotvsInvoice, fetchTotvsSales, isDevolucao, isVenda, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 import { type SwaggerDoc, contrato } from "@/lib/swagger";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ const codigoOp = (n: Nota) => n.operationCode ?? n.operatioCode ?? n.operationId
 
 /** Por que a nota de saída não entrou como venda no painel. */
 function motivo(n: Nota): string {
-  if (n.invoiceStatus !== "Issued") return `situação ${n.invoiceStatus}`;
+  if (!SITUACOES_DE_VENDA.has(n.invoiceStatus)) return `situação ${n.invoiceStatus}`;
   const op = n.operatioName ?? "";
   if (!/VENDA/i.test(op)) return "o nome da operação não tem VENDA";
   const m = /DEVOL|TRANSF|REMESSA|BONIFIC|BRINDE|COMODATO|AMOSTRA/i.exec(op);
@@ -137,12 +137,12 @@ export async function GET(req: NextRequest) {
     corpo = `
 <p>${esc(nomeLoja)}, ${String(m).padStart(2, "0")}/${a}. Notas buscadas agora direto na TOTVS (alteradas até ${ate.split("-").reverse().join("/")}).</p>
 <table class="tot">
-<tr><td>Vendas com nota fiscal (${vendas.length} notas)</td><td class="n">${brl(somar(vendas))}</td></tr>
+<tr><td>Vendas, com nota fiscal e documento interno (${vendas.length} notas)</td><td class="n">${brl(somar(vendas))}</td></tr>
 <tr><td>Devoluções (${devolucoes.length} notas)</td><td class="n">−${brl(somar(devolucoes))}</td></tr>
 <tr><td><b>Pela regra do painel</b></td><td class="n"><b>${brl(liquido)}</b></td></tr>
 <tr><td>O que o painel mostra hoje (com o que está guardado)</td><td class="n">${brl(noPainel)}</td></tr>
 </table>
-<p class="obs">Venda sem nota fiscal não aparece em nenhuma linha acima: a busca do painel é de notas fiscais. Se o relatório da TOTVS der mais, a diferença está em transações sem nota.</p>
+<p class="obs">A venda sem nota fiscal entra como documento interno (situação Normal). Se o relatório da TOTVS ainda der diferente, ela está nas notas que ficaram fora, abaixo.</p>
 <h2>Dia a dia</h2>
 <table><tr><th>Dia</th><th class="n">Vendas</th><th class="n">Devoluções</th><th class="n">Painel</th><th class="n">Notas de saída fora</th></tr>${linhasDia}</table>
 <h2>Notas de saída que o painel não conta</h2>

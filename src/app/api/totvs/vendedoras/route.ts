@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { LOJAS, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
+import { LOJAS, SITUACOES_DE_VENDA, totvsConfigured, totvsFetch } from "@/lib/connectors/totvs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,7 +24,7 @@ interface Nota {
 
 /** Só as vendas que o dashboard conta, para o diagnóstico bater com o ranking. */
 function isVenda(n: Nota): boolean {
-  if (n.invoiceStatus !== "Issued") return false;
+  if (!SITUACOES_DE_VENDA.has(n.invoiceStatus)) return false;
   const op = n.operatioName ?? "";
   if (!/VENDA/i.test(op)) return false;
   return !/DEVOL|TRANSF|REMESSA|BONIFIC|BRINDE|COMODATO|AMOSTRA/i.test(op);

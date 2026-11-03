@@ -10,7 +10,7 @@
  * resposta crua para acertar o mapeamento com dado real.
  */
 
-import { LOJAS, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
+import { LOJAS, SITUACOES_DE_VENDA, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
 import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
 import { conciliarVendas, registrarVenda, salvarCliente } from "./clientes";
 import { aplicarCancelamento, aplicarDevolucao, type DevolucaoLida } from "./devolucoes";
@@ -39,7 +39,7 @@ const num = (o: Obj, ...nomes: string[]): number | undefined => {
 
 /** Só conta venda de verdade (mesma regra do dashboard). */
 function ehVenda(inv: Obj): boolean {
-  if (inv.operationType !== "Output" || inv.invoiceStatus !== "Issued") return false;
+  if (inv.operationType !== "Output" || !SITUACOES_DE_VENDA.has(String(inv.invoiceStatus))) return false;
   const op = String(inv.operatioName ?? inv.operationName ?? "");
   if (!/VENDA/i.test(op)) return false;
   return !/DEVOL|TRANSF|REMESSA|BONIFIC|BRINDE|COMODATO|AMOSTRA/i.test(op);

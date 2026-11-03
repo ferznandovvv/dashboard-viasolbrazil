@@ -330,10 +330,18 @@ export interface TotvsInvoice {
   }[];
 }
 
-/** Só conta venda de verdade: saída, emitida e de operação de venda. */
+/**
+ * Situação de uma venda que vale: "Issued" é a nota fiscal emitida; "Normal"
+ * é o documento interno, a venda sem nota fiscal (operação 84, "VENDA PROPRIA
+ * E TERCEIROS DOCUMENTO INTERNO"), que não é transmitido e nunca vira Issued.
+ * Cancelada fica de fora nos dois casos.
+ */
+export const SITUACOES_DE_VENDA = new Set(["Issued", "Normal"]);
+
+/** Só conta venda de verdade: saída, emitida (ou documento interno) e de operação de venda. */
 export function isVenda(inv: TotvsInvoice): boolean {
   if (inv.operationType !== "Output") return false;
-  if (inv.invoiceStatus !== "Issued") return false;
+  if (!SITUACOES_DE_VENDA.has(inv.invoiceStatus)) return false;
   const op = inv.operatioName ?? "";
   if (!/VENDA/i.test(op)) return false;
   return !/DEVOL|TRANSF|REMESSA|BONIFIC|BRINDE|COMODATO|AMOSTRA/i.test(op);
@@ -536,12 +544,13 @@ function variante(opts: OpcoesTotvs): string {
   return `${opts.devolucoes ? "dev2-" : ""}${opts.itens ? "itens" : "leve"}-${filiais}`;
 }
 
-const PREFIXO = "totvs/mes-";
+// v2 (e dia3, prod2): relidos para entrar a venda sem nota fiscal (documento interno)
+const PREFIXO = "totvs/mes2-";
 // v2: relida uma vez para pegar as vendedoras corrigidas na TOTVS depois de guardadas
-const PREFIXO_DIA = "totvsdia2/";
+const PREFIXO_DIA = "totvsdia3/";
 // v2: vendedora pela venda de antes da devolução (a v1 pegava a venda nova da troca)
 const PREFIXO_DIA_DEV = "totvsdevdia2/";
-const PREFIXO_PROD = "totvsprod/";
+const PREFIXO_PROD = "totvsprod2/";
 
 /** Contadores para a tela de medição de desempenho. */
 export const medidas = { paginas: 0, diasDoCache: 0, mesesDoCache: 0 };
