@@ -736,6 +736,17 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Black November com a arte (foto) no topo: aparece sem tocar, melhor que o vídeo no WhatsApp
+    id: "black-november-arte",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "black_november");
+      if (m?.template) {
+        m.template.nome = "via_sol_black_november";
+        m.template.imagem = "https://painel.viasolbrazil.com.br/midia/black-november-whats.jpg";
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

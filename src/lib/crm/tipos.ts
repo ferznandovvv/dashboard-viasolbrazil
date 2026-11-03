@@ -672,8 +672,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     variacoes: [
       "Oi {primeiro}! Começou a Black November da Via Sol ☀️ Peças de R$ 149 por R$ 59 no Pix, e levando 3 cada uma sai por R$ 39. São tops e calcinhas avulsos pra montar o biquíni do seu jeito, enquanto durar o estoque.",
     ],
-    // Vídeo da Black no topo (o 1º quadro já mostra os preços, vira a capa no WhatsApp)
-    template: { nome: "via_sol_black_november_video", idioma: "pt_BR", parametros: ["primeiro"], imagem: "https://painel.viasolbrazil.com.br/midia/black-november-whats.mp4" },
+    // Arte da Black no topo (aparece sem precisar tocar). Com vídeo: modelo via_sol_black_november_video + o .mp4
+    template: { nome: "via_sol_black_november", idioma: "pt_BR", parametros: ["primeiro"], imagem: "https://painel.viasolbrazil.com.br/midia/black-november-whats.jpg" },
   },
   {
     campanha: "indicacao_convite",
