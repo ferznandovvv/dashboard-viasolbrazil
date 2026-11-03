@@ -103,6 +103,13 @@ export async function POST(req: NextRequest) {
         assinatura = e instanceof Error ? e.message : String(e);
       }
       await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `ok @${eu.username} via ${eu.modo} (token ${token.slice(0, 4)}…), avisos: ${assinatura}` }));
+      // Login do Facebook sem a página: lê a conta, mas a DM só sai pela página ligada a ela
+      if (eu.modo === "fb" && !eu.pageToken)
+        return NextResponse.json({
+          ok: true,
+          usuario: eu.username,
+          assinatura: `${assinatura}. FALTA A PÁGINA: na autorização do Facebook, marque a página ligada à @${eu.username} (a chave só trouxe outras páginas), senão a DM não sai`,
+        });
       return NextResponse.json({ ok: true, usuario: eu.username, assinatura });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
