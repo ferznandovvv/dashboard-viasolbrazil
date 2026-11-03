@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alterarBaseIg, lerBaseIg, type ConfigInstagram } from "@/lib/instagram/base";
-import { assinarWebhook, quemSou, raioXToken, tokenFacebook, tokenLongo, usarConta, webhookAssinado } from "@/lib/instagram/api";
+import { assinarWebhook, diagnostico, quemSou, raioXToken, tokenFacebook, tokenLongo, usarConta, webhookAssinado } from "@/lib/instagram/api";
 import { estadoVigia, montarMensagem } from "@/lib/instagram/robo";
 import { mascarar } from "@/lib/segredo";
 
@@ -46,7 +46,8 @@ type Corpo =
   | { acao: "salvar"; config: Partial<Pick<ConfigInstagram, "ativo" | "palavras" | "postsTambem" | "mensagem" | "link" | "campanha" | "appSecret">> }
   | { acao: "conectar"; token: string }
   | { acao: "assinar" }
-  | { acao: "vigia"; horas: number };
+  | { acao: "vigia"; horas: number }
+  | { acao: "diagnostico" };
 
 export async function POST(req: NextRequest) {
   const corpo = (await req.json().catch(() => null)) as Corpo | null;
@@ -123,6 +124,12 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       return NextResponse.json({ erro: e instanceof Error ? e.message : String(e) }, { status: 400 });
     }
+  }
+
+  if (corpo.acao === "diagnostico") {
+    const { config } = await lerBaseIg();
+    if (!config.token) return NextResponse.json({ erro: "sem token" }, { status: 400 });
+    return NextResponse.json(await diagnostico(config.token, config.igUserId, config.appSecret));
   }
 
   if (corpo.acao === "vigia") {

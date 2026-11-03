@@ -189,3 +189,22 @@ export async function tokenLongo(token: string, appSecret: string, appId = proce
   if (!j.access_token) throw new ErroIg(j.error?.message ?? `HTTP ${r.status}`);
   return j.access_token;
 }
+
+/** Diagnóstico com o token salvo (nunca devolve o token): o que ele enxerga em cada caminho. */
+export async function diagnostico(token: string, igId: string, appSecret: string): Promise<Record<string, unknown>> {
+  const tenta = async (nome: string, caminho: string, query: Record<string, string>, base = GRAPH_FB) => {
+    try {
+      return [nome, await chamar(caminho, token, { base, query })] as const;
+    } catch (e) {
+      return [nome, `ERRO: ${e instanceof Error ? e.message : String(e)}`] as const;
+    }
+  };
+  const r = await Promise.all([
+    tenta("eu", "/me", { fields: "id,name" }),
+    tenta("paginas", "/me/accounts", { fields: "id,name,tasks,instagram_business_account{id,username}", limit: "100" }),
+    tenta("negocios", "/me/businesses", { fields: "id,name", limit: "20" }),
+    tenta("ig", `/${igId}`, { fields: "id,username,name" }),
+    tenta("live", `/${igId}/live_media`, { fields: "id" }),
+  ]);
+  return { ...Object.fromEntries(r), raiox: appSecret ? await raioXToken(token, appSecret) : "sem segredo" };
+}
