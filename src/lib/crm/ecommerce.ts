@@ -19,7 +19,7 @@
 
 import { env } from "../env";
 import "../credenciais";
-import { alterarBase, lerBase } from "./base";
+import { alterarBase, lerBase, somarDias } from "./base";
 import { salvarCliente } from "./clientes";
 import { enfileirar, viaOficial } from "./mensagens";
 import { conferirCupons, criarCupomCarrinho, desativarCupons, escoposShopify, garantirCuponsDeOferta } from "./cupomShopify";
@@ -732,11 +732,13 @@ export interface ResumoSiteMes {
 export function resumoSiteMes(b: BaseCrm, hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)): ResumoSiteMes {
   const inicio = `${hoje.slice(0, 7)}-01`;
   const desde = new Date(`${inicio}T00:00:00-03:00`).toISOString();
+  // Mês passado: só até o último dia dele
+  const ate = new Date(`${somarDias(hoje, 1)}T00:00:00-03:00`).toISOString();
   const of = oficialDe(b.config);
   let pedidos = 0;
   let faturado = 0;
   for (const v of b.vendas) {
-    if (v.loja !== LOJA_OFICIAL || v.data.slice(0, 10) < inicio || v.valor - (v.devolvido ?? 0) < 0.01) continue;
+    if (v.loja !== LOJA_OFICIAL || v.data.slice(0, 10) < inicio || v.data.slice(0, 10) > hoje || v.valor - (v.devolvido ?? 0) < 0.01) continue;
     pedidos++;
     faturado += v.valor - (v.devolvido ?? 0);
   }
@@ -750,7 +752,7 @@ export function resumoSiteMes(b: BaseCrm, hoje = new Date(Date.now() - 3 * 36000
   const linhas: LinhaSite[] = nomes.map(([campanha, nome]) => {
     const l: LinhaSite = { campanha, nome, enviadas: 0, simuladas: 0, vendas: 0, valor: 0 };
     for (const m of b.mensagens) {
-      if (m.campanha !== campanha || m.criadoEm < desde) continue;
+      if (m.campanha !== campanha || m.criadoEm < desde || m.criadoEm >= ate) continue;
       if (m.status === "simulada") l.simuladas++;
       else if (saiu(m)) l.enviadas++;
       // Compra depois de mensagem simulada não foi a mensagem
@@ -767,12 +769,12 @@ export function resumoSiteMes(b: BaseCrm, hoje = new Date(Date.now() - 3 * 36000
   // Cashback do site: aviso com cupom; venda = cupom usado no site no mês
   const cb: LinhaSite = { campanha: "cashback_site", nome: "Cashback do site (cupom)", enviadas: 0, simuladas: 0, vendas: 0, valor: 0, desconto: 0 };
   for (const m of b.mensagens) {
-    if ((m.campanha !== "cashback_site_perto" && m.campanha !== "cashback_site_longe") || m.criadoEm < desde) continue;
+    if ((m.campanha !== "cashback_site_perto" && m.campanha !== "cashback_site_longe") || m.criadoEm < desde || m.criadoEm >= ate) continue;
     if (m.status === "simulada") cb.simuladas++;
     else if (saiu(m)) cb.enviadas++;
   }
   for (const k of b.codigos) {
-    if (!k.movimentoId || k.usadoNaLoja !== LOJA_OFICIAL || !k.usadoEm || k.usadoEm < desde) continue;
+    if (!k.movimentoId || k.usadoNaLoja !== LOJA_OFICIAL || !k.usadoEm || k.usadoEm < desde || k.usadoEm >= ate) continue;
     cb.vendas++;
     cb.valor += k.compraValor ?? 0;
     cb.desconto! += k.valor;

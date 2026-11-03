@@ -1753,3 +1753,24 @@ a.mini { color: var(--brand); display: inline-flex; align-items: center; }
 .lp-cod-form input { text-transform: uppercase; letter-spacing: 0.08em; }
 .cfg-lojas { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 4px; }
 .cfg-check-mini { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+
+/* Visão geral do CRM: três visões e o mês escolhido */
+.vg-topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 4px 0 18px; }
+.vg-topo .pg-envio { margin-bottom: 0; }
+.vg-ver button { padding: 8px 16px; font-size: 13px; white-space: nowrap; }
+.mes-nav { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+.mes-seta { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); font-size: 20px; line-height: 1; cursor: pointer; display: inline-grid; place-items: center; }
+.mes-seta:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.mes-seta:disabled { opacity: 0.35; cursor: default; }
+.mes-nome select { font-family: var(--font-serif); font-size: 22px; font-weight: 600; color: var(--text-primary); background: transparent; border: 0; border-bottom: 1px dashed var(--border); padding: 2px 4px; cursor: pointer; }
+.mes-nome select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.mes-nome option { font-family: var(--font-sans); font-size: 14px; background: var(--surface-1); }
+.mes-info { font-size: 12.5px; color: var(--text-muted); margin-left: 4px; }
+.vg-kpis { margin-bottom: 18px; }
+.vg-carregando { opacity: 0.55; transition: opacity 0.15s; }
+.vg-rodape { margin: 6px 4px 0; }
+@media (max-width: 560px) {
+  .vg-ver { width: 100%; }
+  .vg-ver button { padding: 8px 6px; font-size: 12px; }
+  .mes-nome select { font-size: 19px; }
+}

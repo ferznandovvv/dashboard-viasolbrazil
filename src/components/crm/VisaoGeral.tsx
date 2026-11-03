@@ -246,63 +246,249 @@ function MiniBarras({ dias }: { dias: { dia: string; conversas: number }[] }) {
   );
 }
 
-/** Visão geral do CRM: envio por número, dinheiro do cashback, clientes que voltaram, retorno das mensagens, site, celular no caixa. */
+type Ver = "resultado" | "conferir" | "operacao";
+const VER: [Ver, string][] = [
+  ["resultado", "Resultado do mês"],
+  ["conferir", "Pra conferir"],
+  ["operacao", "Envio e caixa"],
+];
+
+/** Lê e grava um parâmetro do endereço (pra voltar na mesma visão ao recarregar) */
+function paramDaUrl(nome: string): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get(nome);
+  } catch {
+    return null;
+  }
+}
+function gravarParam(nome: string, valor: string | null) {
+  try {
+    const u = new URL(window.location.href);
+    if (valor) u.searchParams.set(nome, valor);
+    else u.searchParams.delete(nome);
+    window.history.replaceState(null, "", u.toString());
+  } catch {
+    /* sem histórico: só não lembra */
+  }
+}
+
+/**
+ * Visão geral do CRM em três partes: o resultado do mês (escolhendo o mês),
+ * o que precisa de conferência e a operação (envio por número, celular no caixa).
+ */
 export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: number; saldoTotal: number } } }) {
   const { p, erro } = usePainel();
-  if (!p) return <div className="empty">{erro || "Carregando…"}</div>;
-  const g = p.geral;
-  const pctCel = g.vendas30 ? Math.round((g.comCelular30 / g.vendas30) * 100) : null;
-  const pctBase = r.base.clientes ? Math.round((r.base.comTelefone / r.base.clientes) * 100) : 0;
-  const e = p.envio;
-  const situacaoEnvio = e.modoSombra
-    ? { txt: "Modo sombra: nenhuma mensagem automática sai", cls: "aviso" }
-    : e.pausado
-      ? { txt: "Envio pausado", cls: "aviso" }
-      : !e.provedor
-        ? { txt: "Sem provedor de WhatsApp configurado", cls: "aviso" }
-        : e.dentroDaJanela
-          ? { txt: `Mandando · ${e.naFila} na fila`, cls: "ok" }
-          : { txt: `Fora do horário de envio (${e.inicio}h às ${e.fim}h) · ${e.naFila} na fila`, cls: "" };
+  const [ver, setVer] = useState<Ver>("resultado");
+  useEffect(() => {
+    const v = paramDaUrl("ver");
+    if (v === "conferir" || v === "operacao") setVer(v);
+  }, []);
+  const mudar = (v: Ver) => {
+    setVer(v);
+    gravarParam("ver", v === "resultado" ? null : v);
+  };
+  const e = p?.envio;
+  const situacaoEnvio = !e
+    ? null
+    : e.modoSombra
+      ? { txt: "modo sombra, nada automático sai", cls: "aviso" }
+      : e.pausado
+        ? { txt: "envio pausado", cls: "aviso" }
+        : !e.provedor
+          ? { txt: "sem WhatsApp configurado", cls: "aviso" }
+          : e.dentroDaJanela
+            ? { txt: `mandando · ${e.naFila.toLocaleString("pt-BR")} na fila`, cls: "ok" }
+            : { txt: `fora do horário (${e.inicio}h às ${e.fim}h) · ${e.naFila.toLocaleString("pt-BR")} na fila`, cls: "" };
+  const nSair = p?.sairam?.length ?? 0;
   return (
     <div>
-      <div className="pg-status">
-        <div className={`pg-envio ${situacaoEnvio.cls}`}>Lojas: {situacaoEnvio.txt}</div>
-        {p.ecommerce && <div className={`pg-envio ${p.ecommerce.sombra ? "aviso" : "ok"}`}>Site: {p.ecommerce.sombra ? "modo sombra" : p.ecommerce.configurado ? "mandando" : "número do site não configurado"}</div>}
+      <div className="vg-topo">
+        <div className="seg vg-ver" role="tablist" aria-label="O que ver">
+          {VER.map(([id, nome]) => (
+            <button key={id} role="tab" aria-selected={ver === id} className={ver === id ? "on" : ""} onClick={() => mudar(id)}>
+              {nome}
+            </button>
+          ))}
+        </div>
+        {p && (
+          <div className="pg-status">
+            {situacaoEnvio && <div className={`pg-envio ${situacaoEnvio.cls}`}>WhatsApp: {situacaoEnvio.txt}</div>}
+            {p.ecommerce && <div className={`pg-envio ${p.ecommerce.sombra ? "aviso" : "ok"}`}>Site: {p.ecommerce.sombra ? "modo sombra" : p.ecommerce.configurado ? "mandando" : "sem número"}</div>}
+          </div>
+        )}
       </div>
 
-      {p.cashbackMes && <ResultadoCashback c={p.cashbackMes} v={p.voltaram} emAberto={r.base.saldoTotal} />}
-      {p.siteMes && <SiteMes s={p.siteMes} />}
-      {p.indicacoes && (p.indicacoes.ativo || p.indicacoes.ultimas.length > 0) && <Indicacoes r={p.indicacoes} />}
-      {p.retorno && p.retorno.length > 0 && <Retorno linhas={p.retorno} />}
-      <ConferenciaCashback />
+      {ver === "resultado" && <ResultadoMes saldoTotal={r.base.saldoTotal} />}
 
-      <h2 className="secao-titulo">Operação</h2>
-      {p.envioNumeros && p.envioNumeros.length > 0 && <EnvioNumeros linhas={p.envioNumeros} />}
-      <CapturaCelular resumo={{ clientes: r.base.clientes, pctBase, pctCel, vendas30: g.vendas30, comCelular30: g.comCelular30 }} />
-
-      {p.sairam && p.sairam.length > 0 && (
-        <section className="card">
-          <h2>Pediram para não receber mensagens</h2>
-          <p className="muted pg-nota">
-            Responderam SAIR (ou parecido) nos últimos 60 dias. O sistema não manda mais nada automático para esse telefone, em nenhuma loja. A loja pode continuar respondendo se a cliente chamar, mas não deve mandar promoção.
-          </p>
-          <ul className="pend-lista">
-            {p.sairam.map((x) => (
-              <li key={x.telefone} className="pend sair">
-                <div className="pend-quem">
-                  {x.loja && <span className="pend-loja">{x.loja}</span>}
-                  <b>{x.nome ?? "Não cadastrada"}</b>
-                  <small>{formatarTelefone(x.telefone)}</small>
-                </div>
-                {x.texto && <p className="pend-texto">“{x.texto}”</p>}
-                <div className="pend-tempo">
-                  <small>{dataHora(x.em)}</small>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {ver === "conferir" && (
+        <>
+          <ConferenciaCashback />
+          <section className="card">
+            <h2>Pediram pra não receber mensagens{nSair ? ` · ${nSair}` : ""}</h2>
+            <p className="muted pg-nota">
+              Responderam SAIR (ou parecido) nos últimos 60 dias. O sistema não manda mais nada automático pra esse telefone, em nenhuma loja. A loja pode responder se a cliente chamar, mas não deve mandar promoção.
+            </p>
+            {!p ? (
+              <div className="empty">{erro || "Carregando…"}</div>
+            ) : nSair === 0 ? (
+              <div className="empty">Ninguém pediu pra sair nos últimos 60 dias.</div>
+            ) : (
+              <ul className="pend-lista">
+                {p.sairam!.map((x) => (
+                  <li key={x.telefone} className="pend sair">
+                    <div className="pend-quem">
+                      {x.loja && <span className="pend-loja">{x.loja}</span>}
+                      <b>{x.nome ?? "Não cadastrada"}</b>
+                      <small>{formatarTelefone(x.telefone)}</small>
+                    </div>
+                    {x.texto && <p className="pend-texto">“{x.texto}”</p>}
+                    <div className="pend-tempo">
+                      <small>{dataHora(x.em)}</small>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
       )}
+
+      {ver === "operacao" &&
+        (!p ? (
+          <div className="empty">{erro || "Carregando…"}</div>
+        ) : (
+          <>
+            {p.envioNumeros && p.envioNumeros.length > 0 && <EnvioNumeros linhas={p.envioNumeros} />}
+            <CapturaCelular
+              resumo={{
+                clientes: r.base.clientes,
+                pctBase: r.base.clientes ? Math.round((r.base.comTelefone / r.base.clientes) * 100) : 0,
+                pctCel: p.geral.vendas30 ? Math.round((p.geral.comCelular30 / p.geral.vendas30) * 100) : null,
+                vendas30: p.geral.vendas30,
+                comCelular30: p.geral.comCelular30,
+              }}
+            />
+          </>
+        ))}
+    </div>
+  );
+}
+
+interface DadosMes {
+  mes: string;
+  atual: boolean;
+  meses: string[];
+  cashbackMes: CashbackMes;
+  voltaram: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> };
+  siteMes: ResumoSiteMes;
+  indicacoes: ResumoIndicacoes;
+  retorno: { id: string; nome: string; manual: boolean; r: ResultadoCampanha }[];
+}
+
+const nomeMesAno = (mes: string) => {
+  const t = new Date(`${mes}-15T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+
+/** Resultado de um mês: escolhe o mês no topo; o resto da tela segue ele. */
+function ResultadoMes({ saldoTotal }: { saldoTotal: number }) {
+  const [mes, setMes] = useState<string | null>(null);
+  const [d, setD] = useState<DadosMes | null>(null);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  useEffect(() => {
+    setMes(paramDaUrl("mes"));
+  }, []);
+  useEffect(() => {
+    let vivo = true;
+    setCarregando(true);
+    api<DadosMes>(`/api/crm/mes${mes ? `?mes=${mes}` : ""}`)
+      .then((x) => {
+        if (!vivo) return;
+        setD(x);
+        setErro("");
+      })
+      .catch((e) => vivo && setErro(e instanceof Error ? e.message : "Erro"))
+      .finally(() => vivo && setCarregando(false));
+    return () => {
+      vivo = false;
+    };
+  }, [mes]);
+  if (!d) return <div className="empty">{erro || "Carregando…"}</div>;
+  const i = d.meses.indexOf(d.mes);
+  const ir = (m: string) => {
+    setMes(m);
+    gravarParam("mes", m === d.meses[d.meses.length - 1] ? null : m);
+  };
+  const c = d.cashbackMes;
+  const v = d.voltaram;
+  const s = d.siteMes;
+  const porReal = c.usado ? c.comprasComCashback / c.usado : null;
+  const dVolta = v.total.pct !== null && v.total.pctAnterior !== null ? v.total.pct - v.total.pctAnterior : null;
+  const diaHoje = Number(new Date(Date.now() - 3 * 3600000).toISOString().slice(8, 10));
+  return (
+    <div className={carregando ? "vg-carregando" : ""} aria-busy={carregando}>
+      <div className="mes-nav">
+        <button className="mes-seta" onClick={() => ir(d.meses[i - 1])} disabled={i <= 0} aria-label="Mês anterior">
+          ‹
+        </button>
+        <label className="mes-nome">
+          <span className="so-leitor">Mês</span>
+          <select value={d.mes} onChange={(ev) => ir(ev.target.value)}>
+            {[...d.meses].reverse().map((m) => (
+              <option key={m} value={m}>
+                {nomeMesAno(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="mes-seta" onClick={() => ir(d.meses[i + 1])} disabled={i >= d.meses.length - 1} aria-label="Próximo mês">
+          ›
+        </button>
+        <span className="mes-info">{d.atual ? `até hoje, dia ${diaHoje}` : "mês fechado"}</span>
+      </div>
+
+      <div className="res-kpis vg-kpis">
+        <div className="res-kpi destaque">
+          <div className="k-label">Vendas com cashback</div>
+          <div className="k-valor">{reais(c.comprasComCashback)}</div>
+          <div className="k-sub">
+            {c.vendasComCashback} {c.vendasComCashback === 1 ? "venda" : "vendas"} nas lojas
+            {c.vendasMes ? ` · ${pctDe(c.vendasComCashback, c.vendasMes) ?? 0}% de ${c.vendasMes.toLocaleString("pt-BR")}` : ""}
+          </div>
+        </div>
+        <div className="res-kpi">
+          <div className="k-label">Desconto de cashback</div>
+          <div className="k-valor">{reais(c.usado)}</div>
+          <div className="k-sub">{porReal ? `cada R$ 1 de desconto virou ${reais2(porReal)} em venda` : "nenhum uso no mês"}</div>
+        </div>
+        <div className="res-kpi">
+          <div className="k-label">Clientes que voltaram</div>
+          <div className="k-valor">{pctTxt(v.total.pct)}</div>
+          <div className="k-sub">
+            {v.total.voltaram} de {v.total.compradoras} já tinham comprado antes
+            {dVolta ? <span className={dVolta < 0 ? "cap-pior" : "cap-melhor"}> · {dVolta > 0 ? "▲" : "▼"}{Math.abs(dVolta)} pts</span> : null}
+          </div>
+        </div>
+        <div className="res-kpi">
+          <div className="k-label">Site: vendas das mensagens</div>
+          <div className="k-valor">{reais(s.valorRecuperado)}</div>
+          <div className="k-sub">
+            {s.vendasRecuperadas} de {s.pedidos} {s.pedidos === 1 ? "pedido" : "pedidos"} · site vendeu {reais(s.faturado)}
+          </div>
+        </div>
+      </div>
+
+      <ResultadoCashback c={c} v={v} />
+      <SiteMes s={s} />
+      {d.retorno.length > 0 ? <Retorno linhas={d.retorno} /> : null}
+      {(d.indicacoes.ativo || d.indicacoes.ultimas.length > 0) && <Indicacoes r={d.indicacoes} />}
+
+      <p className="res-nota vg-rodape">
+        Saldo de cashback no nome das clientes hoje: {reais(saldoTotal)}
+        {d.atual && c.vencendo10d > 0 ? `, ${reais(c.vencendo10d)} vence nos próximos 10 dias (os lembretes saem sozinhos)` : ""}
+        {c.expirado > 0 ? `. Venceu sem uso no mês: ${reais(c.expirado)}` : ""}. Creditado no mês: {reais(c.creditado)} em {c.creditos.toLocaleString("pt-BR")} compras.
+      </p>
     </div>
   );
 }
@@ -846,53 +1032,22 @@ const nomeDoMes = (mes: string) => new Date(`${mes}T12:00:00`).toLocaleDateStrin
  * usou, quanto de desconto isso custou e quantas clientes voltaram. O que foi
  * creditado e o que está em aberto fica numa linha no fim (não é resultado).
  */
-function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> }; emAberto: number }) {
+function ResultadoCashback({ c, v }: { c: CashbackMes; v: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> } }) {
   const mes = nomeDoMes(c.mes);
-  const porReal = c.usado ? c.comprasComCashback / c.usado : null;
-  const lojas = Array.from(new Set([...c.porLoja.map((l) => l.loja), ...(v?.lojas ?? []).map((l) => l.loja)]))
-    .map((loja) => ({ loja, cb: c.porLoja.find((l) => l.loja === loja), vt: v?.lojas.find((l) => l.loja === loja) }))
-    .sort((x, y) => (y.cb?.comprasComCashback ?? 0) - (x.cb?.comprasComCashback ?? 0) || (y.vt?.compradoras ?? 0) - (x.vt?.compradoras ?? 0));
-  const dVolta = v && v.total.pct !== null && v.total.pctAnterior !== null ? v.total.pct - v.total.pctAnterior : null;
+  const lojas = Array.from(new Set([...c.porLoja.map((l) => l.loja), ...v.lojas.map((l) => l.loja)]))
+    .filter((loja) => loja !== "Site" && loja !== "Sem loja")
+    .map((loja) => ({ loja, cb: c.porLoja.find((l) => l.loja === loja), vt: v.lojas.find((l) => l.loja === loja) }))
+    .sort((x, y) => (y.cb?.comprasComCashback ?? 0) - (x.cb?.comprasComCashback ?? 0) || (y.cb?.vendasMes ?? 0) - (x.cb?.vendasMes ?? 0));
   return (
     <section className="card">
-      <h2>Resultado do cashback em {mes}</h2>
-      <div className="res-kpis">
-        <div className="res-kpi destaque">
-          <div className="k-label">Vendas com cashback</div>
-          <div className="k-valor">{reais(c.comprasComCashback)}</div>
-          <div className="k-sub">
-            {c.vendasComCashback} {c.vendasComCashback === 1 ? "venda" : "vendas"}
-            {c.vendasMes ? ` · ${pctDe(c.vendasComCashback, c.vendasMes) ?? 0}% das ${c.vendasMes.toLocaleString("pt-BR")} vendas do mês` : ""}
-          </div>
-        </div>
-        <div className="res-kpi">
-          <div className="k-label">Desconto dado com cashback</div>
-          <div className="k-valor">{reais(c.usado)}</div>
-          <div className="k-sub">{c.comprasComCashback ? `${pctDe(c.usado, c.comprasComCashback)}% do valor dessas vendas` : "nenhum uso ainda"}</div>
-        </div>
-        <div className="res-kpi">
-          <div className="k-label">Cada R$ 1 de desconto</div>
-          <div className="k-valor">{porReal ? reais2(porReal) : "–"}</div>
-          <div className="k-sub">em vendas</div>
-        </div>
-        {v && (
-          <div className="res-kpi">
-            <div className="k-label">Clientes que voltaram</div>
-            <div className="k-valor">{pctTxt(v.total.pct)}</div>
-            <div className="k-sub">
-              {v.total.voltaram} de {v.total.compradoras} clientes já tinham comprado antes
-              {dVolta ? <span className={dVolta < 0 ? "cap-pior" : "cap-melhor"}> · {dVolta > 0 ? "▲" : "▼"}{Math.abs(dVolta)} pts</span> : null}
-            </div>
-          </div>
-        )}
-      </div>
-
+      <h2>Lojas físicas</h2>
       <div className="tbl-wrap" tabIndex={0} role="region" aria-label={`Resultado do cashback em ${mes}, por loja`}>
         <table className="prod-tbl res-tbl">
           <thead>
             <tr>
               <th scope="col">Loja</th>
-              <th scope="col" className="n">Vendas com cashback</th>
+              <th scope="col" className="n">Vendas no mês</th>
+              <th scope="col" className="n">Com cashback</th>
               <th scope="col" className="n">Desconto</th>
               <th scope="col" className="n">Voltaram</th>
             </tr>
@@ -901,6 +1056,7 @@ function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: Vo
             {lojas.map(({ loja, cb, vt }) => (
               <tr key={loja}>
                 <th scope="row">{loja}</th>
+                <td className="n">{cb?.vendasMes ? cb.vendasMes.toLocaleString("pt-BR") : <span className="muted">–</span>}</td>
                 <td className="n">
                   {cb?.vendasComCashback && !cb.comprasComCashback ? (
                     <>
@@ -914,7 +1070,7 @@ function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: Vo
                       <b>{reais(cb.comprasComCashback)}</b>
                       <small>
                         {cb.vendasComCashback} {cb.vendasComCashback === 1 ? "venda" : "vendas"}
-                        {cb.vendasMes ? ` de ${cb.vendasMes}` : ""}
+                        {cb.vendasMes ? ` · ${pctDe(cb.vendasComCashback, cb.vendasMes)}%` : ""}
                       </small>
                     </>
                   ) : (
@@ -932,7 +1088,7 @@ function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: Vo
                   )}
                 </td>
                 <td className="n">
-                  {vt ? (
+                  {vt?.compradoras ? (
                     <>
                       {pctTxt(vt.pct)}
                       <small>
@@ -949,6 +1105,7 @@ function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: Vo
           <tfoot>
             <tr>
               <th scope="row">Total</th>
+              <td className="n">{c.vendasMes.toLocaleString("pt-BR")}</td>
               <td className="n">
                 {reais(c.comprasComCashback)}
                 <small>
@@ -956,14 +1113,13 @@ function ResultadoCashback({ c, v, emAberto }: { c: CashbackMes; v?: { lojas: Vo
                 </small>
               </td>
               <td className="n">{reais(c.usado)}</td>
-              <td className="n">{v ? pctTxt(v.total.pct) : "–"}</td>
+              <td className="n">{pctTxt(v.total.pct)}</td>
             </tr>
           </tfoot>
         </table>
       </div>
       <p className="res-nota">
-        Venda com cashback é a compra da cliente no dia e na loja em que ela usou o saldo. Voltaram: das clientes identificadas que compraram no mês, quantas já tinham comprado antes. Ainda no nome das clientes: {reais(emAberto)}
-        {c.vencendo10d > 0 ? `, ${reais(c.vencendo10d)} vence nos próximos 10 dias (os lembretes saem sozinhos)` : ""}.
+        Com cashback: a compra da cliente no dia e na loja em que ela usou o saldo. Voltaram: das clientes identificadas que compraram no mês, quantas já tinham comprado antes (em {mes}, em qualquer loja ou no site).
       </p>
     </section>
   );
@@ -975,22 +1131,11 @@ function SiteMes({ s }: { s: ResumoSiteMes }) {
   const u = s.ultimo;
   return (
     <section className="card">
-      <h2>Site em {mes}</h2>
-      <div className="res-kpis">
-        <div className="res-kpi">
-          <div className="k-label">Vendas do site</div>
-          <div className="k-valor">{reais(s.faturado)}</div>
-          <div className="k-sub">{s.pedidos} {s.pedidos === 1 ? "pedido pago" : "pedidos pagos"}</div>
-        </div>
-        <div className="res-kpi destaque">
-          <div className="k-label">Vieram das mensagens</div>
-          <div className="k-valor">{reais(s.valorRecuperado)}</div>
-          <div className="k-sub">
-            {s.vendasRecuperadas} {s.vendasRecuperadas === 1 ? "pedido" : "pedidos"}
-            {s.faturado ? ` · ${pctDe(s.valorRecuperado, s.faturado) ?? 0}% do faturamento` : ""}
-          </div>
-        </div>
-      </div>
+      <h2>Site</h2>
+      <p className="muted pg-nota">
+        {s.pedidos} {s.pedidos === 1 ? "pedido pago" : "pedidos pagos"} em {mes}, {reais(s.faturado)}. Das mensagens automáticas vieram {s.vendasRecuperadas} ({reais(s.valorRecuperado)}
+        {s.faturado ? `, ${pctDe(s.valorRecuperado, s.faturado) ?? 0}% do faturamento` : ""}).
+      </p>
       <div className="tbl-wrap" tabIndex={0} role="region" aria-label={`Mensagens do site em ${mes}`}>
         <table className="prod-tbl res-tbl">
           <thead>
@@ -1033,9 +1178,9 @@ function SiteMes({ s }: { s: ResumoSiteMes }) {
 function Retorno({ linhas }: { linhas: { id: string; nome: string; manual: boolean; r: ResultadoCampanha }[] }) {
   return (
     <section className="card">
-      <h2>Retorno das mensagens</h2>
+      <h2>Mensagens das lojas</h2>
       <p className="muted pg-nota">
-        Últimos 30 dias, por campanha. &quot;Compraram&quot; = compra em até 14 dias depois da mensagem (em qualquer loja ou no site); não prova que foi a mensagem, mas comparando campanhas dá pra ver qual puxa mais. Simuladas = modo sombra.
+        Mensagens criadas no mês, por campanha. &quot;Compraram&quot; = compra em até 14 dias depois da mensagem (em qualquer loja ou no site); não prova que foi a mensagem, mas comparando campanhas dá pra ver qual puxa mais. Simuladas = modo sombra.
       </p>
       <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Retorno das mensagens">
         <table className="prod-tbl fin-tbl">

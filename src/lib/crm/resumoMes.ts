@@ -48,6 +48,8 @@ export interface CashbackLoja {
 export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
   const inicio = `${hoje.slice(0, 7)}-01`;
   const desdeIso = new Date(`${inicio}T00:00:00-03:00`).toISOString();
+  // Mês passado: só até o último dia dele (hoje = último dia do mês escolhido)
+  const ateIso = new Date(`${somarDias(hoje, 1)}T00:00:00-03:00`).toISOString();
   let creditado = 0;
   let creditos = 0;
   let usado = 0;
@@ -58,7 +60,7 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
   const vendasNaLoja = new Map<string, number>();
   let vendasMes = 0;
   for (const v of b.vendas) {
-    if (v.data.slice(0, 10) < inicio || !contaComoCompra(v)) continue;
+    if (v.data.slice(0, 10) < inicio || v.data.slice(0, 10) > hoje || !contaComoCompra(v)) continue;
     vendasMes++;
     vendasNaLoja.set(v.loja, (vendasNaLoja.get(v.loja) ?? 0) + 1);
     if (!v.clienteId) continue;
@@ -77,7 +79,7 @@ export function cashbackDoMes(b: BaseCrm, hoje = hojeSp()): CashbackMes {
   };
   const contadas = new Set<string>();
   for (const m of b.cashback) {
-    if (m.criadoEm < desdeIso) continue;
+    if (m.criadoEm < desdeIso || m.criadoEm >= ateIso) continue;
     if (m.tipo === "credito") {
       creditado += m.valor;
       creditos++;
@@ -164,7 +166,8 @@ export function voltaramPorLoja(b: BaseCrm, hoje = hojeSp()): { lojas: VoltaramL
   const inicio = `${hoje.slice(0, 7)}-01`;
   const [a, m] = hoje.split("-").map(Number);
   const inicioAnt = `${m === 1 ? a - 1 : a}-${String(m === 1 ? 12 : m - 1).padStart(2, "0")}-01`;
-  const fimAnt = somarDias(inicioAnt, Number(hoje.slice(8, 10)) - 1);
+  // Mês passado até o mesmo dia (sem passar do fim dele: 31/10 compara com 30/09)
+  const fimAnt = [somarDias(inicioAnt, Number(hoje.slice(8, 10)) - 1), somarDias(inicio, -1)].sort()[0];
   const primeira = new Map<string, string>();
   const compras = b.vendas.filter((v) => v.clienteId && contaComoCompra(v));
   for (const v of compras) {
