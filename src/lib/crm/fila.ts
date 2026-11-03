@@ -212,6 +212,11 @@ let processandoOficial = false;
  * Fila do número oficial: manda como modelo aprovado, várias por passo (a Meta
  * não precisa do intervalo que protege os números comuns), até o teto do dia.
  */
+/** Campanhas mandadas de uma vez pra muita gente: saem depois das automáticas */
+const DISPARO_EM_MASSA = ["black_november"];
+/** Quanto do teto diário do oficial fica guardado pra carrinho, Pix e avisos */
+const RESERVA_DO_DIA = 40;
+
 export async function processarFilaOficial(ignorarJanela = false): Promise<ResultadoTick> {
   if (processandoOficial) return { enviadas: 0, erros: 0, motivo: "já processando" };
   processandoOficial = true;
@@ -230,9 +235,14 @@ export async function processarFilaOficial(ignorarJanela = false): Promise<Resul
     const agoraIso = new Date().toISOString();
     // Aviso das lojas pelo oficial segue o horário das lojas; carrinho e Pix, o do site
     const janelaLojas = ignorarJanela || dentroDaJanela(base);
+    // Disparo em massa (Black etc.) vai depois de carrinho, Pix e avisos, e deixa uma
+    // folga no teto do dia pra eles: um disparo grande não pode segurar um Pix que vence
+    const massaHoje = base.mensagens.filter((m) => m.provedor === "oficial" && DISPARO_EM_MASSA.includes(m.campanha) && m.enviadoEm?.startsWith(hoje) && m.status !== "erro" && m.status !== "fila").length;
+    let cabeMassa = Math.max(0, of.tetoDia - RESERVA_DO_DIA - massaHoje);
     const escolhidas = base.mensagens
       .filter((m) => m.provedor === "oficial" && m.status === "fila" && m.naoAntesDe <= agoraIso && (CAMPANHAS_SITE.includes(m.campanha) || janelaLojas))
-      .sort((a, b) => a.naoAntesDe.localeCompare(b.naoAntesDe))
+      .sort((a, b) => Number(DISPARO_EM_MASSA.includes(a.campanha)) - Number(DISPARO_EM_MASSA.includes(b.campanha)) || a.naoAntesDe.localeCompare(b.naoAntesDe))
+      .filter((m) => !DISPARO_EM_MASSA.includes(m.campanha) || cabeMassa-- > 0)
       .slice(0, cabe);
     if (!escolhidas.length) return { enviadas: 0, erros: 0 };
     await alterarBase((b) => {
