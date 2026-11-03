@@ -71,7 +71,7 @@ async function chamar<T>(caminho: string, token: string, init?: { method?: strin
  * Quem é a conta do token, e por onde a API responde. Tenta os três caminhos
  * e, se nenhum der, devolve o erro de cada um (ajuda a ver o que falta no app).
  */
-export async function quemSou(token: string): Promise<{ id: string; username: string; pageId?: string; modo: ModoApi }> {
+export async function quemSou(token: string): Promise<{ id: string; username: string; pageId?: string; pageToken?: string; modo: ModoApi }> {
   const erros: string[] = [];
   const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 160);
   // 1) Login do Instagram (inclusive token EAA do login unificado)
@@ -83,14 +83,14 @@ export async function quemSou(token: string): Promise<{ id: string; username: st
   }
   // 2) Login do Facebook: conta do Instagram ligada às páginas
   try {
-    const r = await chamar<{ data?: { id: string; instagram_business_account?: { id: string; username?: string } }[] }>("/me/accounts", token, {
+    const r = await chamar<{ data?: { id: string; access_token?: string; instagram_business_account?: { id: string; username?: string } }[] }>("/me/accounts", token, {
       base: GRAPH_FB,
-      query: { fields: "instagram_business_account{id,username}", limit: "100" },
+      query: { fields: "access_token,instagram_business_account{id,username}", limit: "100" },
     });
     const contas = (r.data ?? []).filter((p) => p.instagram_business_account);
     const p = contas.find((x) => x.instagram_business_account?.username === "viasolbrazil") ?? contas[0];
     if (p?.instagram_business_account)
-      return { id: p.instagram_business_account.id, username: p.instagram_business_account.username ?? "", pageId: p.id, modo: "fb" };
+      return { id: p.instagram_business_account.id, username: p.instagram_business_account.username ?? "", pageId: p.id, pageToken: p.access_token, modo: "fb" };
     erros.push(`facebook /me/accounts: ${r.data?.length ?? 0} páginas, nenhuma com Instagram`);
   } catch (e) {
     erros.push(`facebook /me/accounts: ${msg(e)}`);
@@ -150,7 +150,8 @@ export async function liveAgora(token: string): Promise<{ id: string; comentario
 
 /** Resposta privada: uma DM só, pra quem comentou (na live, só enquanto ela está no ar). */
 export function respostaPrivada(token: string, commentId: string, texto: string) {
-  return chamar<{ recipient_id?: string; message_id?: string }>(`${eu(token)}/messages`, token, {
+  // Login do Facebook: quem manda é a página (token da página, /me = a página)
+  return chamar<{ recipient_id?: string; message_id?: string }>(`${modoDe(token) === "fb" ? "/me" : eu(token)}/messages`, token, {
     method: "POST",
     body: { recipient: { comment_id: commentId }, message: { text: texto } },
   });
@@ -175,4 +176,16 @@ export async function raioXToken(token: string, appSecret: string, appId = proce
   } catch (e) {
     return `raio-x falhou: ${e instanceof Error ? e.message : String(e)}`;
   }
+}
+
+/**
+ * Token de usuário do Facebook (o do Explorador da Graph API dura 1-2 h):
+ * troca pelo de 60 dias. O token da página tirado dele não expira.
+ */
+export async function tokenLongo(token: string, appSecret: string, appId = process.env.IG_APP_ID ?? "1065079759887540"): Promise<string> {
+  const u = `${GRAPH_FB}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${encodeURIComponent(appSecret)}&fb_exchange_token=${encodeURIComponent(token)}`;
+  const r = await fetch(u, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  const j = (await r.json()) as { access_token?: string; error?: { message?: string } };
+  if (!j.access_token) throw new ErroIg(j.error?.message ?? `HTTP ${r.status}`);
+  return j.access_token;
 }

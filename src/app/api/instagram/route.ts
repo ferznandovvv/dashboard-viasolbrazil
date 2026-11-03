@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alterarBaseIg, lerBaseIg, type ConfigInstagram } from "@/lib/instagram/base";
-import { assinarWebhook, quemSou, raioXToken, tokenFacebook, usarConta, webhookAssinado } from "@/lib/instagram/api";
+import { assinarWebhook, quemSou, raioXToken, tokenFacebook, tokenLongo, usarConta, webhookAssinado } from "@/lib/instagram/api";
 import { estadoVigia, montarMensagem } from "@/lib/instagram/robo";
 import { mascarar } from "@/lib/segredo";
 
@@ -73,20 +73,31 @@ export async function POST(req: NextRequest) {
     const token = String(corpo.token ?? "").replace(/[\s"'“”]/g, "");
     if (!token) return NextResponse.json({ erro: "Cole o token" }, { status: 400 });
     try {
-      const eu = await quemSou(token);
+      // Token de usuário do Facebook: vira o de 60 dias e, achando a página, usa o token da página (não expira)
+      let usar = token;
+      const { config: atual } = await lerBaseIg();
+      if (tokenFacebook(token) && atual.appSecret) {
+        try {
+          usar = await tokenLongo(token, atual.appSecret);
+        } catch {
+          /* token de sistema ou já longo: segue com o original */
+        }
+      }
+      const eu = await quemSou(usar);
+      if (eu.pageToken) usar = eu.pageToken;
       usarConta(eu.id, eu.modo);
       await alterarBaseIg((b) => {
-        b.config.token = token;
+        b.config.token = usar;
         b.config.modoApi = eu.modo;
         b.config.igUserId = eu.id;
         b.config.usuario = eu.username;
         b.config.pageId = eu.pageId;
         // Token do Facebook (usuário do sistema) não expira; o do Instagram dura 60 dias e renova sozinho
-        b.config.tokenExpiraEm = tokenFacebook(token) ? undefined : new Date(Date.now() + 59 * 86400_000).toISOString();
+        b.config.tokenExpiraEm = tokenFacebook(usar) ? undefined : new Date(Date.now() + 59 * 86400_000).toISOString();
       });
       let assinatura = "ok";
       try {
-        await assinarWebhook(token, eu.pageId);
+        await assinarWebhook(usar, eu.pageId);
       } catch (e) {
         assinatura = e instanceof Error ? e.message : String(e);
       }
