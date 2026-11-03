@@ -31,6 +31,8 @@ export interface ConfigInstagram {
   tokenExpiraEm?: string;
   igUserId: string;
   usuario: string;
+  /** Página do Facebook ligada à conta (só com token do Facebook) */
+  pageId?: string;
   /** Segredo do app (Instagram) pra conferir a assinatura do webhook */
   appSecret: string;
   /** Token de verificação do webhook (vai na tela da Meta) */

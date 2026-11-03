@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alterarBaseIg, lerBaseIg, type ConfigInstagram } from "@/lib/instagram/base";
-import { assinarWebhook, quemSou, webhookAssinado } from "@/lib/instagram/api";
+import { assinarWebhook, quemSou, tokenFacebook, usarConta, webhookAssinado } from "@/lib/instagram/api";
 import { estadoVigia, montarMensagem } from "@/lib/instagram/robo";
 import { mascarar } from "@/lib/segredo";
 
@@ -16,7 +16,8 @@ export async function GET() {
   let erroConta: string | undefined;
   if (c.token) {
     try {
-      assinado = (await webhookAssinado(c.token)).data?.[0]?.subscribed_fields ?? [];
+      usarConta(c.igUserId);
+      assinado = (await webhookAssinado(c.token, c.pageId)).data?.[0]?.subscribed_fields ?? [];
     } catch (e) {
       erroConta = e instanceof Error ? e.message : String(e);
     }
@@ -76,11 +77,13 @@ export async function POST(req: NextRequest) {
         b.config.token = token;
         b.config.igUserId = eu.user_id ?? eu.id;
         b.config.usuario = eu.username;
-        b.config.tokenExpiraEm = new Date(Date.now() + 59 * 86400_000).toISOString();
+        b.config.pageId = eu.pageId;
+        // Token do Facebook (usuário do sistema) não expira; o do Instagram dura 60 dias e renova sozinho
+        b.config.tokenExpiraEm = tokenFacebook(token) ? undefined : new Date(Date.now() + 59 * 86400_000).toISOString();
       });
       let assinatura = "ok";
       try {
-        await assinarWebhook(token);
+        await assinarWebhook(token, eu.pageId);
       } catch (e) {
         assinatura = e instanceof Error ? e.message : String(e);
       }
@@ -94,7 +97,7 @@ export async function POST(req: NextRequest) {
     const { config } = await lerBaseIg();
     if (!config.token) return NextResponse.json({ erro: "Conecte a conta primeiro" }, { status: 400 });
     try {
-      await assinarWebhook(config.token);
+      await assinarWebhook(config.token, config.pageId);
       return NextResponse.json({ ok: true });
     } catch (e) {
       return NextResponse.json({ erro: e instanceof Error ? e.message : String(e) }, { status: 400 });

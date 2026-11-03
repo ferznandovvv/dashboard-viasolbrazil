@@ -5,6 +5,20 @@
  */
 
 export const GRAPH_IG = process.env.IG_GRAPH_URL ?? "https://graph.instagram.com/v21.0";
+const GRAPH_FB = "https://graph.facebook.com/v21.0";
+
+/**
+ * O app da Meta pode entregar dois tipos de token: o do Login do Instagram
+ * (IGAA…, fala com graph.instagram.com e usa /me) e o do login unificado/
+ * Facebook (EAA…, fala com graph.facebook.com e usa o id da conta do Instagram).
+ */
+export const tokenFacebook = (token: string) => token.startsWith("EAA");
+const host = (token: string) => (tokenFacebook(token) ? GRAPH_FB : GRAPH_IG);
+
+/** Conta do Instagram que o robô usa no caminho (/me ou o id, conforme o token) */
+let contaIg = "";
+export const usarConta = (igUserId: string) => void (contaIg = igUserId);
+const eu = (token: string) => (tokenFacebook(token) && contaIg ? `/${contaIg}` : "/me");
 
 export class ErroIg extends Error {
   constructor(
@@ -18,7 +32,7 @@ export class ErroIg extends Error {
 
 async function chamar<T>(caminho: string, token: string, init?: { method?: string; body?: unknown; query?: Record<string, string> }): Promise<T> {
   const q = new URLSearchParams(init?.query ?? {});
-  const url = `${GRAPH_IG}${caminho}${q.size ? `?${q}` : ""}`;
+  const url = `${host(token)}${caminho}${q.size ? `?${q}` : ""}`;
   const r = await fetch(url, {
     method: init?.method ?? "GET",
     headers: { Authorization: `Bearer ${token}`, ...(init?.body ? { "Content-Type": "application/json" } : {}) },
@@ -41,8 +55,16 @@ async function chamar<T>(caminho: string, token: string, init?: { method?: strin
 }
 
 /** Quem é a conta do token. */
-export function quemSou(token: string) {
-  return chamar<{ user_id?: string; id: string; username: string }>("/me", token, { query: { fields: "user_id,username" } });
+export async function quemSou(token: string): Promise<{ user_id?: string; id: string; username: string; pageId?: string }> {
+  if (!tokenFacebook(token)) return chamar("/me", token, { query: { fields: "user_id,username" } });
+  // Token do Facebook: acha a conta do Instagram ligada às páginas (prefere a @viasolbrazil)
+  const r = await chamar<{ data?: { id: string; instagram_business_account?: { id: string; username?: string } }[] }>("/me/accounts", token, {
+    query: { fields: "instagram_business_account{id,username}", limit: "100" },
+  });
+  const contas = (r.data ?? []).filter((p) => p.instagram_business_account);
+  const p = contas.find((x) => x.instagram_business_account?.username === "viasolbrazil") ?? contas[0];
+  if (!p?.instagram_business_account) throw new ErroIg("Esse token não enxerga nenhuma conta do Instagram ligada a uma página");
+  return { id: p.instagram_business_account.id, user_id: p.instagram_business_account.id, username: p.instagram_business_account.username ?? "", pageId: p.id };
 }
 
 /** Renova o token de 60 dias (precisa ter pelo menos 24 h). */
@@ -57,15 +79,18 @@ export async function renovarToken(token: string): Promise<{ token: string; expi
 }
 
 /** Liga os avisos (webhook) da conta: comentários, comentários de live e mensagens. */
-export function assinarWebhook(token: string) {
+export function assinarWebhook(token: string, pageId?: string) {
+  // Login do Facebook: os avisos do Instagram vêm pela página ligada à conta
+  if (tokenFacebook(token) && pageId)
+    return chamar<{ success?: boolean }>(`/${pageId}/subscribed_apps`, token, { method: "POST", query: { subscribed_fields: "feed" } });
   return chamar<{ success?: boolean }>("/me/subscribed_apps", token, {
     method: "POST",
     query: { subscribed_fields: "comments,live_comments,messages" },
   });
 }
 
-export function webhookAssinado(token: string) {
-  return chamar<{ data?: { subscribed_fields?: string[] }[] }>("/me/subscribed_apps", token);
+export function webhookAssinado(token: string, pageId?: string) {
+  return chamar<{ data?: { subscribed_fields?: string[] }[] }>(tokenFacebook(token) && pageId ? `/${pageId}/subscribed_apps` : "/me/subscribed_apps", token);
 }
 
 export interface ComentarioApi {
@@ -78,7 +103,7 @@ export interface ComentarioApi {
 
 /** Live no ar agora, com os comentários (só existe enquanto transmite). */
 export async function liveAgora(token: string): Promise<{ id: string; comentarios: ComentarioApi[] } | null> {
-  const r = await chamar<{ data?: { id: string; comments?: { data?: ComentarioApi[] } }[] }>("/me/live_media", token, {
+  const r = await chamar<{ data?: { id: string; comments?: { data?: ComentarioApi[] } }[] }>(`${eu(token)}/live_media`, token, {
     query: { fields: "id,comments.limit(100){id,text,timestamp,username,from}" },
   });
   const m = r.data?.[0];
@@ -87,7 +112,7 @@ export async function liveAgora(token: string): Promise<{ id: string; comentario
 
 /** Resposta privada: uma DM só, pra quem comentou (na live, só enquanto ela está no ar). */
 export function respostaPrivada(token: string, commentId: string, texto: string) {
-  return chamar<{ recipient_id?: string; message_id?: string }>("/me/messages", token, {
+  return chamar<{ recipient_id?: string; message_id?: string }>(`${eu(token)}/messages`, token, {
     method: "POST",
     body: { recipient: { comment_id: commentId }, message: { text: texto } },
   });

@@ -11,7 +11,7 @@
  */
 
 import { type Origem, type Resposta, alterarBaseIg, lerBaseIg } from "./base";
-import { ErroIg, liveAgora, renovarToken, respostaPrivada } from "./api";
+import { ErroIg, liveAgora, renovarToken, respostaPrivada, tokenFacebook, usarConta } from "./api";
 
 export interface Comentario {
   commentId: string;
@@ -86,6 +86,7 @@ export async function processarComentario(c: Comentario): Promise<string> {
   }
 
   emAndamento.add(c.commentId);
+  usarConta(cfg.igUserId);
   try {
     const texto = montarMensagem(cfg.mensagem, c, cfg.link, cfg.campanha);
     try {
@@ -142,6 +143,7 @@ export async function passoVigia(): Promise<void> {
       estado.liveId = undefined;
       return;
     }
+    usarConta(cfg.igUserId);
     const live = await liveAgora(cfg.token);
     estado.ultimaBusca = new Date().toISOString();
     estado.ultimoErro = undefined;
@@ -175,6 +177,7 @@ export async function passoVigia(): Promise<void> {
 export async function renovarSePreciso(): Promise<string> {
   const { config: cfg } = await lerBaseIg();
   if (!cfg.token) return "sem token";
+  if (tokenFacebook(cfg.token)) return "token do Facebook (não expira)";
   const expira = cfg.tokenExpiraEm ? Date.parse(cfg.tokenExpiraEm) : 0;
   if (expira && expira - Date.now() > 15 * 86400_000) return "em dia";
   const r = await renovarToken(cfg.token);
