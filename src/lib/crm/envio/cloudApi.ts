@@ -9,6 +9,9 @@
 
 import type { Adaptador, ResultadoEnvio, SituacaoNumero } from "./adaptador";
 
+/** Topo da mensagem em vídeo (mp4) em vez de foto */
+export const ehVideo = (url: string) => /\.mp4(\?|$)/i.test(url);
+
 export const GRAPH = process.env.META_GRAPH_URL ?? "https://graph.facebook.com/v21.0";
 
 export interface TemplateNaMeta {
@@ -37,7 +40,10 @@ export class CloudApi implements Adaptador {
     t: { nome: string; idioma: string; parametros: string[]; botao?: string; imagem?: string }
   ): Promise<ResultadoEnvio> {
     const components: Record<string, unknown>[] = [];
-    if (t.imagem) components.push({ type: "header", parameters: [{ type: "image", image: { link: t.imagem } }] });
+    if (t.imagem) {
+      const tipo = ehVideo(t.imagem) ? "video" : "image";
+      components.push({ type: "header", parameters: [{ type: tipo, [tipo]: { link: t.imagem } }] });
+    }
     if (t.parametros.length)
       components.push({ type: "body", parameters: t.parametros.map((p) => ({ type: "text", text: p.trim() || "-" })) });
     if (t.botao) components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: t.botao }] });

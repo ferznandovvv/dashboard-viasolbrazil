@@ -725,6 +725,17 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Black November com o vídeo da campanha no topo, no lugar da foto
+    id: "black-november-video",
+    aplicar: (b) => {
+      const m = b.modelos.find((x) => x.campanha === "black_november");
+      if (m?.template) {
+        m.template.nome = "via_sol_black_november_video";
+        m.template.imagem = "https://painel.viasolbrazil.com.br/midia/black-november-whats.mp4";
+      }
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {

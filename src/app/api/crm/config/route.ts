@@ -6,7 +6,7 @@ import { LOJAS } from "@/lib/connectors/totvs";
 import { alterarBase, copiaDeSeguranca, lerBase } from "@/lib/crm/base";
 import { indicacaoDe, CAMPANHAS, ENDERECO_PUBLICO_PADRAO, WAAKG_LINK_PADRAO, oficialDe, type ConfigCrm, type ConfigOficial, type Modelo, type TemplateMeta } from "@/lib/crm/tipos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
-import { CloudApi } from "@/lib/crm/envio/cloudApi";
+import { CloudApi, ehVideo } from "@/lib/crm/envio/cloudApi";
 import { normalizarTelefone } from "@/lib/crm/telefone";
 import { mensagensDeTeste } from "@/lib/crm/mensagens";
 import { MODELOS_SUGERIDOS, payloadDoModelo } from "@/lib/crm/modelosMeta";
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
         else if (m.imagem) {
           // Modelo com foto: a Meta pede a imagem de exemplo pela API de upload do app
           const bytes = await fetch(m.imagem).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
-          const up = bytes ? await api.subirArquivo(APP_META, new Uint8Array(bytes)) : { erro: "não consegui baixar a foto" };
+          const up = bytes ? await api.subirArquivo(APP_META, new Uint8Array(bytes), ehVideo(m.imagem) ? "video/mp4" : "image/jpeg") : { erro: "não consegui baixar a foto" };
           feitos.push(up.handle ? { nome: m.nome, ...(await api.criarModelo(of.wabaId, payloadDoModelo(m, of, up.handle))) } : { nome: m.nome, ok: false, detalhe: up.erro ?? "upload falhou" });
         } else feitos.push({ nome: m.nome, ...(await api.criarModelo(of.wabaId, payloadDoModelo(m, of))) });
       }

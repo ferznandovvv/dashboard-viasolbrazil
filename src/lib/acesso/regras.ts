@@ -55,7 +55,9 @@ export function publica(caminho: string): boolean {
     caminho === "/api/crm/webhook" ||
     // A portaria da WA-AKG confere o passe de entrada (uso único, 1 minuto)
     caminho === "/whats/validar" ||
-    /^\/(logo-[a-z]+|icon)\.png$/.test(caminho)
+    /^\/(logo-[a-z]+|icon)\.png$/.test(caminho) ||
+    // Fotos e vídeos das mensagens: a Meta baixa daqui na aprovação e no envio
+    /^\/midia\/[\w-]+\.(mp4|jpe?g|png)$/.test(caminho)
   );
 }
 

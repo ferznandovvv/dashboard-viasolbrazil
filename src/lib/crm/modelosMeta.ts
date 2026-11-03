@@ -15,7 +15,7 @@ export interface ModeloSugerido {
   rodape?: string;
   /** `base`: começo fixo do link (padrão: urlBase do site); o final vai como variável. `fixo`: link inteiro, sem variável */
   botao: { texto: string; exemploSufixo: string; base?: string; fixo?: string };
-  /** Foto no topo: link público da imagem (a Meta pede um exemplo na aprovação) */
+  /** Foto ou vídeo (.mp4) no topo: link público (a Meta pede um exemplo na aprovação) */
   imagem?: string;
 }
 
@@ -121,6 +121,17 @@ export const MODELOS_SUGERIDOS: ModeloSugerido[] = [
     rodape: SAIR,
     botao: { texto: "Ver a Black", exemploSufixo: "", fixo: "https://www.viasolbrazil.com.br/collections/black-november" },
     imagem: "https://cdn.shopify.com/s/files/1/0949/0382/8756/files/TopBiquiniBohoBeachPreto-hd.jpg?v=1793634198",
+  },
+  {
+    campanha: "black_november",
+    nome: "via_sol_black_november_video",
+    categoria: "MARKETING",
+    corpo:
+      "Oi {{1}}! Começou a Black November da Via Sol ☀️ Peças de R$ 149 por R$ 59 no Pix, e levando 3 cada uma sai por R$ 39. São tops e calcinhas avulsos pra montar o biquíni do seu jeito, enquanto durar o estoque.",
+    exemplo: ["Ana"],
+    rodape: SAIR,
+    botao: { texto: "Ver a Black", exemploSufixo: "", fixo: "https://www.viasolbrazil.com.br/collections/black-november" },
+    imagem: "https://painel.viasolbrazil.com.br/midia/black-november-whats.mp4",
   },
   // Cashback das lojas: assina a vendedora e o botão abre o WhatsApp da loja, pra conversa seguir com ela.
   // A Meta não aceita wa.me no botão: vai viasolbrazil.com.br/w/<loja>, que redireciona (linkLoja.ts)
@@ -237,7 +248,7 @@ export function payloadDoModelo(m: ModeloSugerido, of: ConfigOficial, handleImag
     language: "pt_BR",
     category: m.categoria,
     components: [
-      ...(handleImagem ? [{ type: "HEADER", format: "IMAGE", example: { header_handle: [handleImagem] } }] : []),
+      ...(handleImagem ? [{ type: "HEADER", format: m.imagem && /\.mp4(\?|$)/i.test(m.imagem) ? "VIDEO" : "IMAGE", example: { header_handle: [handleImagem] } }] : []),
       { type: "BODY", text: m.corpo, example: { body_text: [m.exemplo] } },
       ...(m.rodape ? [{ type: "FOOTER", text: m.rodape }] : []),
       { type: "BUTTONS", buttons: [m.botao.fixo ? { type: "URL", text: m.botao.texto, url: m.botao.fixo } : { type: "URL", text: m.botao.texto, url: `${base}{{1}}`, example: [`${base}${m.botao.exemploSufixo}`] }] },

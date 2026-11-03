@@ -672,8 +672,8 @@ export const MODELOS_PADRAO: Modelo[] = [
     variacoes: [
       "Oi {primeiro}! Começou a Black November da Via Sol ☀️ Peças de R$ 149 por R$ 59 no Pix, e levando 3 cada uma sai por R$ 39. São tops e calcinhas avulsos pra montar o biquíni do seu jeito, enquanto durar o estoque.",
     ],
-    // A foto vai no topo (troca pela arte da Black quando estiver no ar)
-    template: { nome: "via_sol_black_november", idioma: "pt_BR", parametros: ["primeiro"], imagem: "https://cdn.shopify.com/s/files/1/0949/0382/8756/files/TopBiquiniBohoBeachPreto-hd.jpg?v=1793634198" },
+    // Vídeo da Black no topo (o 1º quadro já mostra os preços, vira a capa no WhatsApp)
+    template: { nome: "via_sol_black_november_video", idioma: "pt_BR", parametros: ["primeiro"], imagem: "https://painel.viasolbrazil.com.br/midia/black-november-whats.mp4" },
   },
   {
     campanha: "indicacao_convite",
