@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (corpo.acao === "conectar") {
-    const token = String(corpo.token ?? "").trim();
+    // Tira espaço, quebra de linha e aspas que vêm junto ao copiar
+    const token = String(corpo.token ?? "").replace(/[\s"'“”]/g, "");
     if (!token) return NextResponse.json({ erro: "Cole o token" }, { status: 400 });
     try {
       const eu = await quemSou(token);
@@ -87,9 +88,13 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         assinatura = e instanceof Error ? e.message : String(e);
       }
+      await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `ok @${eu.username} (token ${token.slice(0, 4)}…), avisos: ${assinatura}` }));
       return NextResponse.json({ ok: true, usuario: eu.username, assinatura });
     } catch (e) {
-      return NextResponse.json({ erro: e instanceof Error ? e.message : String(e) }, { status: 400 });
+      const msg = e instanceof Error ? e.message : String(e);
+      // Fica registrado pra diagnóstico (só o começo do token, nunca ele inteiro)
+      await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `erro (token ${token.slice(0, 4)}…, ${token.length} letras): ${msg}` }));
+      return NextResponse.json({ erro: msg }, { status: 400 });
     }
   }
 

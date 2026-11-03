@@ -6,6 +6,8 @@
 
 export const GRAPH_IG = process.env.IG_GRAPH_URL ?? "https://graph.instagram.com/v21.0";
 const GRAPH_FB = "https://graph.facebook.com/v21.0";
+/** @viasolbrazil */
+const IG_VIASOL = process.env.IG_USER_ID ?? "17841400378201514";
 
 /**
  * O app da Meta pode entregar dois tipos de token: o do Login do Instagram
@@ -63,7 +65,11 @@ export async function quemSou(token: string): Promise<{ user_id?: string; id: st
   });
   const contas = (r.data ?? []).filter((p) => p.instagram_business_account);
   const p = contas.find((x) => x.instagram_business_account?.username === "viasolbrazil") ?? contas[0];
-  if (!p?.instagram_business_account) throw new ErroIg("Esse token não enxerga nenhuma conta do Instagram ligada a uma página");
+  if (!p?.instagram_business_account) {
+    // Token de usuário do sistema pode não listar páginas: tenta direto a @viasolbrazil
+    const ig = await chamar<{ id: string; username: string }>(`/${IG_VIASOL}`, token, { query: { fields: "id,username" } });
+    return { id: ig.id, user_id: ig.id, username: ig.username };
+  }
   return { id: p.instagram_business_account.id, user_id: p.instagram_business_account.id, username: p.instagram_business_account.username ?? "", pageId: p.id };
 }
 

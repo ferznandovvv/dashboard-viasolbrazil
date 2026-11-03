@@ -243,9 +243,10 @@ export default function Instagram() {
             <div className="cfg-input">
               <input type="password" placeholder={e.conectado ? e.config.token : "cole o token gerado no app da Meta"} value={token} onChange={(x) => setToken(x.target.value)} />
               <button className="btn btn-pri btn-sm" disabled={ocupado || !token.trim()} onClick={() => void acao({ acao: "conectar", token }, "Conectado.").then((ok) => ok && setToken(""))}>
-                Conectar
+                {ocupado ? "Conectando…" : "Conectar"}
               </button>
             </div>
+            {aviso && <small role="status" style={{ color: aviso.startsWith("Não deu") ? "var(--critical)" : undefined }}>{aviso}</small>}
           </label>
           <label className="cfg-campo">
             <span>Chave secreta do app do Instagram</span>
