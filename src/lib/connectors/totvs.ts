@@ -304,7 +304,7 @@ export async function totvsFetchCom(
   return { status: res.status, json, text };
 }
 
-interface TotvsInvoice {
+export interface TotvsInvoice {
   branchCode: number;
   invoiceDate: string;
   invoiceSequence: number;
@@ -331,7 +331,7 @@ interface TotvsInvoice {
 }
 
 /** Só conta venda de verdade: saída, emitida e de operação de venda. */
-function isVenda(inv: TotvsInvoice): boolean {
+export function isVenda(inv: TotvsInvoice): boolean {
   if (inv.operationType !== "Output") return false;
   if (inv.invoiceStatus !== "Issued") return false;
   const op = inv.operatioName ?? "";
@@ -340,7 +340,7 @@ function isVenda(inv: TotvsInvoice): boolean {
 }
 
 /** Nota de entrada de devolução de venda (troca ou devolução), que não foi cancelada. */
-function isDevolucao(inv: TotvsInvoice): boolean {
+export function isDevolucao(inv: TotvsInvoice): boolean {
   if (inv.operationType !== "Input" || inv.invoiceStatus === "Canceled") return false;
   return /DEVOLU[CÇ][AÃ]O DE VENDA/i.test(inv.operatioName ?? "");
 }
