@@ -150,8 +150,8 @@ export async function liveAgora(token: string): Promise<{ id: string; comentario
 
 /** Resposta privada: uma DM só, pra quem comentou (na live, só enquanto ela está no ar). */
 export function respostaPrivada(token: string, commentId: string, texto: string) {
-  // Login do Facebook: quem manda é a página (token da página, /me = a página)
-  return chamar<{ recipient_id?: string; message_id?: string }>(`${modoDe(token) === "fb" ? "/me" : eu(token)}/messages`, token, {
+  // Login do Facebook: POST /<id da conta do Instagram>/messages (testado: aceita com o token do usuário)
+  return chamar<{ recipient_id?: string; message_id?: string }>(`${eu(token)}/messages`, token, {
     method: "POST",
     body: { recipient: { comment_id: commentId }, message: { text: texto } },
   });
