@@ -454,7 +454,7 @@ function ResultadoMes({ saldoTotal }: { saldoTotal: number }) {
           <div className="k-valor">{reais(c.comprasComCashback)}</div>
           <div className="k-sub">
             {c.vendasComCashback} {c.vendasComCashback === 1 ? "venda" : "vendas"} nas lojas
-            {c.vendasMes ? ` · ${pctDe(c.vendasComCashback, c.vendasMes) ?? 0}% de ${c.vendasMes.toLocaleString("pt-BR")}` : ""}
+            {c.vendasMes ? ` · ${pctFino(c.vendasComCashback, c.vendasMes)} de ${c.vendasMes.toLocaleString("pt-BR")}` : ""}
           </div>
         </div>
         <div className="res-kpi">
@@ -1024,6 +1024,12 @@ function EnvioNumeros({ linhas }: { linhas: (LinhaEnvio & { conectado: boolean |
 }
 
 const pctDe = (a: number, b: number) => (b ? Math.round((a / b) * 100) : null);
+/** Percentual com uma casa quando é pequeno (0,5% em vez de 0%) */
+const pctFino = (a: number, b: number) => {
+  if (!b) return "–";
+  const x = (a / b) * 100;
+  return `${x > 0 && x < 10 ? x.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : Math.round(x)}%`;
+};
 const reais2 = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nomeDoMes = (mes: string) => new Date(`${mes}T12:00:00`).toLocaleDateString("pt-BR", { month: "long" });
 
@@ -1070,7 +1076,7 @@ function ResultadoCashback({ c, v }: { c: CashbackMes; v: { lojas: VoltaramLoja[
                       <b>{reais(cb.comprasComCashback)}</b>
                       <small>
                         {cb.vendasComCashback} {cb.vendasComCashback === 1 ? "venda" : "vendas"}
-                        {cb.vendasMes ? ` · ${pctDe(cb.vendasComCashback, cb.vendasMes)}%` : ""}
+                        {cb.vendasMes ? ` · ${pctFino(cb.vendasComCashback, cb.vendasMes)}` : ""}
                       </small>
                     </>
                   ) : (
