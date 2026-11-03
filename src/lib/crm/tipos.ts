@@ -593,6 +593,8 @@ export interface ConfigCrm {
   devolucoesAte?: string;
   /** Quando as devoluções de todo o histórico de vendas foram lidas (uma vez) */
   devolucoesHistoricoEm?: string;
+  /** Quando as vendas sem nota fiscal (documento interno) desde o começo do cashback foram trazidas (uma vez) */
+  docInternoTrazidoEm?: string;
   diariaTotvsEm?: string;
   ultimaSincShopify?: string;
   ultimaSincShopifyResultado?: string;

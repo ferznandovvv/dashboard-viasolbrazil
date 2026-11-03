@@ -550,6 +550,29 @@ export async function sincronizarDiaria(): Promise<typeof progresso | null> {
 }
 
 /**
+ * Uma vez só: a venda sem nota fiscal (documento interno, situação "Normal")
+ * ficava de fora do CRM. Traz as que passaram desde o começo do cashback nas
+ * lojas, com cashback, de 7 em 7 dias (com os itens, como a diária). Venda
+ * que o CRM já tem não muda nem ganha cashback de novo.
+ */
+export async function trazerDocumentosInternos(): Promise<{ erro?: string; vendasNovas: number } | null> {
+  if (!totvsConfigured() || progresso.rodando) return null;
+  const hoje = hojeSp();
+  let vendasNovas = 0;
+  for (let de = INICIO_CASHBACK_LOJAS; de <= hoje; de = somarDias(de, 7)) {
+    const ate = somarDias(de, 6) < hoje ? somarDias(de, 6) : hoje;
+    const r = await sincronizar(de, ate, { creditar: true }).catch((e: Error) => ({ erro: e.message, vendasNovas: 0 }));
+    if (r.erro) return { erro: `${de} a ${ate}: ${r.erro}`, vendasNovas };
+    vendasNovas += r.vendasNovas;
+  }
+  await alterarBase((b) => {
+    b.config.docInternoTrazidoEm = new Date().toISOString();
+    b.config.ultimaSincTotvsResultado = `Vendas sem nota fiscal desde ${INICIO_CASHBACK_LOJAS.split("-").reverse().join("/")}: ${vendasNovas} vendas novas no CRM`;
+  });
+  return { vendasNovas };
+}
+
+/**
  * Relê o cadastro de toda cliente do TOTVS que está sem celular no CRM,
  * agora olhando também o endereço (complemento, referência). Roda uma vez
  * sozinha depois da atualização e pelo botão em Configurar → Dados.
