@@ -32,6 +32,7 @@ const MODULOS: Item[] = [
   { href: "/financeiro", nome: "Financeiro", icone: "financeiro", area: "financeiro" },
   { href: "/atendimento", nome: "Atendimento", icone: "atendimento", area: "crm" },
   { href: "/crm", nome: "CRM", icone: "crm", area: "crm" },
+  { href: "/instagram", nome: "Instagram", icone: "atendimento", area: "config", semAtalho: true },
 ];
 
 const LOJAS: Item[] = [

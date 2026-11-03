@@ -53,6 +53,8 @@ export function publica(caminho: string): boolean {
     caminho === "/api/login" ||
     caminho === "/api/aquecer" ||
     caminho === "/api/crm/webhook" ||
+    // Comentários do Instagram (robô do QUERO); confere a assinatura da Meta
+    caminho === "/api/instagram/webhook" ||
     // A portaria da WA-AKG confere o passe de entrada (uso único, 1 minuto)
     caminho === "/whats/validar" ||
     /^\/(logo-[a-z]+|icon)\.png$/.test(caminho) ||
@@ -81,6 +83,6 @@ export function areaDaRota(caminho: string, metodo: string, busca: URLSearchPara
   // Metas: ler aparece em Vendas; mudar é configuração
   if (em("/api/config")) return metodo === "GET" ? "vendas" : "config";
   if (em("/api/acesso/eu")) return null;
-  if (em("/configurar") || caminho.startsWith("/api/")) return "config";
+  if (em("/configurar") || em("/instagram") || caminho.startsWith("/api/")) return "config";
   return null;
 }

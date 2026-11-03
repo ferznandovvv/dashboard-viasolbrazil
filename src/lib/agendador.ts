@@ -17,6 +17,7 @@ import { reagruparAvisos, rodarAutomacoes } from "./crm/automacoes";
 import { processarFila, processarFilaOficial } from "./crm/fila";
 import { conferirEcommerce } from "./crm/ecommerce";
 import { alterarBase as alterarBaseCrm, hojeSp, lerBase as lerBaseCrm } from "./crm/base";
+import { passoVigia, renovarSePreciso } from "./instagram/robo";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
 const HORARIOS = [
@@ -174,6 +175,15 @@ export function iniciarAgendador(): void {
         .catch(() => {});
     }
   }, 30_000);
+
+  // Robô do Instagram: vigia da live (só faz algo quando ligada na tela) e token de 60 dias
+  setInterval(() => void passoVigia(), 3_000);
+  const tokenIg = () =>
+    renovarSePreciso()
+      .then((r) => r === "renovado" && console.log("[instagram] token renovado"))
+      .catch((e) => console.error("[instagram] renovar token:", e instanceof Error ? e.message : e));
+  setTimeout(tokenIg, 120_000);
+  setInterval(tokenIg, 24 * 3600_000);
 
   // Fila de envio do CRM: um passo a cada 20 s, independente do aquecimento
   setInterval(() => {
