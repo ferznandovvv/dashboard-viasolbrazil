@@ -384,6 +384,9 @@ export default function Dashboard() {
     const lista = todas;
     const maior = Math.max(...todas.map((x) => x.revenue), 1);
     const semNome = (v: { name: string }) => v.name.startsWith("Sem vendedora no caixa");
+    // Compras de funcionárias (fatura): linha à parte, fora da contagem das vendedoras
+    const funcionarias = (v: { name: string }) => v.name.startsWith("Compras de funcionárias");
+    const aParte = (v: { name: string }) => semNome(v) || funcionarias(v);
     // Quanto do faturamento das lojas ficou sem dono
     const semDono = todas.filter(semNome).reduce((s, v) => s + v.revenue, 0);
     const totalLojas = todas.reduce((s, v) => s + v.revenue, 0);
@@ -400,12 +403,12 @@ export default function Dashboard() {
           {lista.map((v, i) => (
             <div
               key={v.name}
-              className={`rank-row${semNome(v) ? " anon" : ""}`}
+              className={`rank-row${aParte(v) ? " anon" : ""}`}
               title={v.stores.join(", ")}
             >
               <div className="rank-info">
                 <span className="rank-title">
-                  {semNome(v) ? "Sem vendedora" : `${i + 1}º ${v.name}`}
+                  {semNome(v) ? "Sem vendedora" : funcionarias(v) ? "Compras de funcionárias (fatura)" : `${i + 1}º ${v.name}`}
                 </span>
                 <span className="rank-nums">
                   {v.orders} vendas · <b>{brl.format(v.revenue)}</b>
@@ -416,7 +419,7 @@ export default function Dashboard() {
                   className="rank-fill"
                   style={{
                     width: `${(v.revenue / maior) * 100}%`,
-                    background: semNome(v)
+                    background: aParte(v)
                       ? "var(--text-muted)"
                       : v.stores.length === 1
                         ? corDaLoja(v.stores[0])
@@ -430,8 +433,16 @@ export default function Dashboard() {
               </span>
               {v.notas && v.notas.length > 0 && (
                 <details className="rank-notas">
-                  <summary>{v.notas.length === 1 ? "Ver a nota sem vendedora" : `Ver as ${v.notas.length} notas sem vendedora`}</summary>
-                  <ul tabIndex={0} aria-label="Notas sem vendedora">
+                  <summary>
+                    {funcionarias(v)
+                      ? v.notas.length === 1
+                        ? "Ver a compra"
+                        : `Ver as ${v.notas.length} compras`
+                      : v.notas.length === 1
+                        ? "Ver a nota sem vendedora"
+                        : `Ver as ${v.notas.length} notas sem vendedora`}
+                  </summary>
+                  <ul tabIndex={0} aria-label={funcionarias(v) ? "Compras de funcionárias" : "Notas sem vendedora"}>
                     {v.notas.map((n) => (
                       <li key={`${n.label}-${n.createdAt}`}>
                         <span>

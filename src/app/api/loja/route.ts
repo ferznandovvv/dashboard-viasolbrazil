@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { lojasPermitidas } from "@/lib/acesso/lojas";
 import { LOJAS, fetchTotvsSales } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
-import { addDays, contaComoPedido, spDateKey, todaySpKey } from "@/lib/types";
+import { addDays, contaComoPedido, ehCompraDeFuncionaria, spDateKey, todaySpKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -43,7 +43,9 @@ export async function GET(req: NextRequest) {
 
   const [vendas, cfg] = await Promise.all([fetchTotvsSales(buscarDesde, hoje), readConfig()]);
 
-  const daLoja = vendas.orders.filter((o) => o.store === nome);
+  const todasDaLoja = vendas.orders.filter((o) => o.store === nome);
+  // Compra de funcionária (fatura) conta para a loja, não para a vendedora
+  const daLoja = todasDaLoja.filter((o) => !ehCompraDeFuncionaria(o));
   const metaLoja = cfg.metas?.[nome] ?? 0;
 
   // Vendedoras ativas: venderam nesta loja nos últimos 30 dias
@@ -54,7 +56,8 @@ export async function GET(req: NextRequest) {
   );
 
   const doMes = daLoja.filter((o) => spDateKey(o.createdAt) >= inicioMes);
-  const vendidoLoja = doMes.reduce((s, o) => s + o.total, 0);
+  const funcionarias = todasDaLoja.filter((o) => ehCompraDeFuncionaria(o) && spDateKey(o.createdAt) >= inicioMes).reduce((s, o) => s + o.total, 0);
+  const vendidoLoja = doMes.reduce((s, o) => s + o.total, 0) + funcionarias;
   const semVendedora = doMes.filter((o) => !o.seller).reduce((s, o) => s + o.total, 0);
 
   // Dias até o fim do mês, contando hoje
@@ -95,6 +98,7 @@ export async function GET(req: NextRequest) {
     vendidoLoja,
     pctLoja: metaLoja > 0 ? vendidoLoja / metaLoja : 0,
     semVendedora,
+    funcionarias,
     vendedoras,
     conectado: vendas.connected,
     erro: vendas.error,

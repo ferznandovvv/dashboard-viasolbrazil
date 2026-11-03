@@ -133,6 +133,19 @@ export async function GET(req: NextRequest) {
     const linhaNota = (n: Nota, sinal = 1) =>
       `<tr><td>${dia(n).split("-").reverse().join("/")}</td><td>${esc(n.invoiceCode ?? n.invoiceSequence)}</td><td>${esc(n.personName)}</td><td>${esc(codigoOp(n))} ${esc(n.operatioName)}</td><td>${esc(n.invoiceStatus)}</td><td class="n">${sinal < 0 ? "−" : ""}${brl(Number(n.totalValue ?? 0))}</td></tr>`;
     const amostra = foraSaida[0] ?? s[0];
+    // Formas de pagamento das vendas: a "fatura" (compra de funcionária) não conta para as vendedoras
+    const formas = new Map<string, { n: number; valor: number }>();
+    for (const n of vendas) {
+      const f = String(n.paymentConditionName ?? "").trim() || "(sem forma de pagamento)";
+      const g = formas.get(f) ?? { n: 0, valor: 0 };
+      g.n += 1;
+      g.valor += Number(n.totalValue ?? 0);
+      formas.set(f, g);
+    }
+    const linhasForma = Array.from(formas.entries())
+      .sort((x, y) => y[1].valor - x[1].valor)
+      .map(([f, g]) => `<tr><td>${esc(f)}</td><td>${/FATURA/i.test(f) ? "compra de funcionária: fora das vendedoras" : ""}</td><td class="n">${g.n}</td><td class="n">${brl(g.valor)}</td></tr>`)
+      .join("");
 
     corpo = `
 <p>${esc(nomeLoja)}, ${String(m).padStart(2, "0")}/${a}. Notas buscadas agora direto na TOTVS (alteradas até ${ate.split("-").reverse().join("/")}).</p>
@@ -148,6 +161,8 @@ export async function GET(req: NextRequest) {
 <h2>Notas de saída que o painel não conta</h2>
 ${linhasGrupo ? `<table><tr><th>Cód.</th><th>Operação</th><th>Por que ficou fora</th><th class="n">Notas</th><th class="n">Valor</th></tr>${linhasGrupo}</table>
 <details><summary>Ver as ${foraSaida.length} notas</summary><table>${foraSaida.map((n) => linhaNota(n)).join("")}</table></details>` : "<p>Nenhuma: toda nota de saída emitida do mês entrou como venda.</p>"}
+<h2>Formas de pagamento das vendas</h2>
+<table><tr><th>Forma</th><th></th><th class="n">Notas</th><th class="n">Valor</th></tr>${linhasForma}</table>
 <h2>Devoluções que o painel desconta</h2>
 <table>${devolucoes.map((n) => linhaNota(n, -1)).join("") || "<tr><td>Nenhuma</td></tr>"}</table>
 ${devolucoesFora.length ? `<h2>Notas de entrada com DEVOL ou VENDA que não contaram</h2><table>${devolucoesFora.map((n) => linhaNota(n)).join("")}</table>` : ""}

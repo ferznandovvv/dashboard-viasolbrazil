@@ -63,6 +63,7 @@ interface Vendas {
   rankingMeta?: { loja: string; pct: number | null; vendido: number }[];
   vendedoras?: { nome: string; vendido: number; vendas: number; ticket: number; hoje: number; comCelular: number; pctCelular: number | null; peloWhats: number }[];
   semVendedora?: number;
+  funcionarias?: number;
 }
 
 interface FichaCashback {
@@ -554,6 +555,7 @@ function Vendedoras({ v }: { v: Vendas }) {
         </table>
       </div>
       {v.semVendedora ? <p className="muted lp-nota">{reais(v.semVendedora)} em vendas sem vendedora na nota.</p> : null}
+      {v.funcionarias ? <p className="muted lp-nota">{reais(v.funcionarias)} em compras de funcionárias (fatura), que não contam para as vendedoras.</p> : null}
     </section>
   );
 }

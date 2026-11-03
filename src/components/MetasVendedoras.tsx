@@ -16,6 +16,7 @@ interface Dados {
   metaLoja: number;
   vendedoras: Vendedora[];
   semVendedora: number;
+  funcionarias?: number;
 }
 
 const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -97,6 +98,9 @@ export function MetasVendedoras({ loja }: { loja: string }) {
       </ul>
       {d.semVendedora > 0 && (
         <p className="metas-vend-sub">{reais(d.semVendedora)} saíram do caixa no mês sem vendedora registrada.</p>
+      )}
+      {(d.funcionarias ?? 0) > 0 && (
+        <p className="metas-vend-sub">{reais(d.funcionarias!)} em compras de funcionárias (fatura) não contam para as vendedoras.</p>
       )}
     </section>
   );

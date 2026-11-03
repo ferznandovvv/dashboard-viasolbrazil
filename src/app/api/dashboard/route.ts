@@ -13,6 +13,7 @@ import {
   addDays,
   contaComoPedido,
   devolucoesEm,
+  ehCompraDeFuncionaria,
   spDateKey,
   spMidnight,
   pedidosEm,
@@ -503,6 +504,7 @@ export async function GET(req: NextRequest) {
   // As vendas que saíram do caixa sem vendedora ficam separadas por loja, para
   // mostrar onde o PDV está deixando de registrar.
   const SEM_VEND = "Sem vendedora no caixa";
+  const FUNCIONARIAS = "Compras de funcionárias (fatura)";
   const vendMap = new Map<
     string,
     {
@@ -518,7 +520,11 @@ export async function GET(req: NextRequest) {
     if (o.channel !== "lojas") continue;
     // Venda sem vendedora identificada entra como linha própria: some do
     // ranking seria esconder faturamento que existe.
-    const nome = o.seller ?? `${SEM_VEND} — ${o.store ?? "loja não informada"}`;
+    // Compra de funcionária (fatura) vai para uma linha própria: não é venda de quem passou no caixa
+    const funcionaria = ehCompraDeFuncionaria(o);
+    const nome = funcionaria
+      ? `${FUNCIONARIAS} — ${o.store ?? "loja não informada"}`
+      : (o.seller ?? `${SEM_VEND} — ${o.store ?? "loja não informada"}`);
     const e =
       vendMap.get(nome) ?? { name: nome, revenue: 0, orders: 0, pieces: 0, stores: new Set<string>() };
     // Devolução sai de quem fez a venda original (o conector já trocou a vendedora)
@@ -526,8 +532,8 @@ export async function GET(req: NextRequest) {
     e.orders += contaComoPedido(o) ? 1 : 0;
     e.pieces += o.qty ?? 0;
     if (o.store) e.stores.add(o.store);
-    // Quais notas ficaram sem vendedora, para a loja conferir uma a uma
-    if (!o.seller && contaComoPedido(o)) {
+    // Quais notas ficaram sem vendedora (ou são de funcionária), para a loja conferir uma a uma
+    if ((funcionaria || !o.seller) && contaComoPedido(o)) {
       e.notas ??= [];
       if (e.notas.length < 150) e.notas.push({ label: o.label, createdAt: o.createdAt, total: o.total, customer: o.customer });
     }
@@ -547,7 +553,7 @@ export async function GET(req: NextRequest) {
     // A linha das vendas sem identificação fica sempre por último, para não
     // disputar posição com quem tem nome
     .sort((a, b) => {
-      const anon = (v: { name: string }) => (v.name.startsWith(SEM_VEND) ? 1 : 0);
+      const anon = (v: { name: string }) => (v.name.startsWith(SEM_VEND) || v.name.startsWith(FUNCIONARIAS) ? 1 : 0);
       return anon(a) - anon(b) || b.revenue - a.revenue;
     });
 

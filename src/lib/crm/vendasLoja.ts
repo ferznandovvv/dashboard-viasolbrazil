@@ -9,7 +9,7 @@
 
 import { LOJAS, fetchTotvsSales, fetchVendasPorProduto, totvsConfigured } from "@/lib/connectors/totvs";
 import { readConfig } from "@/lib/config";
-import { contaComoPedido, pedidosEm, spDateKey } from "@/lib/types";
+import { contaComoPedido, ehCompraDeFuncionaria, pedidosEm, spDateKey } from "@/lib/types";
 import { alterarBase, hojeSp, somarDias } from "./base";
 import type { BaseCrm } from "./tipos";
 
@@ -102,6 +102,8 @@ export interface VendasLoja {
   rankingMeta: { loja: string; pct: number | null; vendido: number }[];
   vendedoras: { nome: string; vendido: number; vendas: number; ticket: number; hoje: number; comCelular: number; pctCelular: number | null; peloWhats: number }[];
   semVendedora: number;
+  /** Compras de funcionárias (fatura): da loja, mas fora das vendedoras */
+  funcionarias: number;
 }
 
 /**
@@ -120,7 +122,7 @@ export async function vendasDaLoja(
   const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
   const diasRestantes = ultimoDia - Number(hoje.slice(8, 10)) + 1;
   const dias = Math.round((Date.parse(per.ate) - Date.parse(per.de)) / 86400000) + 1;
-  const vazio: VendasLoja = { configurado: false, mes: per.rotulo, periodo: per, vendido: 0, meta: 0, pct: null, hoje: 0, vendas: 0, ticket: 0, mediaDia: 0, diasRestantes, porDia: 0, rankingMeta: [], vendedoras: [], semVendedora: 0 };
+  const vazio: VendasLoja = { configurado: false, mes: per.rotulo, periodo: per, vendido: 0, meta: 0, pct: null, hoje: 0, vendas: 0, ticket: 0, mediaDia: 0, diasRestantes, porDia: 0, rankingMeta: [], vendedoras: [], semVendedora: 0, funcionarias: 0 };
   if (!totvsConfigured()) return vazio;
 
   const [r, cfg] = await Promise.all([fetchTotvsSales(per.de, per.ate), readConfig()]);
@@ -159,7 +161,12 @@ export async function vendasDaLoja(
 
   const porVend = new Map<string, { nome: string; vendido: number; vendas: number; hoje: number; cpf?: string }>();
   let semVendedora = 0;
+  let funcionarias = 0;
   for (const o of daLoja) {
+    if (ehCompraDeFuncionaria(o)) {
+      funcionarias += o.total;
+      continue;
+    }
     if (!o.sellerCpf) {
       semVendedora += o.total;
       continue;
@@ -200,6 +207,7 @@ export async function vendasDaLoja(
       }))
       .sort((a, b) => b.vendido - a.vendido),
     semVendedora: Math.round(semVendedora),
+    funcionarias: Math.round(funcionarias),
   };
 }
 

@@ -48,6 +48,13 @@ export interface NormalizedOrder {
 /** Conta como pedido/venda (devolução só desconta valor e peças; troca não é venda nova). */
 export const contaComoPedido = (o: NormalizedOrder) => !o.devolucao && !o.troca;
 
+/**
+ * Compra de funcionária para descontar do salário: passa no caixa com a forma
+ * de pagamento "fatura". Conta no faturamento da loja, mas não é venda de
+ * vendedora: fica fora do ranking, da meta de cada uma e da base da comissão.
+ */
+export const ehCompraDeFuncionaria = (o: NormalizedOrder) => o.channel === "lojas" && !o.devolucao && /FATURA/i.test(o.payment ?? "");
+
 /** Quantos pedidos de verdade tem a lista (sem as devoluções e as trocas). */
 export const pedidosEm = (lista: NormalizedOrder[]) => lista.reduce((n, o) => n + (contaComoPedido(o) ? 1 : 0), 0);
 
