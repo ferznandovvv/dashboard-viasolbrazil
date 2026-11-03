@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alterarBaseIg, lerBaseIg, type ConfigInstagram } from "@/lib/instagram/base";
-import { assinarWebhook, quemSou, tokenFacebook, usarConta, webhookAssinado } from "@/lib/instagram/api";
+import { assinarWebhook, quemSou, raioXToken, tokenFacebook, usarConta, webhookAssinado } from "@/lib/instagram/api";
 import { estadoVigia, montarMensagem } from "@/lib/instagram/robo";
 import { mascarar } from "@/lib/segredo";
 
@@ -94,8 +94,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, usuario: eu.username, assinatura });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // Fica registrado pra diagnóstico (só o começo do token, nunca ele inteiro)
-      await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `erro (token ${token.slice(0, 4)}…, ${token.length} letras): ${msg}` }));
+      // Fica registrado pra diagnóstico (só o começo do token, nunca ele inteiro), com o raio-x da Meta
+      const { config: cfgAtual } = await lerBaseIg();
+      const raio = cfgAtual.appSecret ? await raioXToken(token, cfgAtual.appSecret) : "sem segredo do app pro raio-x";
+      await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `erro (token ${token.slice(0, 4)}…, ${token.length} letras): ${msg} || RAIO-X: ${raio}` }));
       return NextResponse.json({ erro: msg }, { status: 400 });
     }
   }

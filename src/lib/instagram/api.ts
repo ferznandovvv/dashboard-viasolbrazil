@@ -155,3 +155,24 @@ export function respostaPrivada(token: string, commentId: string, texto: string)
     body: { recipient: { comment_id: commentId }, message: { text: texto } },
   });
 }
+
+/**
+ * Raio-X do token pela própria Meta (debug_token, com o token do app = id|segredo):
+ * tipo, permissões e em quais contas/páginas cada permissão vale. Nunca devolve o token.
+ */
+export async function raioXToken(token: string, appSecret: string, appId = process.env.IG_APP_ID ?? "1065079759887540"): Promise<string> {
+  try {
+    const u = `${GRAPH_FB}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`;
+    const r = await fetch(u, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const j = (await r.json()) as {
+      data?: { type?: string; app_id?: string; is_valid?: boolean; user_id?: string; profile_id?: string; expires_at?: number; scopes?: string[]; granular_scopes?: { scope: string; target_ids?: string[] }[]; error?: { message?: string } };
+      error?: { message?: string };
+    };
+    if (j.error) return `raio-x falhou: ${j.error.message}`;
+    const d = j.data ?? {};
+    const gran = (d.granular_scopes ?? []).map((g) => `${g.scope}${g.target_ids?.length ? `→${g.target_ids.join("/")}` : ""}`).join(", ");
+    return `tipo ${d.type}, app ${d.app_id}, válido ${d.is_valid}, user ${d.user_id ?? "-"}, profile ${d.profile_id ?? "-"}, expira ${d.expires_at ? new Date(d.expires_at * 1000).toISOString().slice(0, 10) : "nunca"}, escopos: ${gran || (d.scopes ?? []).join(", ")}${d.error ? `, erro: ${d.error.message}` : ""}`;
+  } catch (e) {
+    return `raio-x falhou: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
