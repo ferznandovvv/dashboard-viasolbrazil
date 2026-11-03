@@ -40,7 +40,7 @@ export interface VendaWhats {
   motivo: string;
 }
 
-export function vendasPeloWhatsApp(base: BaseCrm, loja: string, desde: string) {
+export function vendasPeloWhatsApp(base: BaseCrm, loja: string, desde: string, ate = "9999-12-31") {
   // Quando cada telefone escreveu pra esta loja
   const conversas = new Map<string, number[]>();
   for (const a of base.atendimento) {
@@ -56,7 +56,7 @@ export function vendasPeloWhatsApp(base: BaseCrm, loja: string, desde: string) {
   const lista: VendaWhats[] = [];
   const porVendedora = new Map<string, { n: number; valor: number }>();
   for (const v of base.vendas) {
-    if (v.loja !== loja || v.valor <= 0 || v.data.slice(0, 10) < desde) continue;
+    if (v.loja !== loja || v.valor <= 0 || v.data.slice(0, 10) < desde || v.data.slice(0, 10) > ate) continue;
     total++;
     totalValor += v.valor;
     const c = v.clienteId ? cliente.get(v.clienteId) : undefined;

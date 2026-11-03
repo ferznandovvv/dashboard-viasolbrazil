@@ -377,3 +377,12 @@ tr.venda-aberta td { border-bottom-color: transparent; background: var(--page); 
   .rank-notas li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .rank-notas-cli { display: none; }
 }
+
+/* ——— Tela da loja: período das vendas ——— */
+.lp-periodo { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--e-2) var(--e-4); flex-wrap: wrap; margin-bottom: var(--e-2); }
+.lp-periodo .lp-bloco-titulo { margin-bottom: 0; padding-top: 6px; }
+.lp-periodo .filters { margin-bottom: 0; }
+.lp-periodo .custom-range { margin-top: var(--e-2); }
+.lp-vendas-area { transition: opacity 0.2s; }
+.lp-vendas-area.trocando { opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) { .lp-vendas-area { transition: none; } }

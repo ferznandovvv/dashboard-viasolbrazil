@@ -42,16 +42,60 @@ export async function aprenderVendedoras(base: BaseCrm): Promise<void> {
   for (const [cpf, nome] of novos) (base.vendedoras ??= {})[cpf] = nome;
 }
 
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/** O período escolhido na tela da loja, já conferido, e como chamá-lo nos títulos. */
+export interface PeriodoLoja {
+  de: string;
+  ate: string;
+  /** "novembro", "outubro de 2025", "hoje", "27/10 a 02/11" */
+  rotulo: string;
+  /** Um mês inteiro (ou o mês atual até hoje) */
+  mesInteiro: boolean;
+  /** O mês atual: o único com meta, porque só a meta de agora fica guardada */
+  mesAtual: boolean;
+  /** O período vai até hoje */
+  temHoje: boolean;
+}
+
+/** Sem datas (ou com datas inválidas) é o mês atual; nada depois de hoje nem mais de 400 dias. */
+export function periodoDaLoja(deQ?: string | null, ateQ?: string | null): PeriodoLoja {
+  const hoje = hojeSp();
+  const data = (d?: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null);
+  let ate = data(ateQ) ?? hoje;
+  if (ate > hoje) ate = hoje;
+  let de = data(deQ) ?? `${hoje.slice(0, 7)}-01`;
+  if (de > ate) de = ate;
+  if (de < somarDias(ate, -400)) de = somarDias(ate, -400);
+  const [a, m] = de.split("-").map(Number);
+  const fimDoMes = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
+  const mesInteiro = de.endsWith("-01") && de.slice(0, 7) === ate.slice(0, 7) && (ate === fimDoMes || ate === hoje);
+  const anoAtual = hoje.slice(0, 4);
+  const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}${d.slice(0, 4) === anoAtual ? "" : `/${d.slice(2, 4)}`}`;
+  const rotulo = mesInteiro
+    ? `${MESES[m - 1]}${String(a) === anoAtual ? "" : ` de ${a}`}`
+    : de === ate
+      ? de === hoje
+        ? "hoje"
+        : dm(de)
+      : `${dm(de)} a ${dm(ate)}`;
+  return { de, ate, rotulo, mesInteiro, mesAtual: mesInteiro && de.slice(0, 7) === hoje.slice(0, 7), temHoje: ate === hoje };
+}
+
 export interface VendasLoja {
   configurado: boolean;
   erro?: string;
+  /** Nome do período nos títulos (era só o mês) */
   mes: string;
+  periodo: PeriodoLoja;
   vendido: number;
   meta: number;
   pct: number | null;
   hoje: number;
   vendas: number;
   ticket: number;
+  /** Vendido por dia no período */
+  mediaDia: number;
   diasRestantes: number;
   /** Quanto precisa vender por dia, de hoje até o fim do mês, pra bater a meta */
   porDia: number;
@@ -60,18 +104,27 @@ export interface VendasLoja {
   semVendedora: number;
 }
 
-export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<string, { n: number; valor: number }>): Promise<VendasLoja> {
+/**
+ * Vendas da loja no período (o mês atual, se não vier outro). A meta só
+ * entra no mês atual: a meta guardada é a de agora, e comparar um mês
+ * passado com ela seria comparar com um número que talvez nem valesse.
+ */
+export async function vendasDaLoja(
+  base: BaseCrm,
+  loja: string,
+  peloWhats?: Map<string, { n: number; valor: number }>,
+  per: PeriodoLoja = periodoDaLoja()
+): Promise<VendasLoja> {
   const hoje = hojeSp();
-  const inicioMes = `${hoje.slice(0, 7)}-01`;
   const [ano, mes] = hoje.split("-").map(Number);
   const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
   const diasRestantes = ultimoDia - Number(hoje.slice(8, 10)) + 1;
-  const mesNome = new Date(`${inicioMes}T12:00:00`).toLocaleDateString("pt-BR", { month: "long" });
-  const vazio: VendasLoja = { configurado: false, mes: mesNome, vendido: 0, meta: 0, pct: null, hoje: 0, vendas: 0, ticket: 0, diasRestantes, porDia: 0, rankingMeta: [], vendedoras: [], semVendedora: 0 };
+  const dias = Math.round((Date.parse(per.ate) - Date.parse(per.de)) / 86400000) + 1;
+  const vazio: VendasLoja = { configurado: false, mes: per.rotulo, periodo: per, vendido: 0, meta: 0, pct: null, hoje: 0, vendas: 0, ticket: 0, mediaDia: 0, diasRestantes, porDia: 0, rankingMeta: [], vendedoras: [], semVendedora: 0 };
   if (!totvsConfigured()) return vazio;
 
-  const [r, cfg] = await Promise.all([fetchTotvsSales(inicioMes, hoje), readConfig()]);
-  const metas = cfg.metas ?? {};
+  const [r, cfg] = await Promise.all([fetchTotvsSales(per.de, per.ate), readConfig()]);
+  const metas = per.mesAtual ? (cfg.metas ?? {}) : {};
 
   // Nome de cada vendedora pelo CPF (o dashboard já traduz); guarda os novos no CRM
   const nomes = new Map<string, string>();
@@ -95,11 +148,12 @@ export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<
   const vendido = daLoja.reduce((s, o) => s + o.total, 0);
   const meta = metas[loja] ?? 0;
 
-  // Celular por vendedora no mês, pelas vendas do CRM (que sabem se a cliente tem celular)
+  // Celular por vendedora no período, pelas vendas do CRM (que sabem se a cliente tem celular)
   const temCel = new Map(base.clientes.map((c) => [c.id, Boolean(c.telefone)]));
   const cel = new Map<string, number>();
   for (const v of base.vendas) {
-    if (v.loja !== loja || !v.vendedoraCpf || v.data.slice(0, 10) < inicioMes || v.valor <= 0) continue;
+    const dia = v.data.slice(0, 10);
+    if (v.loja !== loja || !v.vendedoraCpf || dia < per.de || dia > per.ate || v.valor <= 0) continue;
     if (v.clienteId && temCel.get(v.clienteId)) cel.set(v.vendedoraCpf, (cel.get(v.vendedoraCpf) ?? 0) + 1);
   }
 
@@ -121,13 +175,15 @@ export async function vendasDaLoja(base: BaseCrm, loja: string, peloWhats?: Map<
   return {
     configurado: true,
     erro: r.error,
-    mes: mesNome,
+    mes: per.rotulo,
+    periodo: per,
     vendido: Math.round(vendido),
     meta,
     pct: meta > 0 ? Math.round((vendido / meta) * 100) : null,
     hoje: Math.round(daLoja.filter((o) => spDateKey(o.createdAt) === hoje).reduce((s, o) => s + o.total, 0)),
     vendas: pedidosEm(daLoja),
     ticket: pedidosEm(daLoja) ? Math.round(vendido / pedidosEm(daLoja)) : 0,
+    mediaDia: Math.round(vendido / Math.max(1, dias)),
     diasRestantes,
     porDia: meta > vendido && diasRestantes > 0 ? Math.round((meta - vendido) / diasRestantes) : 0,
     rankingMeta,
@@ -153,12 +209,11 @@ const NAO_PRODUTO = /FRETE|MOTO ?BOY|ENTREGA|TAXA DE|SACOLA|EMBALAGEM PRESENTE/i
 /** Produtos vendidos na loja no período (sem frete), com quantidade e valor. */
 export async function produtosDaLoja(
   loja: string,
-  periodo: "mes" | "7" | "30" = "mes"
+  per: PeriodoLoja = periodoDaLoja()
 ): Promise<{ produtos: { nome: string; qtd: number; receita: number }[]; pecas: number; receita: number; incompleto: boolean; de: string }> {
-  const hoje = hojeSp();
-  const de = periodo === "mes" ? `${hoje.slice(0, 7)}-01` : somarDias(hoje, -(Number(periodo) - 1));
+  const de = per.de;
   if (!totvsConfigured()) return { produtos: [], pecas: 0, receita: 0, incompleto: false, de };
-  const r = await fetchVendasPorProduto(de, hoje, 20000);
+  const r = await fetchVendasPorProduto(de, per.ate, 20000);
   const m = new Map<string, { nome: string; qtd: number; receita: number }>();
   for (const it of r.itens) {
     if (it.loja !== loja || NAO_PRODUTO.test(it.nome)) continue;

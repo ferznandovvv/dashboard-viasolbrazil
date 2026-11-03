@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { MetasVendedoras } from "@/components/MetasVendedoras";
+import { SeletorPeriodo } from "@/components/SeletorPeriodo";
+import { type Period, buildPresets } from "@/lib/periodos";
 
 interface Painel {
   loja: string;
@@ -46,7 +48,10 @@ interface Painel {
 interface Vendas {
   configurado: boolean;
   erro?: string;
+  /** Nome do período: "novembro", "hoje", "27/10 a 02/11" */
   mes?: string;
+  periodo?: { de: string; ate: string; rotulo: string; mesInteiro: boolean; mesAtual: boolean; temHoje: boolean };
+  mediaDia?: number;
   vendido?: number;
   meta?: number;
   pct?: number | null;
@@ -80,6 +85,8 @@ const lerValor = (t: string) => {
 const minutos = (m: number | null | undefined) => (m === null || m === undefined ? "–" : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`);
 const zap = (tel: string) => `https://wa.me/55${tel.replace(/\D/g, "")}`;
 const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+/** "em novembro" para um mês; "de 27/10 a 02/11" ou "de hoje" para o resto */
+const noPeriodo = (v: Vendas) => (!v.mes ? "" : v.periodo && !v.periodo.mesInteiro ? `de ${v.mes}` : `em ${v.mes}`);
 const nomeCurto = (nome: string) =>
   nome
     .split(/\s+/)
@@ -101,6 +108,10 @@ export default function PainelDaLoja() {
   const [pronto, setPronto] = useState(false);
   const [cashback, setCashback] = useState(false);
   const [codigo, setCodigo] = useState(false);
+  // Período das vendas: abre sempre no mês atual
+  const [presets] = useState(buildPresets);
+  const [periodo, setPeriodo] = useState<Period>(() => presets.find((x) => x.key === "Mês atual") ?? presets[0]);
+  const [trocando, setTrocando] = useState(false);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -144,23 +155,31 @@ export default function PainelDaLoja() {
 
   useEffect(() => {
     if (!pronto || !loja || !lojas.includes(loja)) return;
+    // Resposta de um período (ou loja) que já foi trocado não entra na tela
+    let vivo = true;
+    setTrocando(true);
     const carregar = () =>
-      buscar<Painel>(`/api/crm/loja?painel=${encodeURIComponent(loja)}${document.visibilityState === "visible" ? "&visivel=1" : ""}`)
+      buscar<Painel>(
+        `/api/crm/loja?painel=${encodeURIComponent(loja)}&de=${periodo.from}&ate=${periodo.to}${document.visibilityState === "visible" ? "&visivel=1" : ""}`
+      )
         .then((x) => {
+          if (!vivo) return;
           setP(x);
           setErro("");
+          setTrocando(false);
         })
-        .catch((e) => setErro(e.message));
+        .catch((e) => vivo && setErro(e.message));
     carregar();
     const t = setInterval(carregar, 60000);
     // Voltou pra aba: atualiza na hora
     const aoVoltar = () => document.visibilityState === "visible" && carregar();
     document.addEventListener("visibilitychange", aoVoltar);
     return () => {
+      vivo = false;
       clearInterval(t);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
-  }, [pronto, loja, lojas, buscar]);
+  }, [pronto, loja, lojas, buscar, periodo]);
 
   const escolher = (l: string) => {
     setP(null);
@@ -221,7 +240,7 @@ export default function PainelDaLoja() {
       {!p ? (
         <div className="empty">Carregando…</div>
       ) : (
-        <Conteudo p={p} buscar={buscar} />
+        <Conteudo p={p} buscar={buscar} periodo={{ atual: periodo, opcoes: presets, mudar: setPeriodo, trocando }} />
       )}
       {cashback && p && <UsarCashback loja={loja} buscar={buscar} fechar={() => setCashback(false)} />}
       {codigo && p && <CodigoNaLoja loja={loja} buscar={buscar} fechar={() => setCodigo(false)} />}
@@ -231,7 +250,9 @@ export default function PainelDaLoja() {
 
 type Buscar = <T>(url: string, corpo?: object) => Promise<T>;
 
-function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
+type Periodo = { atual: Period; opcoes: Period[]; mudar: (p: Period) => void; trocando: boolean };
+
+function Conteudo({ p, buscar, periodo }: { p: Painel; buscar: Buscar; periodo: Periodo }) {
   const a = p.atendimento;
   const maxDia = Math.max(1, ...a.dias.map((d) => d.conversas));
 
@@ -338,15 +359,23 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
         )}
       </section>
 
-      <VendasWhats w={p.peloWhats} mes={p.vendas.mes} ativo={p.whatsapp.ativo} />
+      <section className="lp-bloco lp-periodo">
+        <h2 className="lp-bloco-titulo">Vendas da loja</h2>
+        <SeletorPeriodo opcoes={periodo.opcoes} atual={periodo.atual} aoMudar={periodo.mudar} rotulo="Vendas de quando" />
+      </section>
 
-      <BlocoVendas v={p.vendas} celular={p.celular} />
+      <div className={`lp-vendas-area${periodo.trocando ? " trocando" : ""}`} aria-busy={periodo.trocando}>
+        <VendasWhats w={p.peloWhats} v={p.vendas} ativo={p.whatsapp.ativo} />
 
-      <MetasVendedoras loja={p.loja} />
+        <BlocoVendas v={p.vendas} celular={p.celular} />
 
-      <Vendedoras v={p.vendas} />
+        {/* A meta guardada é só a de agora: em outro período não tem com o que comparar */}
+        {p.vendas.periodo?.mesAtual !== false && <MetasVendedoras loja={p.loja} />}
 
-      <Produtos loja={p.loja} buscar={buscar} />
+        <Vendedoras v={p.vendas} />
+
+        <Produtos loja={p.loja} buscar={buscar} de={periodo.atual.from} ate={periodo.atual.to} />
+      </div>
 
       <section className="card lp-porque">
         <h2>Por que pedir o celular</h2>
@@ -362,12 +391,12 @@ function Conteudo({ p, buscar }: { p: Painel; buscar: Buscar }) {
   );
 }
 
-function VendasWhats({ w, mes, ativo }: { w: Painel["peloWhats"]; mes?: string; ativo: boolean }) {
+function VendasWhats({ w, v, ativo }: { w: Painel["peloWhats"]; v: Vendas; ativo: boolean }) {
   return (
     <section className="card lp-pw">
       <div className="lp-pw-cab">
         <div>
-          <h2>Vendas pelo WhatsApp{mes ? ` em ${mes}` : ""}</h2>
+          <h2>Vendas pelo WhatsApp {noPeriodo(v)}</h2>
           <p className="muted lp-nota">Venda com frete de motoboy, ou de cliente que conversou com a loja no WhatsApp nos 7 dias antes de comprar.</p>
         </div>
         <div className="lp-pw-n">
@@ -410,7 +439,9 @@ function VendasWhats({ w, mes, ativo }: { w: Painel["peloWhats"]; mes?: string; 
         <p className="muted">
           {!ativo && !w.comEntrega
             ? "Começa a contar quando o WhatsApp da loja estiver ligado e as notas trouxerem o frete de motoboy."
-            : "Nenhuma venda pelo WhatsApp no mês ainda."}
+            : v.periodo?.mesAtual === false
+              ? "Nenhuma venda pelo WhatsApp no período."
+              : "Nenhuma venda pelo WhatsApp no mês ainda."}
         </p>
       )}
     </section>
@@ -420,6 +451,10 @@ function VendasWhats({ w, mes, ativo }: { w: Painel["peloWhats"]; mes?: string; 
 function BlocoVendas({ v, celular }: { v: Vendas; celular: Painel["celular"] }) {
   if (!v.configurado) return null;
   const pct = v.pct ?? null;
+  const per = v.periodo;
+  const umDia = per ? per.de === per.ate : false;
+  // Até hoje: quanto foi hoje; período fechado: a média por dia; um dia só: nenhum dos dois
+  const primeiro = umDia ? null : per?.temHoje === false ? { v: v.mediaDia ?? 0, r: "por dia, em média" } : { v: v.hoje ?? 0, r: "vendido hoje" };
   return (
     <section className="card lp-vendas-mes">
       <h2>Vendas de {v.mes}</h2>
@@ -444,14 +479,16 @@ function BlocoVendas({ v, celular }: { v: Vendas; celular: Painel["celular"] }) 
           </div>
         </>
       ) : null}
-      <div className="lp-vendas-mini lp-vendas-mini-4">
-        <div>
-          <b>{reais(v.hoje ?? 0)}</b>
-          <small>vendido hoje</small>
-        </div>
+      <div className={`lp-vendas-mini${primeiro ? " lp-vendas-mini-4" : ""}`}>
+        {primeiro && (
+          <div>
+            <b>{reais(primeiro.v)}</b>
+            <small>{primeiro.r}</small>
+          </div>
+        )}
         <div>
           <b>{v.vendas ?? 0}</b>
-          <small>vendas no mês</small>
+          <small>{per && !per.mesInteiro ? "vendas no período" : "vendas no mês"}</small>
         </div>
         <div>
           <b>{reais(v.ticket ?? 0)}</b>
@@ -470,18 +507,19 @@ function Vendedoras({ v }: { v: Vendas }) {
   const lista = v.vendedoras ?? [];
   if (!v.configurado || !lista.length) return null;
   const max = Math.max(1, ...lista.map((x) => x.vendido));
+  const comHoje = v.periodo?.temHoje !== false;
   return (
     <section className="card">
-      <h2>Vendedoras em {v.mes}</h2>
-      <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Vendedoras do mês">
+      <h2>Vendedoras {noPeriodo(v)}</h2>
+      <div className="tbl-wrap" tabIndex={0} role="region" aria-label="Vendedoras">
         <table className="prod-tbl fin-tbl lp-tab">
           <thead>
             <tr>
               <th>Vendedora</th>
-              <th style={{ width: "28%" }}>Vendido no mês</th>
+              <th style={{ width: "28%" }}>{v.periodo && !v.periodo.mesInteiro ? "Vendido" : "Vendido no mês"}</th>
               <th className="n">Vendas</th>
               <th className="n">Ticket</th>
-              <th className="n">Hoje</th>
+              {comHoje && <th className="n">Hoje</th>}
               <th className="n">Pelo WhatsApp</th>
               <th style={{ width: "18%" }}>Com celular da cliente</th>
             </tr>
@@ -500,7 +538,7 @@ function Vendedoras({ v }: { v: Vendas }) {
                 </td>
                 <td className="n">{x.vendas}</td>
                 <td className="n">{reais(x.ticket)}</td>
-                <td className="n">{x.hoje ? reais(x.hoje) : ""}</td>
+                {comHoje && <td className="n">{x.hoje ? reais(x.hoje) : ""}</td>}
                 <td className="n">{x.peloWhats || ""}</td>
                 <td>
                   <span className="lp-barra-v">
@@ -522,17 +560,20 @@ function Vendedoras({ v }: { v: Vendas }) {
 
 type DadosProdutos = { produtos: { nome: string; qtd: number; receita: number }[]; pecas: number; receita: number; incompleto: boolean };
 
-function Produtos({ loja, buscar }: { loja: string; buscar: Buscar }) {
-  const [periodo, setPeriodo] = useState<"mes" | "7" | "30">("mes");
+function Produtos({ loja, buscar, de, ate }: { loja: string; buscar: Buscar; de: string; ate: string }) {
   const [ordem, setOrdem] = useState<"qtd" | "receita">("qtd");
   const [todos, setTodos] = useState(false);
   const [d, setD] = useState<DadosProdutos | null>(null);
   useEffect(() => {
     setD(null);
-    buscar<DadosProdutos>(`/api/crm/loja?produtos=${encodeURIComponent(loja)}&periodo=${periodo}`)
-      .then(setD)
-      .catch(() => setD({ produtos: [], pecas: 0, receita: 0, incompleto: true }));
-  }, [loja, periodo, buscar]);
+    let vivo = true;
+    buscar<DadosProdutos>(`/api/crm/loja?produtos=${encodeURIComponent(loja)}&de=${de}&ate=${ate}`)
+      .then((x) => vivo && setD(x))
+      .catch(() => vivo && setD({ produtos: [], pecas: 0, receita: 0, incompleto: true }));
+    return () => {
+      vivo = false;
+    };
+  }, [loja, de, ate, buscar]);
   const lista = (d?.produtos ?? []).slice().sort((a, b) => (ordem === "qtd" ? b.qtd - a.qtd || b.receita - a.receita : b.receita - a.receita));
   const mostrar = todos ? lista : lista.slice(0, 12);
   const max = Math.max(1, ...mostrar.map((x) => (ordem === "qtd" ? x.qtd : x.receita)));
@@ -541,19 +582,6 @@ function Produtos({ loja, buscar }: { loja: string; buscar: Buscar }) {
       <div className="lp-prod-cab">
         <h2>Produtos vendidos</h2>
         <div className="lp-prod-filtros">
-          <div className="seg">
-            {(
-              [
-                ["mes", "Este mês"],
-                ["7", "7 dias"],
-                ["30", "30 dias"],
-              ] as const
-            ).map(([k, nome]) => (
-              <button key={k} className={periodo === k ? "on" : ""} onClick={() => setPeriodo(k)}>
-                {nome}
-              </button>
-            ))}
-          </div>
           <div className="seg">
             <button className={ordem === "qtd" ? "on" : ""} onClick={() => setOrdem("qtd")}>
               Por quantidade

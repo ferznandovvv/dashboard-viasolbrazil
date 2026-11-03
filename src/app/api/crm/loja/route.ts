@@ -6,7 +6,7 @@ import { registrarAcesso } from "@/lib/crm/acessos";
 import { alterarBase, hojeSp, lerBase, somarDias } from "@/lib/crm/base";
 import { painel } from "@/lib/crm/painel";
 import { conferir } from "@/lib/crm/conferencia";
-import { produtosDaLoja, vendasDaLoja } from "@/lib/crm/vendasLoja";
+import { type PeriodoLoja, periodoDaLoja, produtosDaLoja, vendasDaLoja } from "@/lib/crm/vendasLoja";
 import { clientesAtendidas, vendasPeloWhatsApp } from "@/lib/crm/whatsLoja";
 import { nomearPendentes, telefoneVisivel } from "@/lib/crm/contatos";
 import { adaptadorDe } from "@/lib/crm/envio/adaptador";
@@ -54,15 +54,15 @@ function fichaCurta(base: Awaited<ReturnType<typeof lerBase>>, id: string, loja?
 /**
  * Painel da loja: atendimento no WhatsApp, captura de celular nas vendas e
  * a posição dela entre as lojas (pra ter competição), mais o % por vendedora.
+ * O atendimento é sempre o de agora; as vendas são as do período escolhido.
  */
-async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: string) {
+async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: string, per: PeriodoLoja) {
   const pg = painel(base);
   const card = pg.lojas.find((l) => l.loja === loja)!;
   const n = base.config.numeros.find((x) => x.loja === loja);
   const adaptador = adaptadorDe(base.config);
   const situacao = adaptador && n?.ativo && n.sessao ? await adaptador.situacao(n.sessao).catch(() => null) : null;
-  const inicioMes = `${hojeSp().slice(0, 7)}-01`;
-  const whats = vendasPeloWhatsApp(base, loja, inicioMes);
+  const whats = vendasPeloWhatsApp(base, loja, per.de, per.ate);
   return {
     loja,
     atualizado: new Date().toISOString(),
@@ -80,7 +80,7 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
       .itens.filter((i) => i.tipo === "desconto_sem_baixa")
       .slice(0, 20)
       .map((i) => ({ cliente: i.cliente, data: i.data, desconto: i.desconto, vendedora: i.vendedora })),
-    vendas: await vendasDaLoja(base, loja, whats.porVendedora).catch((e) => ({ configurado: false, erro: e instanceof Error ? e.message : "erro" })),
+    vendas: await vendasDaLoja(base, loja, whats.porVendedora, per).catch((e) => ({ configurado: false, periodo: per, mes: per.rotulo, erro: e instanceof Error ? e.message : "erro" })),
   };
 }
 
@@ -92,9 +92,8 @@ export async function GET(req: NextRequest) {
   if (produtos) {
     if (!Object.values(LOJAS).includes(produtos)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
     if (!permitidas.includes(produtos)) return foraDaLoja(produtos);
-    const per = req.nextUrl.searchParams.get("periodo");
-    const periodo = per === "7" || per === "30" ? per : "mes";
-    return NextResponse.json(await produtosDaLoja(produtos, periodo).catch(() => ({ produtos: [], pecas: 0, receita: 0, incompleto: true })));
+    const per = periodoDaLoja(req.nextUrl.searchParams.get("de"), req.nextUrl.searchParams.get("ate"));
+    return NextResponse.json(await produtosDaLoja(produtos, per).catch(() => ({ produtos: [], pecas: 0, receita: 0, incompleto: true })));
   }
   const painel = req.nextUrl.searchParams.get("painel");
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest) {
     // Conta como "a loja abriu o painel" só o computador da loja ou o usuário de loja, com a aba visível
     if (req.nextUrl.searchParams.get("visivel") === "1" && (codigoDeAparelho(req) || (await sessaoDe(req))?.papel === "loja"))
       await registrarAcesso(painel).catch(() => {});
-    return NextResponse.json(await painelDaLoja(base, painel));
+    return NextResponse.json(await painelDaLoja(base, painel, periodoDaLoja(req.nextUrl.searchParams.get("de"), req.nextUrl.searchParams.get("ate"))));
   }
   if (!q) return NextResponse.json({ lojas: permitidas, clientes: [] });
   const dig = q.replace(/\D/g, "");
