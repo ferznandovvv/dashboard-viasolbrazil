@@ -480,6 +480,7 @@ function BlocoVendas({ v, celular }: { v: Vendas; celular: Painel["celular"] }) 
           </div>
         </>
       ) : null}
+      {v.funcionarias ? <p className="muted lp-nota">Sem {reais(v.funcionarias)} de compras de funcionárias (fatura): não contam como venda nem para a meta.</p> : null}
       <div className={`lp-vendas-mini${primeiro ? " lp-vendas-mini-4" : ""}`}>
         {primeiro && (
           <div>
@@ -555,7 +556,7 @@ function Vendedoras({ v }: { v: Vendas }) {
         </table>
       </div>
       {v.semVendedora ? <p className="muted lp-nota">{reais(v.semVendedora)} em vendas sem vendedora na nota.</p> : null}
-      {v.funcionarias ? <p className="muted lp-nota">{reais(v.funcionarias)} em compras de funcionárias (fatura), que não contam para as vendedoras.</p> : null}
+      {v.funcionarias ? <p className="muted lp-nota">{reais(v.funcionarias)} em compras de funcionárias (fatura) ficam fora das vendedoras.</p> : null}
     </section>
   );
 }

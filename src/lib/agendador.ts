@@ -7,7 +7,7 @@
 
 import { rodandoLocal } from "./credenciais";
 import { aquecer, continuarEstoque } from "./aquecer";
-import { completarTelefones, sincronizarDiaria, trazerDocumentosInternos } from "./crm/totvs";
+import { completarTelefones, relerDesdeOCashback, sincronizarDiaria } from "./crm/totvs";
 import { configurarWebhooks } from "./crm/webhookAuto";
 import { recuperarConversas } from "./crm/recuperar";
 import { ligarPortaoWhats } from "./acesso/portaoWhats";
@@ -60,8 +60,9 @@ function conferirSincronizacoesCrm(hora: string) {
     .then((b) => {
       const ultimaTotvs = b.config.diariaTotvsEm ? Date.parse(b.config.diariaTotvsEm) : 0;
       if (totvsConfigured() && Date.now() - ultimaTotvs >= 2 * 3600_000) void sincronizarCrm("crm sincronização", sincronizarDiaria);
-      // Uma vez, fora da hora da diária: as vendas sem nota fiscal que ficaram fora do CRM
-      else if (totvsConfigured() && !b.config.docInternoTrazidoEm) void sincronizarCrm("crm vendas sem nota", trazerDocumentosInternos);
+      // Uma vez, fora da hora da diária: relê as vendas desde o começo do cashback (sem nota fiscal; funcionárias na fatura)
+      else if (totvsConfigured() && (!b.config.docInternoTrazidoEm || !b.config.faturaConferidaEm))
+        void sincronizarCrm("crm releitura desde o cashback", relerDesdeOCashback);
       const shopifyHoje = b.config.ultimaSincShopify && new Date(b.config.ultimaSincShopify).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) === hojeSp();
       if (shopifyConfigured() && hora >= "08:45" && !shopifyHoje) void sincronizarCrm("crm shopify", sincronizarShopifyDiaria);
     })

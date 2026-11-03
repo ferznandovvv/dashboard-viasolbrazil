@@ -50,8 +50,8 @@ export const contaComoPedido = (o: NormalizedOrder) => !o.devolucao && !o.troca;
 
 /**
  * Compra de funcionária para descontar do salário: passa no caixa com a forma
- * de pagamento "fatura". Conta no faturamento da loja, mas não é venda de
- * vendedora: fica fora do ranking, da meta de cada uma e da base da comissão.
+ * de pagamento "fatura". Conta no faturamento da loja, mas não é venda: fica
+ * fora do ranking, da meta de cada vendedora, da meta da loja e do cashback.
  */
 export const ehCompraDeFuncionaria = (o: NormalizedOrder) => o.channel === "lojas" && !o.devolucao && /FATURA/i.test(o.payment ?? "");
 

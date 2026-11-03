@@ -138,15 +138,19 @@ export async function vendasDaLoja(
       for (const [cpf, nome] of novos) b.vendedoras[cpf] = nome;
     });
 
+  // Compra de funcionária (fatura) não é venda: fora das vendas, da meta e das vendedoras
+  const vendasDeVerdade = r.orders.filter((o) => !ehCompraDeFuncionaria(o));
+  const funcionarias = r.orders.filter((o) => o.store === loja && ehCompraDeFuncionaria(o)).reduce((s, o) => s + o.total, 0);
+
   const rankingMeta = Object.values(LOJAS)
     .map((l) => {
-      const vendido = r.orders.filter((o) => o.store === l).reduce((s, o) => s + o.total, 0);
+      const vendido = vendasDeVerdade.filter((o) => o.store === l).reduce((s, o) => s + o.total, 0);
       const meta = metas[l] ?? 0;
       return { loja: l, vendido: Math.round(vendido), pct: meta > 0 ? Math.round((vendido / meta) * 100) : null };
     })
     .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1) || b.vendido - a.vendido);
 
-  const daLoja = r.orders.filter((o) => o.store === loja);
+  const daLoja = vendasDeVerdade.filter((o) => o.store === loja);
   const vendido = daLoja.reduce((s, o) => s + o.total, 0);
   const meta = metas[loja] ?? 0;
 
@@ -161,12 +165,7 @@ export async function vendasDaLoja(
 
   const porVend = new Map<string, { nome: string; vendido: number; vendas: number; hoje: number; cpf?: string }>();
   let semVendedora = 0;
-  let funcionarias = 0;
   for (const o of daLoja) {
-    if (ehCompraDeFuncionaria(o)) {
-      funcionarias += o.total;
-      continue;
-    }
     if (!o.sellerCpf) {
       semVendedora += o.total;
       continue;

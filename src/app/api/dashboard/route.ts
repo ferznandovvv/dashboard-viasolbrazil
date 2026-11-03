@@ -398,9 +398,10 @@ export async function GET(req: NextRequest) {
   // A meta é sempre da empresa toda — ignora o filtro de canal.
   const cfg = await readConfig();
   const target = cfg.metaMensal ?? parseFloat(process.env.META_MENSAL ?? "") ?? 0;
+  // Conta para as metas: compra de funcionária (fatura) não entra
   const monthOrders = allChannels.filter((o) => {
     const k = spDateKey(o.createdAt);
-    return k >= monthStart && k <= today;
+    return k >= monthStart && k <= today && !ehCompraDeFuncionaria(o);
   });
   const monthRevenue = monthOrders.reduce((s, o) => s + o.total, 0);
 

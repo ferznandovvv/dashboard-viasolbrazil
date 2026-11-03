@@ -100,7 +100,7 @@ export function MetasVendedoras({ loja }: { loja: string }) {
         <p className="metas-vend-sub">{reais(d.semVendedora)} saíram do caixa no mês sem vendedora registrada.</p>
       )}
       {(d.funcionarias ?? 0) > 0 && (
-        <p className="metas-vend-sub">{reais(d.funcionarias!)} em compras de funcionárias (fatura) não contam para as vendedoras.</p>
+        <p className="metas-vend-sub">{reais(d.funcionarias!)} em compras de funcionárias (fatura) não contam para as vendedoras nem para a meta da loja.</p>
       )}
     </section>
   );

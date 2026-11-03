@@ -12,6 +12,7 @@
 
 import { LOJAS, SITUACOES_DE_VENDA, getTotvsToken, totvsBaseUrl, totvsConfigured, totvsFetch } from "../connectors/totvs";
 import { alterarBase, diasEntre, hojeSp, lerBase, somarDias } from "./base";
+import { tirarCashbackDeFuncionarias } from "./cashback";
 import { conciliarVendas, registrarVenda, salvarCliente } from "./clientes";
 import { aplicarCancelamento, aplicarDevolucao, type DevolucaoLida } from "./devolucoes";
 import type { Venda } from "./tipos";
@@ -347,6 +348,7 @@ async function buscarVendas(de: string, ate: string, limitePaginas = 300, itens 
           desconto: itens ? descontoDaNota(inv) : undefined,
           entrega: itens ? temFrete(inv) : undefined,
           itens: itens ? referencias(inv) : undefined,
+          funcionaria: /FATURA/i.test(str(inv, "paymentConditionName") ?? "") || undefined,
           origem: "totvs",
         },
       });
@@ -453,6 +455,8 @@ async function sincronizarTrecho(de: string, ate: string, opcoes: { creditar?: b
       if (registrarVenda(b, venda)) progresso.vendasNovas++;
     }
     conciliarVendas(b);
+    // Compra de funcionária na fatura que tinha ganho cashback antes da regra: o crédito sai
+    tirarCashbackDeFuncionarias(b);
     // Venda cancelada na TOTVS sai da base e leva o cashback junto
     for (const id of canceladas) aplicarCancelamento(b, id);
     b.config.cashbackPct = pctAntes;
@@ -550,12 +554,15 @@ export async function sincronizarDiaria(): Promise<typeof progresso | null> {
 }
 
 /**
- * Uma vez só: a venda sem nota fiscal (documento interno, situação "Normal")
- * ficava de fora do CRM. Traz as que passaram desde o começo do cashback nas
- * lojas, com cashback, de 7 em 7 dias (com os itens, como a diária). Venda
- * que o CRM já tem não muda nem ganha cashback de novo.
+ * Releitura única das vendas desde o começo do cashback nas lojas, de 7 em 7
+ * dias (com os itens, como a diária). Roda de novo quando aparece uma regra
+ * nova que precisa das vendas antigas:
+ * - a venda sem nota fiscal (documento interno, situação "Normal") ficava de
+ *   fora do CRM: entra, com cashback;
+ * - a compra de funcionária na fatura fica marcada e perde o cashback.
+ * Venda que o CRM já tem não ganha cashback de novo.
  */
-export async function trazerDocumentosInternos(): Promise<{ erro?: string; vendasNovas: number } | null> {
+export async function relerDesdeOCashback(): Promise<{ erro?: string; vendasNovas: number } | null> {
   if (!totvsConfigured() || progresso.rodando) return null;
   const hoje = hojeSp();
   let vendasNovas = 0;
@@ -566,8 +573,11 @@ export async function trazerDocumentosInternos(): Promise<{ erro?: string; venda
     vendasNovas += r.vendasNovas;
   }
   await alterarBase((b) => {
-    b.config.docInternoTrazidoEm = new Date().toISOString();
-    b.config.ultimaSincTotvsResultado = `Vendas sem nota fiscal desde ${INICIO_CASHBACK_LOJAS.split("-").reverse().join("/")}: ${vendasNovas} vendas novas no CRM`;
+    const agora = new Date().toISOString();
+    b.config.docInternoTrazidoEm ??= agora;
+    b.config.faturaConferidaEm = agora;
+    const funcionarias = b.vendas.filter((v) => v.funcionaria && v.data.slice(0, 10) >= INICIO_CASHBACK_LOJAS).length;
+    b.config.ultimaSincTotvsResultado = `Vendas desde ${INICIO_CASHBACK_LOJAS.split("-").reverse().join("/")} relidas: ${vendasNovas} vendas novas, ${funcionarias} compras de funcionárias na fatura sem cashback`;
   });
   return { vendasNovas };
 }

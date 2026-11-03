@@ -74,6 +74,8 @@ export function vencendoAte(base: BaseCrm, clienteId: string, ate: string, hoje 
 export function creditarVenda(base: BaseCrm, venda: Venda, cliente: Cliente): MovimentoCashback | null {
   const cfg = base.config;
   if (cfg.cashbackPct <= 0) return null;
+  // Compra de funcionária na fatura (desconto em folha) não gera cashback
+  if (venda.funcionaria) return null;
   if (venda.valor < cfg.cashbackCompraMinima) return null;
   if (base.cashback.some((m) => m.vendaId === venda.id && m.tipo === "credito")) return null;
   const valor = arred((venda.valor * cfg.cashbackPct) / 100);
@@ -92,6 +94,33 @@ export function creditarVenda(base: BaseCrm, venda: Venda, cliente: Cliente): Mo
   };
   base.cashback.push(mov);
   return mov;
+}
+
+const OBS_FUNCIONARIA = "Compra de funcionária na fatura (desconto em folha): sem cashback";
+
+/**
+ * Compra de funcionária na fatura que ganhou cashback antes de a regra
+ * existir: o crédito sai (até o saldo que ela tem) e o aviso que ainda está
+ * na fila não sai. Uma vez por compra. Devolve quantas compras acertou.
+ */
+export function tirarCashbackDeFuncionarias(base: BaseCrm): number {
+  let n = 0;
+  for (const v of base.vendas) {
+    if (!v.funcionaria || !v.clienteId) continue;
+    const cred = base.cashback.find((m) => m.tipo === "credito" && m.vendaId === v.id);
+    if (!cred || cred.obs === OBS_FUNCIONARIA) continue;
+    cred.obs = OBS_FUNCIONARIA; // marca: não acerta de novo
+    const valor = arred(Math.min(cred.valor, saldoDe(base, v.clienteId)));
+    if (valor >= 0.01)
+      base.cashback.push({ id: novoId(), clienteId: v.clienteId, tipo: "ajuste", valor: -valor, vendaId: v.id, loja: v.loja, obs: OBS_FUNCIONARIA, criadoEm: new Date().toISOString(), por: "sistema" });
+    for (const msg of base.mensagens)
+      if (msg.chave === `cb-credito-${cred.id}` && msg.status === "fila") {
+        msg.status = "cancelada";
+        msg.erro = "Compra de funcionária na fatura";
+      }
+    n++;
+  }
+  return n;
 }
 
 /** Marca como expirado o que passou da validade sem ser usado. Devolve quantos movimentos criou. */

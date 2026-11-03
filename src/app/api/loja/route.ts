@@ -57,7 +57,8 @@ export async function GET(req: NextRequest) {
 
   const doMes = daLoja.filter((o) => spDateKey(o.createdAt) >= inicioMes);
   const funcionarias = todasDaLoja.filter((o) => ehCompraDeFuncionaria(o) && spDateKey(o.createdAt) >= inicioMes).reduce((s, o) => s + o.total, 0);
-  const vendidoLoja = doMes.reduce((s, o) => s + o.total, 0) + funcionarias;
+  // Meta da loja também sem as compras de funcionárias
+  const vendidoLoja = doMes.reduce((s, o) => s + o.total, 0);
   const semVendedora = doMes.filter((o) => !o.seller).reduce((s, o) => s + o.total, 0);
 
   // Dias até o fim do mês, contando hoje

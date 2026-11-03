@@ -115,6 +115,8 @@ export interface Venda {
   itens?: string[];
   /** Quanto dessa compra voltou em devolução ou troca (R$) */
   devolvido?: number;
+  /** Compra de funcionária na fatura (desconto em folha): não gera cashback */
+  funcionaria?: boolean;
   origem: "totvs" | "shopify" | "csv" | "manual";
 }
 
@@ -595,6 +597,8 @@ export interface ConfigCrm {
   devolucoesHistoricoEm?: string;
   /** Quando as vendas sem nota fiscal (documento interno) desde o começo do cashback foram trazidas (uma vez) */
   docInternoTrazidoEm?: string;
+  /** Quando as compras de funcionárias na fatura desde o começo do cashback foram marcadas e perderam o cashback (uma vez) */
+  faturaConferidaEm?: string;
   diariaTotvsEm?: string;
   ultimaSincShopify?: string;
   ultimaSincShopifyResultado?: string;
