@@ -16,7 +16,7 @@ export async function GET() {
   let erroConta: string | undefined;
   if (c.token) {
     try {
-      usarConta(c.igUserId);
+      usarConta(c.igUserId, c.modoApi);
       assinado = (await webhookAssinado(c.token, c.pageId)).data?.[0]?.subscribed_fields ?? [];
     } catch (e) {
       erroConta = e instanceof Error ? e.message : String(e);
@@ -74,9 +74,11 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ erro: "Cole o token" }, { status: 400 });
     try {
       const eu = await quemSou(token);
+      usarConta(eu.id, eu.modo);
       await alterarBaseIg((b) => {
         b.config.token = token;
-        b.config.igUserId = eu.user_id ?? eu.id;
+        b.config.modoApi = eu.modo;
+        b.config.igUserId = eu.id;
         b.config.usuario = eu.username;
         b.config.pageId = eu.pageId;
         // Token do Facebook (usuário do sistema) não expira; o do Instagram dura 60 dias e renova sozinho
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         assinatura = e instanceof Error ? e.message : String(e);
       }
-      await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `ok @${eu.username} (token ${token.slice(0, 4)}…), avisos: ${assinatura}` }));
+      await alterarBaseIg((b) => void b.ultimosEventos.push({ em: new Date().toISOString(), campo: "conectar", resumo: `ok @${eu.username} via ${eu.modo} (token ${token.slice(0, 4)}…), avisos: ${assinatura}` }));
       return NextResponse.json({ ok: true, usuario: eu.username, assinatura });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -101,6 +103,7 @@ export async function POST(req: NextRequest) {
   if (corpo.acao === "assinar") {
     const { config } = await lerBaseIg();
     if (!config.token) return NextResponse.json({ erro: "Conecte a conta primeiro" }, { status: 400 });
+    usarConta(config.igUserId, config.modoApi);
     try {
       await assinarWebhook(config.token, config.pageId);
       return NextResponse.json({ ok: true });

@@ -15,12 +15,23 @@ const IG_VIASOL = process.env.IG_USER_ID ?? "17841400378201514";
  * Facebook (EAA…, fala com graph.facebook.com e usa o id da conta do Instagram).
  */
 export const tokenFacebook = (token: string) => token.startsWith("EAA");
-const host = (token: string) => (tokenFacebook(token) ? GRAPH_FB : GRAPH_IG);
 
-/** Conta do Instagram que o robô usa no caminho (/me ou o id, conforme o token) */
+/**
+ * Por onde falar com a Meta, descoberto ao conectar (o token do login
+ * unificado começa com EAA mas pode funcionar só no graph.instagram.com):
+ *  - "ig": graph.instagram.com, caminho /me
+ *  - "fb": graph.facebook.com, caminho /<id da conta do Instagram>
+ */
+export type ModoApi = "ig" | "fb";
+let modo: ModoApi | undefined;
 let contaIg = "";
-export const usarConta = (igUserId: string) => void (contaIg = igUserId);
-const eu = (token: string) => (tokenFacebook(token) && contaIg ? `/${contaIg}` : "/me");
+export const usarConta = (igUserId: string, m?: ModoApi) => {
+  contaIg = igUserId;
+  if (m) modo = m;
+};
+const modoDe = (token: string): ModoApi => modo ?? (tokenFacebook(token) ? "fb" : "ig");
+const host = (token: string) => (modoDe(token) === "fb" ? GRAPH_FB : GRAPH_IG);
+const eu = (token: string) => (modoDe(token) === "fb" && contaIg ? `/${contaIg}` : "/me");
 
 export class ErroIg extends Error {
   constructor(
@@ -32,9 +43,9 @@ export class ErroIg extends Error {
   }
 }
 
-async function chamar<T>(caminho: string, token: string, init?: { method?: string; body?: unknown; query?: Record<string, string> }): Promise<T> {
+async function chamar<T>(caminho: string, token: string, init?: { method?: string; body?: unknown; query?: Record<string, string>; base?: string }): Promise<T> {
   const q = new URLSearchParams(init?.query ?? {});
-  const url = `${host(token)}${caminho}${q.size ? `?${q}` : ""}`;
+  const url = `${init?.base ?? host(token)}${caminho}${q.size ? `?${q}` : ""}`;
   const r = await fetch(url, {
     method: init?.method ?? "GET",
     headers: { Authorization: `Bearer ${token}`, ...(init?.body ? { "Content-Type": "application/json" } : {}) },
@@ -56,21 +67,42 @@ async function chamar<T>(caminho: string, token: string, init?: { method?: strin
   return j as T;
 }
 
-/** Quem é a conta do token. */
-export async function quemSou(token: string): Promise<{ user_id?: string; id: string; username: string; pageId?: string }> {
-  if (!tokenFacebook(token)) return chamar("/me", token, { query: { fields: "user_id,username" } });
-  // Token do Facebook: acha a conta do Instagram ligada às páginas (prefere a @viasolbrazil)
-  const r = await chamar<{ data?: { id: string; instagram_business_account?: { id: string; username?: string } }[] }>("/me/accounts", token, {
-    query: { fields: "instagram_business_account{id,username}", limit: "100" },
-  });
-  const contas = (r.data ?? []).filter((p) => p.instagram_business_account);
-  const p = contas.find((x) => x.instagram_business_account?.username === "viasolbrazil") ?? contas[0];
-  if (!p?.instagram_business_account) {
-    // Token de usuário do sistema pode não listar páginas: tenta direto a @viasolbrazil
-    const ig = await chamar<{ id: string; username: string }>(`/${IG_VIASOL}`, token, { query: { fields: "id,username" } });
-    return { id: ig.id, user_id: ig.id, username: ig.username };
+/**
+ * Quem é a conta do token, e por onde a API responde. Tenta os três caminhos
+ * e, se nenhum der, devolve o erro de cada um (ajuda a ver o que falta no app).
+ */
+export async function quemSou(token: string): Promise<{ id: string; username: string; pageId?: string; modo: ModoApi }> {
+  const erros: string[] = [];
+  const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 160);
+  // 1) Login do Instagram (inclusive token EAA do login unificado)
+  try {
+    const r = await chamar<{ user_id?: string; id: string; username: string }>("/me", token, { base: GRAPH_IG, query: { fields: "user_id,username" } });
+    if (r.username) return { id: r.user_id ?? r.id, username: r.username, modo: "ig" };
+  } catch (e) {
+    erros.push(`instagram /me: ${msg(e)}`);
   }
-  return { id: p.instagram_business_account.id, user_id: p.instagram_business_account.id, username: p.instagram_business_account.username ?? "", pageId: p.id };
+  // 2) Login do Facebook: conta do Instagram ligada às páginas
+  try {
+    const r = await chamar<{ data?: { id: string; instagram_business_account?: { id: string; username?: string } }[] }>("/me/accounts", token, {
+      base: GRAPH_FB,
+      query: { fields: "instagram_business_account{id,username}", limit: "100" },
+    });
+    const contas = (r.data ?? []).filter((p) => p.instagram_business_account);
+    const p = contas.find((x) => x.instagram_business_account?.username === "viasolbrazil") ?? contas[0];
+    if (p?.instagram_business_account)
+      return { id: p.instagram_business_account.id, username: p.instagram_business_account.username ?? "", pageId: p.id, modo: "fb" };
+    erros.push(`facebook /me/accounts: ${r.data?.length ?? 0} páginas, nenhuma com Instagram`);
+  } catch (e) {
+    erros.push(`facebook /me/accounts: ${msg(e)}`);
+  }
+  // 3) Direto na @viasolbrazil
+  try {
+    const ig = await chamar<{ id: string; username: string }>(`/${IG_VIASOL}`, token, { base: GRAPH_FB, query: { fields: "id,username" } });
+    return { id: ig.id, username: ig.username, modo: "fb" };
+  } catch (e) {
+    erros.push(`facebook /${IG_VIASOL}: ${msg(e)}`);
+  }
+  throw new ErroIg(erros.join(" | "));
 }
 
 /** Renova o token de 60 dias (precisa ter pelo menos 24 h). */

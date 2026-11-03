@@ -86,7 +86,7 @@ export async function processarComentario(c: Comentario): Promise<string> {
   }
 
   emAndamento.add(c.commentId);
-  usarConta(cfg.igUserId);
+  usarConta(cfg.igUserId, cfg.modoApi);
   try {
     const texto = montarMensagem(cfg.mensagem, c, cfg.link, cfg.campanha);
     try {
@@ -143,7 +143,7 @@ export async function passoVigia(): Promise<void> {
       estado.liveId = undefined;
       return;
     }
-    usarConta(cfg.igUserId);
+    usarConta(cfg.igUserId, cfg.modoApi);
     const live = await liveAgora(cfg.token);
     estado.ultimaBusca = new Date().toISOString();
     estado.ultimoErro = undefined;
