@@ -223,6 +223,7 @@ export type TipoCampanha =
   | "pix_expirado"
   | "cashback_repescagem"
   | "indicacao_convite"
+  | "black_november"
   | "indicacao_premio"
   | "avulsa";
 
@@ -234,6 +235,7 @@ export const CAMPANHAS: { id: TipoCampanha; nome: string; dica: string; marketin
   { id: "cashback_vencendo", nome: "Cashback vencendo (primeiro aviso)", dica: "Alguns dias antes de expirar", marketing: false },
   { id: "cashback_vencendo_urgente", nome: "Cashback vencendo (último aviso)", dica: "Poucos dias antes, com urgência", marketing: false },
   { id: "cashback_repescagem", nome: "Repescagem do cashback", dica: "Cashback que venceu sem uso volta por 7 dias (uma vez só), quando você manda a repescagem num mês fraco", marketing: false },
+  { id: "black_november", nome: "Black November (site)", dica: "Disparo da Black pras clientes do site, com foto e botão pra coleção", marketing: true },
   { id: "indicacao_convite", nome: "Indique uma amiga: convite", dica: "Uns dias depois de uma compra boa: o código dela, a amiga ganha desconto e ela ganha cashback", marketing: true },
   { id: "indicacao_premio", nome: "Indique uma amiga: ganhou", dica: "A amiga comprou com o código e passou a carência: avisa o cashback que ela ganhou", marketing: false },
   { id: "aniversario", nome: "Aniversário", dica: "No começo do mês do aniversário (ou no dia), com a oferta; o código vale na loja e no site", marketing: true },
@@ -280,6 +282,8 @@ export interface TemplateMeta {
    * sem o começo), "whatsLoja" (link curto /w/<loja> do site, que redireciona pro WhatsApp da loja) ou "codigo" (cupom do site)
    */
   botaoVar?: string;
+  /** Foto no topo da mensagem (link público da imagem) */
+  imagem?: string;
 }
 
 /** WhatsApp oficial (Cloud API da Meta), usado pelo número do site. */
@@ -374,7 +378,7 @@ export interface Mensagem {
   /** Sai pela API oficial (número do site), não pela WA-AKG */
   provedor?: "oficial";
   /** API oficial: modelo aprovado e os valores das variáveis, já prontos */
-  template?: { nome: string; idioma: string; parametros: string[]; botao?: string };
+  template?: { nome: string; idioma: string; parametros: string[]; botao?: string; imagem?: string };
   /** Compra que veio depois (carrinho/Pix): pedido, valor e quando */
   resultado?: { pedido: string; valor: number; em: string };
   /** Segunda mensagem, logo depois desta (o código Pix sozinho, pra copiar fácil) */
@@ -662,6 +666,15 @@ export const LOJA_CIDADE: Record<string, string> = {
 };
 
 export const MODELOS_PADRAO: Modelo[] = [
+  {
+    campanha: "black_november",
+    ativo: true,
+    variacoes: [
+      "Oi {primeiro}! Começou a Black November da Via Sol ☀️ Peças de R$ 149 por R$ 59 no Pix, e levando 3 cada uma sai por R$ 39. São tops e calcinhas avulsos pra montar o biquíni do seu jeito, enquanto durar o estoque.",
+    ],
+    // A foto vai no topo (troca pela arte da Black quando estiver no ar)
+    template: { nome: "via_sol_black_november", idioma: "pt_BR", parametros: ["primeiro"], imagem: "https://cdn.shopify.com/s/files/1/0949/0382/8756/files/TopBiquiniBohoBeachPreto-hd.jpg?v=1793634198" },
+  },
   {
     campanha: "indicacao_convite",
     ativo: true,

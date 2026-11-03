@@ -249,7 +249,7 @@ export function viaOficial(base: BaseCrm, campanha: TipoCampanha, loja?: string)
   if (!of.campanhas.includes(campanha)) return false;
   // Lojas que seguem pelo número próprio (as que respondem bem e não tiveram problema)
   // (a repescagem vale só 7 dias: vai toda pelo oficial, que não tem limite de 15 por dia)
-  if (!CAMPANHAS_SITE.includes(campanha) && campanha !== "cashback_repescagem" && loja && (of.lojasPeloNumero ?? []).includes(loja)) return false;
+  if (!CAMPANHAS_SITE.includes(campanha) && campanha !== "cashback_repescagem" && campanha !== "black_november" && loja && (of.lojasPeloNumero ?? []).includes(loja)) return false;
   if (of.token && of.phoneNumberId) return true;
   // Campanha das lojas marcada pro oficial, mas a Meta ainda não está pronta: segue pelo número da loja
   if (!CAMPANHAS_SITE.includes(campanha)) return false;
@@ -405,6 +405,7 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
           idioma: t.idioma || "pt_BR",
           parametros: t.parametros.map((k) => valorDaVariavel(k, c, v)),
           botao,
+          imagem: t.imagem,
         }
       : undefined,
   };
@@ -415,6 +416,7 @@ function enfileirarOficial(base: BaseCrm, p: PedidoFila): { mensagem?: Mensagem;
 const ROTULO_TESTE: Partial<Record<TipoCampanha, string>> = {
   carrinho_abandonado: "Carrinho abandonado",
   carrinho_cupom: "Carrinho, 2º aviso com cupom",
+  black_november: "Black November",
   pix_pendente: "Pix não pago",
   pix_expirado: "Pix vencido",
   cashback_creditado: "Cashback da loja",
@@ -466,7 +468,7 @@ export function mensagensDeTeste(base: BaseCrm): { campanha: TipoCampanha; rotul
     };
     v.whatsLoja = sufixoWhatsLoja(base, v.lojaProxima ?? loja);
     const botao = t.botaoLink ? (t.botaoVar && t.botaoVar !== "link" ? valorDaVariavel(t.botaoVar, c, v) : sufixoDoLink(v.link)) : undefined;
-    saida.push({ campanha, rotulo, template: { nome: t.nome, idioma: t.idioma || "pt_BR", parametros: t.parametros.map((k) => valorDaVariavel(k, c, v)), botao } });
+    saida.push({ campanha, rotulo, template: { nome: t.nome, idioma: t.idioma || "pt_BR", parametros: t.parametros.map((k) => valorDaVariavel(k, c, v)), botao, imagem: t.imagem } });
   }
   return saida;
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { alterarBase, lerBase } from "@/lib/crm/base";
-import { type PedidoCampanha, cancelarCampanha, criarCampanha, listarCampanhas, previa } from "@/lib/crm/campanhas";
-import type { FiltroCampanha } from "@/lib/crm/tipos";
+import { type PedidoCampanha, cancelarCampanha, criarCampanha, disparoOficial, listarCampanhas, previa } from "@/lib/crm/campanhas";
+import type { FaixaCliente, FiltroCampanha } from "@/lib/crm/tipos";
 import { fazerRepescagem, previaRepescagem } from "@/lib/crm/repescagem";
 import { creditarIndicacao } from "@/lib/crm/indicacao";
 
@@ -19,7 +19,8 @@ type Pedido =
   | { acao: "cancelar"; id: string }
   | { acao: "repescagem-previa"; dias?: number; minimo?: number }
   | { acao: "repescagem"; dias?: number; minimo?: number }
-  | { acao: "indicacao-aprovar" | "indicacao-recusar"; id: string };
+  | { acao: "indicacao-aprovar" | "indicacao-recusar"; id: string }
+  | { acao: "disparo-previa" | "disparo"; campanha: "black_november"; lojas?: string[]; faixas?: FaixaCliente[] };
 
 const filtroLimpo = (f: Partial<FiltroCampanha> | undefined): FiltroCampanha => {
   const num = (v: unknown) => (Number(v) > 0 ? Number(v) : undefined);
@@ -69,6 +70,12 @@ export async function POST(req: NextRequest) {
         return ind.status as string;
       });
       return NextResponse.json({ ok: true, detalhe: r === "creditada" ? "Cashback creditado e aviso na fila." : "Indicação recusada." });
+    }
+    if (p.acao === "disparo-previa" || p.acao === "disparo") {
+      if (p.campanha !== "black_november") throw new Error("Campanha sem disparo.");
+      const f = { lojas: Array.isArray(p.lojas) ? p.lojas.map(String) : [], faixas: Array.isArray(p.faixas) ? p.faixas : [] };
+      if (p.acao === "disparo-previa") return NextResponse.json(disparoOficial(await lerBase(), p.campanha, f, false));
+      return NextResponse.json(await alterarBase((b) => disparoOficial(b, p.campanha, f, true)));
     }
     if (p.acao === "cancelar") return NextResponse.json({ canceladas: await alterarBase((b) => cancelarCampanha(b, p.id)) });
     return NextResponse.json({ erro: "Ação desconhecida." }, { status: 400 });

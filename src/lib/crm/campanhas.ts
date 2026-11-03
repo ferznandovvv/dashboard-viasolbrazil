@@ -9,7 +9,7 @@ import { saldoDe, creditosAbertos } from "./cashback";
 import { enviadasHoje } from "./fila";
 import { assinatura, compraMinimaPara, enfileirar, lojaDeEnvio, motivoBloqueio, renderizar } from "./mensagens";
 import { type Perfil, perfis } from "./perfil";
-import { CAMPANHAS, contaComoCompra, tetoDoNumero, valorLiquido, type BaseCrm, type CampanhaManual, type Cliente, type FaixaCliente, type FiltroCampanha, type Mensagem } from "./tipos";
+import { CAMPANHAS, contaComoCompra, tetoDoNumero, valorLiquido, type BaseCrm, type CampanhaManual, type Cliente, type FaixaCliente, type FiltroCampanha, type Mensagem, type TipoCampanha } from "./tipos";
 
 export interface Previa {
   /** Clientes no filtro (antes das regras de envio) */
@@ -283,4 +283,42 @@ export function listarCampanhas(base: BaseCrm) {
     resultado: resultado(base, porTipo.get(c.id) ?? [], vendasDe),
   }));
   return { manuais, automaticas, modoSombra: base.config.modoSombra, envioInicio: base.config.envioInicio, envioFim: base.config.envioFim, envioDias: base.config.envioDias, intervaloMinSeg: base.config.intervaloMinSeg };
+}
+
+/**
+ * Disparo pelo número oficial com um modelo aprovado (ex.: Black November):
+ * clientes da loja/faixa escolhidas, das que mais gastaram pras que menos (a
+ * fila oficial respeita o teto do dia, então as melhores saem primeiro).
+ */
+export function disparoOficial(base: BaseCrm, campanha: TipoCampanha, f: { lojas: string[]; faixas: FaixaCliente[] }, executar: boolean) {
+  const hoje = hojeSp();
+  const prf = perfis(base, hoje);
+  const alvo = base.clientes
+    .map((c) => ({ c, p: prf.get(c.id)! }))
+    .filter(({ p }) => (!f.lojas.length || f.lojas.includes(p?.loja ?? "")) && (!f.faixas.length || f.faixas.includes(p?.faixa ?? "Sem compra")))
+    .sort((a, b) => b.p.total - a.p.total);
+  const fora: Record<string, number> = {};
+  const porFaixa: Record<string, number> = {};
+  let ok = 0;
+  for (const { c, p } of alvo) {
+    const motivo = motivoBloqueio(base, c, campanha);
+    if (motivo) {
+      fora[motivo] = (fora[motivo] ?? 0) + 1;
+      continue;
+    }
+    if (base.mensagens.some((m) => m.chave === `${campanha}-${c.id}` && m.status !== "cancelada" && m.status !== "erro")) {
+      fora["já recebeu"] = (fora["já recebeu"] ?? 0) + 1;
+      continue;
+    }
+    if (executar) {
+      const r = enfileirar(base, { cliente: c, campanha, loja: p.loja && p.loja !== "Site" ? p.loja : "Site", chave: `${campanha}-${c.id}` });
+      if (!r.mensagem) {
+        fora[r.motivo ?? "não entrou"] = (fora[r.motivo ?? "não entrou"] ?? 0) + 1;
+        continue;
+      }
+    }
+    ok++;
+    porFaixa[p.faixa] = (porFaixa[p.faixa] ?? 0) + 1;
+  }
+  return { clientes: ok, porFaixa, fora: Object.entries(fora).map(([motivo, n]) => ({ motivo, n })).sort((a, b) => b.n - a.n), custoEstimado: Math.round(ok * 0.35) };
 }

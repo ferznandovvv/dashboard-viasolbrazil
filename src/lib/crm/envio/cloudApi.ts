@@ -34,9 +34,10 @@ export class CloudApi implements Adaptador {
   async enviarTemplate(
     sessao: string,
     telefone: string,
-    t: { nome: string; idioma: string; parametros: string[]; botao?: string }
+    t: { nome: string; idioma: string; parametros: string[]; botao?: string; imagem?: string }
   ): Promise<ResultadoEnvio> {
     const components: Record<string, unknown>[] = [];
+    if (t.imagem) components.push({ type: "header", parameters: [{ type: "image", image: { link: t.imagem } }] });
     if (t.parametros.length)
       components.push({ type: "body", parameters: t.parametros.map((p) => ({ type: "text", text: p.trim() || "-" })) });
     if (t.botao) components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: t.botao }] });
@@ -135,6 +136,16 @@ export class CloudApi implements Adaptador {
   }
 
   /** Manda um modelo para aprovação. */
+  /** Sobe um arquivo pela API de upload do app e devolve o "handle" (foto de perfil, exemplo de modelo com imagem). */
+  async subirArquivo(appId: string, bytes: Uint8Array, tipo = "image/jpeg"): Promise<{ handle?: string; erro?: string }> {
+    const s = await fetch(`${GRAPH}/${appId}/uploads?file_length=${bytes.length}&file_type=${encodeURIComponent(tipo)}&access_token=${encodeURIComponent(this.token)}`, { method: "POST", cache: "no-store" });
+    const sj = (await s.json().catch(() => ({}))) as { id?: string; error?: { message: string } };
+    if (!sj.id) return { erro: `upload: ${sj.error?.message ?? s.status}` };
+    const u = await fetch(`${GRAPH}/${sj.id}`, { method: "POST", headers: { Authorization: `OAuth ${this.token}`, file_offset: "0" }, body: new Uint8Array(bytes), cache: "no-store" });
+    const uj = (await u.json().catch(() => ({}))) as { h?: string; error?: { message: string } };
+    return uj.h ? { handle: uj.h } : { erro: `upload: ${uj.error?.message ?? u.status}` };
+  }
+
   async criarModelo(wabaId: string, modelo: Record<string, unknown>): Promise<{ ok: boolean; detalhe: string }> {
     const r = await fetch(`${GRAPH}/${wabaId}/message_templates`, {
       method: "POST",

@@ -80,6 +80,9 @@ function horarioLimpo(h: unknown): { semana?: string; sabado?: string; domingo?:
   return r.semana || r.sabado || r.domingo ? r : undefined;
 }
 
+/** App "Via Sol Avisos" na Meta (upload de arquivos: foto do perfil, exemplo de modelo com imagem) */
+const APP_META = "1422008623381560";
+
 export async function POST(req: NextRequest) {
   const p = (await req.json().catch(() => ({}))) as Pedido;
   try {
@@ -131,7 +134,7 @@ export async function POST(req: NextRequest) {
       const { readFile } = await import("node:fs/promises");
       const { join } = await import("node:path");
       const foto = await readFile(join(process.cwd(), "public", "marca", "whatsapp-perfil.png"));
-      const r = await new CloudApi(of.token).perfil(of.phoneNumberId, "1422008623381560", {
+      const r = await new CloudApi(of.token).perfil(of.phoneNumberId, APP_META, {
         about: "Biquínis e saídas de praia ☀️ Avisos de cashback e pedidos",
         description: "Via Sol Brazil, moda praia. Por este número chegam os avisos de cashback e dos seus pedidos do site. Pra falar com a gente, toque no botão da mensagem ou chame o WhatsApp da sua loja.",
         email: "contato@viasolbrazil.com.br",
@@ -227,7 +230,12 @@ export async function POST(req: NextRequest) {
       const feitos = [];
       for (const m of MODELOS_SUGERIDOS) {
         if (existentes.has(m.nome)) feitos.push({ nome: m.nome, ok: true, detalhe: "já existe" });
-        else feitos.push({ nome: m.nome, ...(await api.criarModelo(of.wabaId, payloadDoModelo(m, of))) });
+        else if (m.imagem) {
+          // Modelo com foto: a Meta pede a imagem de exemplo pela API de upload do app
+          const bytes = await fetch(m.imagem).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+          const up = bytes ? await api.subirArquivo(APP_META, new Uint8Array(bytes)) : { erro: "não consegui baixar a foto" };
+          feitos.push(up.handle ? { nome: m.nome, ...(await api.criarModelo(of.wabaId, payloadDoModelo(m, of, up.handle))) } : { nome: m.nome, ok: false, detalhe: up.erro ?? "upload falhou" });
+        } else feitos.push({ nome: m.nome, ...(await api.criarModelo(of.wabaId, payloadDoModelo(m, of))) });
       }
       return NextResponse.json({ feitos });
     }

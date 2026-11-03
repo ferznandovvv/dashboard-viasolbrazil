@@ -715,6 +715,16 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Black November: disparo pras clientes do site, pelo número oficial
+    id: "black-november-v1",
+    aplicar: (b) => {
+      const of = b.config.oficial;
+      if (of?.campanhas && !of.campanhas.includes("black_november")) of.campanhas.push("black_november");
+      const m = MODELOS_PADRAO.find((x) => x.campanha === "black_november");
+      if (m && !b.modelos.some((x) => x.campanha === "black_november")) b.modelos.push(structuredClone(m));
+    },
+  },
+  {
     // Campos de configuração que não existiam ganham o valor padrão
     id: "config-padrao",
     aplicar: (b) => {
