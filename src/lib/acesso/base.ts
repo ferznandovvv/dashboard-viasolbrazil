@@ -7,10 +7,11 @@
  * as mesmas senhas: o administrador vira Dono e a equipe vira Financeiro.
  */
 
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Papel } from "./regras";
+import { copiasNasPastas, gravarSeguro, lerComRecuperacao, lerPastaAnotada } from "../arquivoSeguro";
 
 const DADOS = process.env.DADOS_DIR ?? join(process.cwd(), "dados");
 export const ARQUIVO_ACESSO = join(DADOS, "acesso.json");
@@ -98,23 +99,23 @@ async function doFinanceiro(): Promise<Conta[]> {
   }
 }
 
+/** Arquivo que não abre (zerado por queda de energia) volta da cópia boa mais nova; a do backup do financeiro inclusive. */
 async function lerArquivo(): Promise<BaseAcesso> {
-  try {
-    return JSON.parse(await readFile(ARQUIVO_ACESSO, "utf8")) as BaseAcesso;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // arquivo corrompido: não sobrescreve
-    const base: BaseAcesso = { contas: await doFinanceiro(), segredo: randomBytes(32).toString("hex"), senhaAntiga: true };
-    await gravar(base);
-    return base;
-  }
+  const lida = await lerComRecuperacao<BaseAcesso>(
+    ARQUIVO_ACESSO,
+    (x) => Array.isArray((x as Partial<BaseAcesso> | null)?.contas),
+    async () => copiasNasPastas([await lerPastaAnotada(join(DADOS, "financeiro", "pasta-backup.txt"))], /^acesso\.json$/)
+  );
+  if (lida) return lida;
+  const base: BaseAcesso = { contas: await doFinanceiro(), segredo: randomBytes(32).toString("hex"), senhaAntiga: true };
+  await gravar(base);
+  return base;
 }
 
-/** Grava num arquivo temporário e troca: queda de energia não corrompe a base. */
+/** Grava forçando o disco; a versão anterior fica em acesso.json.bak. */
 async function gravar(base: BaseAcesso): Promise<void> {
   await mkdir(DADOS, { recursive: true });
-  const tmp = `${ARQUIVO_ACESSO}.tmp`;
-  await writeFile(tmp, JSON.stringify(base, null, 1), "utf8");
-  await rename(tmp, ARQUIVO_ACESSO);
+  await gravarSeguro(ARQUIVO_ACESSO, JSON.stringify(base, null, 1));
   g.__acesso = undefined;
 }
 

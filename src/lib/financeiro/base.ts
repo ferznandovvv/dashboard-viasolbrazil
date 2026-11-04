@@ -6,15 +6,18 @@
  * ao mesmo tempo não se atropelarem. Só roda no servidor Node.
  */
 
-import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { LOJAS } from "../connectors/totvs";
 import { ARQUIVO_ACESSO } from "../acesso/base";
 import { CATEGORIAS_PADRAO, type BaseFinanceira } from "./tipos";
+import { copiasNasPastas, gravarSeguro, lerComRecuperacao, lerPastaAnotada } from "../arquivoSeguro";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "financeiro");
 const ARQUIVO = join(PASTA, "base.json");
+/** A pasta de backup anotada fora da base: se a base estragar, é por ela que se acha a cópia */
+const PASTA_BACKUP_ANOTADA = join(PASTA, "pasta-backup.txt");
 /** Boletos e comprovantes anexados às contas */
 export const PASTA_ANEXOS = join(PASTA, "anexos");
 /** Cópias diárias guardadas na pasta de backup */
@@ -42,23 +45,26 @@ function inicial(): BaseFinanceira {
 // tem suas próprias variáveis de módulo)
 const global = globalThis as unknown as { __filaFin?: Promise<unknown>; __backupFin?: number };
 
+const baseValida = (x: unknown) => {
+  const b = x as Partial<BaseFinanceira> | null;
+  return Boolean(b && Array.isArray(b.contas) && Array.isArray(b.empresas) && b.config);
+};
+
+/** Base que não abre (zerada por queda de energia, cortada) volta sozinha da cópia boa mais nova. */
 async function ler(): Promise<BaseFinanceira> {
-  try {
-    return JSON.parse(await readFile(ARQUIVO, "utf8")) as BaseFinanceira;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // arquivo corrompido: não sobrescreve
-    const base = inicial();
-    await gravar(base);
-    return base;
-  }
+  const base = await lerComRecuperacao<BaseFinanceira>(ARQUIVO, baseValida, async () =>
+    copiasNasPastas([await lerPastaAnotada(PASTA_BACKUP_ANOTADA)], /^financeiro-\d{4}-\d{2}-\d{2}\.json$/)
+  );
+  if (base) return base;
+  const nova = inicial();
+  await gravar(nova);
+  return nova;
 }
 
-/** Grava num arquivo temporário e troca: queda de energia não corrompe a base. */
+/** Grava forçando o disco; a versão anterior fica em base.json.bak. */
 async function gravar(base: BaseFinanceira): Promise<void> {
   await mkdir(PASTA, { recursive: true });
-  const tmp = `${ARQUIVO}.tmp`;
-  await writeFile(tmp, JSON.stringify(base, null, 1), "utf8");
-  await rename(tmp, ARQUIVO);
+  await gravarSeguro(ARQUIVO, JSON.stringify(base, null, 1));
 }
 
 /**
@@ -168,6 +174,7 @@ export async function copiaDeSeguranca(base: BaseFinanceira, forcar = false): Pr
   if (!forcar && Date.now() - (global.__backupFin ?? 0) < INTERVALO_BACKUP_MS) return "aguardando";
   try {
     await mkdir(dir, { recursive: true });
+    await writeFile(PASTA_BACKUP_ANOTADA, dir).catch(() => {});
     const dia = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
     await copyFile(ARQUIVO, join(dir, `financeiro-${dia}.json`));
     // As contas de acesso ao sistema vão junto (senhas guardadas só como hash)

@@ -5,15 +5,19 @@
  * Toda escrita passa por uma fila única do processo. Só roda no servidor Node.
  */
 
-import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { type BaseCrm, CONFIG_PADRAO, MODELOS_PADRAO, oficialDe } from "./tipos";
 import { normalizarTelefone } from "./telefone";
 import { pedeParaSair } from "./sair";
+import { copiasNasPastas, gravarSeguro, lerComRecuperacao, lerPastaAnotada } from "../arquivoSeguro";
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm");
 const ARQUIVO = join(PASTA, "base.json");
+const DADOS = join(PASTA, "..");
+/** A pasta de backup anotada fora da base: se a base estragar, é por ela que se acha a cópia */
+const PASTA_BACKUP_ANOTADA = join(PASTA, "pasta-backup.txt");
 const MANTER_COPIAS = 60;
 const INTERVALO_BACKUP_MS = 30 * 60000;
 
@@ -38,23 +42,33 @@ function inicial(): BaseCrm {
 
 const global = globalThis as unknown as { __filaCrm?: Promise<unknown>; __backupCrm?: number };
 
-async function ler(): Promise<BaseCrm> {
-  try {
-    return JSON.parse(await readFile(ARQUIVO, "utf8")) as BaseCrm;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // corrompido: não sobrescreve
-    const base = inicial();
-    await gravar(base);
-    return base;
-  }
+const baseValida = (x: unknown) => {
+  const b = x as Partial<BaseCrm> | null;
+  return Boolean(b && Array.isArray(b.clientes) && Array.isArray(b.vendas) && b.config);
+};
+
+/** Cópias da base para recuperar: na pasta de backup anotada e na do financeiro (costuma ser a mesma). */
+async function copiasDaBase(): Promise<string[]> {
+  const doFinanceiro = await readFile(join(DADOS, "financeiro", "base.json"), "utf8")
+    .then((t) => (JSON.parse(t) as { config?: { backupDir?: string } }).config?.backupDir)
+    .catch(() => undefined);
+  const pastas = [await lerPastaAnotada(PASTA_BACKUP_ANOTADA), await lerPastaAnotada(join(DADOS, "financeiro", "pasta-backup.txt")), doFinanceiro];
+  return copiasNasPastas(pastas, /^crm-\d{4}-\d{2}-\d{2}\.json$/);
 }
 
-/** Grava num arquivo temporário e troca: queda de energia não corrompe a base. */
+/** Base que não abre (zerada por queda de energia, cortada) volta sozinha da cópia boa mais nova. */
+async function ler(): Promise<BaseCrm> {
+  const base = await lerComRecuperacao<BaseCrm>(ARQUIVO, baseValida, copiasDaBase);
+  if (base) return base;
+  const nova = inicial();
+  await gravar(nova);
+  return nova;
+}
+
+/** Grava forçando o disco; a versão anterior fica em base.json.bak. */
 async function gravar(base: BaseCrm): Promise<void> {
   await mkdir(PASTA, { recursive: true });
-  const tmp = `${ARQUIVO}.tmp`;
-  await writeFile(tmp, JSON.stringify(base), "utf8");
-  await rename(tmp, ARQUIVO);
+  await gravarSeguro(ARQUIVO, JSON.stringify(base));
 }
 
 /** Ajustes que entram com versões novas e precisam valer para a base que já existe. */
@@ -836,6 +850,7 @@ export async function copiaDeSeguranca(base: BaseCrm, forcar = false): Promise<s
   if (!forcar && Date.now() - (global.__backupCrm ?? 0) < INTERVALO_BACKUP_MS) return "aguardando";
   try {
     await mkdir(dir, { recursive: true });
+    await writeFile(PASTA_BACKUP_ANOTADA, dir).catch(() => {});
     const dia = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
     await copyFile(ARQUIVO, join(dir, `crm-${dia}.json`));
     global.__backupCrm = Date.now();
