@@ -15,6 +15,8 @@ import { copiasNasPastas, gravarSeguro, lerComRecuperacao, lerPastaAnotada } fro
 
 const PASTA = join(process.env.DADOS_DIR ?? join(process.cwd(), "dados"), "crm");
 const ARQUIVO = join(PASTA, "base.json");
+/** Para a página de recuperação (/api/recuperar-crm) */
+export const ARQUIVO_BASE_CRM = ARQUIVO;
 const DADOS = join(PASTA, "..");
 /** A pasta de backup anotada fora da base: se a base estragar, é por ela que se acha a cópia */
 const PASTA_BACKUP_ANOTADA = join(PASTA, "pasta-backup.txt");
@@ -42,13 +44,13 @@ function inicial(): BaseCrm {
 
 const global = globalThis as unknown as { __filaCrm?: Promise<unknown>; __backupCrm?: number };
 
-const baseValida = (x: unknown) => {
+export const baseValida = (x: unknown) => {
   const b = x as Partial<BaseCrm> | null;
   return Boolean(b && Array.isArray(b.clientes) && Array.isArray(b.vendas) && b.config);
 };
 
 /** Cópias da base para recuperar: na pasta de backup anotada e na do financeiro (costuma ser a mesma). */
-async function copiasDaBase(): Promise<string[]> {
+export async function copiasDaBase(): Promise<string[]> {
   const doFinanceiro = await readFile(join(DADOS, "financeiro", "base.json"), "utf8")
     .then((t) => (JSON.parse(t) as { config?: { backupDir?: string } }).config?.backupDir)
     .catch(() => undefined);

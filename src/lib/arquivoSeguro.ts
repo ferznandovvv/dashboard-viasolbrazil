@@ -105,6 +105,10 @@ async function recuperar<T>(arquivo: string, motivo: string | null, valido: (x: 
   }
   if (!motivo) return null;
   throw new Error(
-    `${basename(arquivo)} ${motivo} e não achei cópia boa para recuperar. Procure a cópia mais nova na pasta de backup e copie por cima de ${arquivo}.`
+    `${basename(arquivo)} ${motivo} e não achei cópia boa para recuperar sozinho. ${
+      basename(arquivo) === "base.json" && /crm/i.test(arquivo)
+        ? "Abra painel.viasolbrazil.com.br/api/recuperar-crm para procurar uma cópia no computador."
+        : `Procure a cópia mais nova na pasta de backup e copie por cima de ${arquivo}.`
+    }`
   );
 }
