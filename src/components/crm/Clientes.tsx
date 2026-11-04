@@ -1,10 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { DetalheVenda } from "@/components/DetalheVenda";
 import type { CodigoResgate, FaixaCliente, FiltroCampanha, Mensagem, MovimentoCashback, Recebida, Venda } from "@/lib/crm/tipos";
 import { Chips, SeletorFaixas, SeloFaixa } from "./faixa";
 import { type ClienteResumo, type Resumo, STATUS_NOME, api, brl, dataBrAno, dataHora, lerValor } from "./comum";
 import { formatarTelefone } from "@/lib/crm/telefone";
+import type { NormalizedOrder } from "@/lib/types";
+
+/** A compra do CRM no formato do detalhe de venda: loja (TOTVS) ou site (Shopify) abrem com os produtos */
+const comoPedido = (v: Venda): NormalizedOrder => ({
+  channel: v.origem === "shopify" ? "shopify" : "lojas",
+  id: v.id,
+  label: v.id,
+  createdAt: v.data,
+  total: v.valor,
+  currency: "BRL",
+  status: v.loja,
+  store: v.origem === "shopify" ? undefined : v.loja,
+  qty: v.pecas,
+});
 
 interface Ficha {
   cliente: ClienteResumo;
@@ -304,6 +319,7 @@ function FichaCliente({ id, lojas, fechar, aoMudar }: { id: string; lojas: strin
   const [aviso, setAviso] = useState("");
   const [editando, setEditando] = useState(false);
   const [acao, setAcao] = useState<"" | "resgate" | "ajuste" | "mensagem" | "codigo">("");
+  const [compraAberta, setCompraAberta] = useState<string | null>(null);
 
   const carregar = useCallback(async () => setF(await api<Ficha>(`/api/crm/clientes/${id}`)), [id]);
   useEffect(() => {
@@ -436,9 +452,23 @@ function FichaCliente({ id, lojas, fechar, aoMudar }: { id: string; lojas: strin
           ) : (
             <table className="prod-tbl fin-tbl">
               <tbody>
-                {f.vendas.slice(0, 30).map((v) => (
-                  <tr key={v.id}>
-                    <td>{dataBrAno(v.data.slice(0, 10))}</td>
+                {f.vendas.slice(0, 30).map((v) => {
+                  const aberta = compraAberta === v.id;
+                  return (
+                  <Fragment key={v.id}>
+                  <tr>
+                    <td>
+                      <button
+                        type="button"
+                        className="venda-abrir"
+                        aria-expanded={aberta}
+                        aria-controls={aberta ? `compra-${v.id}` : undefined}
+                        onClick={() => setCompraAberta(aberta ? null : v.id)}
+                      >
+                        <span className="venda-seta" aria-hidden="true" />
+                        {dataBrAno(v.data.slice(0, 10))}
+                      </button>
+                    </td>
                     <td>
                       {v.loja}
                       {v.pecas ? <span className="fin-sub"> {v.pecas} pç</span> : null}
@@ -451,7 +481,16 @@ function FichaCliente({ id, lojas, fechar, aoMudar }: { id: string; lojas: strin
                       {brl.format(v.valor)}
                     </td>
                   </tr>
-                ))}
+                  {aberta && (
+                    <tr id={`compra-${v.id}`} className="venda-det-linha">
+                      <td colSpan={3}>
+                        <DetalheVenda o={comoPedido(v)} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}

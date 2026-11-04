@@ -386,3 +386,4 @@ tr.venda-aberta td { border-bottom-color: transparent; background: var(--page); 
 .lp-vendas-area { transition: opacity 0.2s; }
 .lp-vendas-area.trocando { opacity: 0.5; }
 @media (prefers-reduced-motion: reduce) { .lp-vendas-area { transition: none; } }
+.venda-det-itens .venda-det-var { font-weight: 700; color: var(--text-primary); white-space: normal; }

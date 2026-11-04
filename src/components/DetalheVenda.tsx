@@ -18,7 +18,8 @@ const jaBuscadas = new Map<string, NormalizedOrder>();
  * sem eles quando nenhuma loja está selecionada, e aí busca só esta nota.
  */
 export function DetalheVenda({ o }: { o: NormalizedOrder }) {
-  const buscar = o.channel === "lojas" && !o.items?.length;
+  // Venda de loja sem os itens, ou pedido do site vindo do CRM (shopify-<número>)
+  const buscar = !o.items?.length && (o.channel === "lojas" || /^shopify-\d+$/.test(o.id));
   const [v, setV] = useState<NormalizedOrder | null>(buscar ? (jaBuscadas.get(o.id) ?? null) : o);
   const [erro, setErro] = useState("");
 
@@ -78,7 +79,10 @@ export function DetalheVenda({ o }: { o: NormalizedOrder }) {
           {itens.map((it, i) => (
             <li key={i}>
               <span className="venda-det-qtd">{Math.abs(it.qty)}×</span>
-              <span>{it.title}</span>
+              <span>
+                {it.title}
+                {it.variant ? <b className="venda-det-var"> · {it.variant}</b> : null}
+              </span>
               <b>{brl.format(Math.abs(it.revenue))}</b>
             </li>
           ))}

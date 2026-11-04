@@ -4,6 +4,8 @@ export interface OrderItem {
   title: string;
   qty: number;
   revenue: number;
+  /** Tamanho/cor quando o canal manda à parte do nome (Shopify) */
+  variant?: string;
 }
 
 export interface NormalizedOrder {

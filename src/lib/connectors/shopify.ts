@@ -22,6 +22,7 @@ interface ShopifyOrderNode {
   lineItems: {
     nodes: {
       title: string;
+      variantTitle?: string | null;
       quantity: number;
       discountedTotalSet: { shopMoney: { amount: string } };
     }[];
@@ -69,7 +70,7 @@ async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
               paymentGatewayNames
               shippingAddress { provinceCode }
               lineItems(first: 10) {
-                nodes { title quantity discountedTotalSet { shopMoney { amount } } }
+                nodes { title variantTitle quantity discountedTotalSet { shopMoney { amount } } }
               }
             }
           }
@@ -120,6 +121,7 @@ async function buscar(since: Date, ate?: Date): Promise<ChannelResult> {
             title: li.title,
             qty: li.quantity,
             revenue: parseFloat(li.discountedTotalSet.shopMoney.amount),
+            variant: li.variantTitle && li.variantTitle !== "Default Title" ? li.variantTitle : undefined,
           })),
         });
       }
