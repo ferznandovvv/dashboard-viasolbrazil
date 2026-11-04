@@ -152,14 +152,19 @@ export async function POST(req: NextRequest) {
       const gasto = r.daily.reduce((s, d) => s + d.spend, 0);
       const reais = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
       if (id === "meta") {
-        // As contas das lojas físicas usam o mesmo token: ele precisa enxergar as três
+        // As contas das lojas físicas (quando ligadas) usam o mesmo token: ele precisa enxergar todas
         const lojas = await fetchAnunciosLojas(addDays(hoje, -6), hoje);
         const porLoja = Object.entries(lojas.porLoja).map(([l, dias]) => `${l} ${reais(dias.reduce((t, d) => t + d.spend, 0))}`);
         return NextResponse.json({
           ok: !lojas.error,
           mensagem:
             `Site: ${reais(gasto)} nos últimos 7 dias. Lojas: ` +
-            (lojas.error ? `o token não abre as contas das lojas (${lojas.error})` : porLoja.join(" · ") || "nenhum gasto nos últimos 7 dias") + ".",
+            (!lojas.connected
+              ? "desligado (sem contas das lojas)"
+              : lojas.error
+                ? `o token não abre as contas das lojas (${lojas.error})`
+                : porLoja.join(" · ") || "nenhum gasto nos últimos 7 dias") +
+            ".",
         });
       }
       return NextResponse.json({ ok: true, mensagem: `Funcionando — gasto de ${reais(gasto)} nos últimos 7 dias.` });

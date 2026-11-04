@@ -54,11 +54,12 @@ async function buscarMeta(fromKey: string, toKey: string): Promise<AdsSpendResul
 }
 
 /**
- * Contas de anúncio das lojas físicas: a "CA VIASOL OFICIAL" (Rio, Praia
- * Grande, BH e SP) e a "Via Sol Ribeirão Preto" (Ribeirão e Fiusa). Pode
- * trocar pela env META_CONTAS_LOJAS, separadas por vírgula.
+ * Contas de anúncio das lojas físicas, pela env META_CONTAS_LOJAS (separadas
+ * por vírgula). Desligado enquanto estiver em branco: as contas das lojas são
+ * de outras empresas da Meta e o token só as enxerga depois de compartilhadas.
+ * As de hoje são a "CA VIASOL OFICIAL" (324266283725524: Rio, Praia Grande,
+ * BH e SP) e a "Via Sol Ribeirão Preto" (343471301180450: Ribeirão e Fiusa).
  */
-const CONTAS_LOJAS_PADRAO = ["324266283725524", "343471301180450"];
 /** Conta inteira de uma loja: campanha sem a loja no nome vai para ela */
 const LOJA_DA_CONTA: Record<string, string> = { "343471301180450": "Ribeirão Preto" };
 
@@ -90,8 +91,8 @@ export async function fetchAnunciosLojas(fromKey: string, toKey: string): Promis
 
 async function buscarLojas(fromKey: string, toKey: string): Promise<AnunciosLojas> {
   const token = env("META_ACCESS_TOKEN") || undefined;
-  if (!token) return { connected: false, porLoja: {}, semLoja: 0 };
-  const contas = (env("META_CONTAS_LOJAS") || CONTAS_LOJAS_PADRAO.join(",")).split(/[\s,;]+/).map((c) => c.replace(/^act_/, "")).filter(Boolean);
+  const contas = env("META_CONTAS_LOJAS").split(/[\s,;]+/).map((c) => c.replace(/^act_/, "")).filter(Boolean);
+  if (!token || !contas.length) return { connected: false, porLoja: {}, semLoja: 0 };
   const porLoja: AnunciosLojas["porLoja"] = {};
   let semLoja = 0;
   const erros: string[] = [];

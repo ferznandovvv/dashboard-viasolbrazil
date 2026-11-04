@@ -113,8 +113,8 @@ export const INTEGRACOES: Integracao[] = [
       },
       {
         nome: "META_CONTAS_LOJAS",
-        rotulo: "Contas de anúncio das lojas (só se mudar)",
-        dica: "Em branco: CA VIASOL OFICIAL (324266283725524) e Via Sol Ribeirão Preto (343471301180450). A loja de cada campanha sai do nome: [RJ], [PG], [BH], [SP], [RP] ou LOJA NOVA (Fiusa)",
+        rotulo: "Contas de anúncio das lojas",
+        dica: "Em branco: anúncios das lojas desligados. Para ligar, compartilhe as contas com a empresa Via Sol Brazil e coloque aqui: 324266283725524, 343471301180450. A loja de cada campanha sai do nome: [RJ], [PG], [BH], [SP], [RP] ou LOJA NOVA (Fiusa)",
         opcional: true,
         visivel: true,
       },
