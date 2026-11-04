@@ -19,6 +19,7 @@ import { conferirEcommerce } from "./crm/ecommerce";
 import { alterarBase as alterarBaseCrm, hojeSp, lerBase as lerBaseCrm } from "./crm/base";
 import { passoVigia, renovarSePreciso } from "./instagram/robo";
 import { registrarErro } from "./registroDeErros";
+import { configurarBackupPadrao } from "./pastaBackup";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
 const HORARIOS = [
@@ -121,6 +122,8 @@ let iniciado = false;
 export function iniciarAgendador(): void {
   if (iniciado || !rodandoLocal()) return;
   iniciado = true;
+  // CRM e financeiro sem pasta de backup ganham a padrão (Google Drive, se houver)
+  setTimeout(() => void executarCrm("pasta de backup", configurarBackupPadrao), 90_000);
   // Portaria do link whats. (só deixa entrar na WA-AKG quem veio do painel como dono)
   ligarPortaoWhats();
 
