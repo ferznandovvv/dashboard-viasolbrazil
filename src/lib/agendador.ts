@@ -18,6 +18,7 @@ import { processarFila, processarFilaOficial } from "./crm/fila";
 import { conferirEcommerce } from "./crm/ecommerce";
 import { alterarBase as alterarBaseCrm, hojeSp, lerBase as lerBaseCrm } from "./crm/base";
 import { passoVigia, renovarSePreciso } from "./instagram/robo";
+import { registrarErro } from "./registroDeErros";
 
 /** Horários no fuso de São Paulo, antes das lojas abrirem. */
 const HORARIOS = [
@@ -46,10 +47,12 @@ async function sincronizarCrm(nome: string, tarefa: () => Promise<{ erro?: strin
     if (!r || r.erro) {
       tentarDeNovo.set(nome, Date.now() + 30 * 60_000);
       console.error(`[agenda] ${nome} ${r ? `falhou: ${r.erro}` : "não rodou (outra sincronização em andamento)"}; tento de novo em 30 min`);
+      if (r?.erro) void registrarErro(`agenda: ${nome}`, r.erro);
     } else console.log(`[agenda] ${nome} ok em ${Math.round((Date.now() - inicio) / 1000)}s`);
   } catch (e) {
     tentarDeNovo.set(nome, Date.now() + 30 * 60_000);
     console.error(`[agenda] ${nome} falhou:`, e instanceof Error ? e.message : e);
+    void registrarErro(`agenda: ${nome}`, e);
   } finally {
     sincronizando.delete(nome);
   }
@@ -95,6 +98,7 @@ async function executar(nome: string, tarefa: () => Promise<unknown>) {
     console.log(`[agenda] ${nome} ok em ${Math.round((Date.now() - inicio) / 1000)}s`, JSON.stringify(r));
   } catch (e) {
     console.error(`[agenda] ${nome} falhou:`, e instanceof Error ? e.message : e);
+    void registrarErro(`agenda: ${nome}`, e);
   } finally {
     rodando = false;
   }
@@ -108,6 +112,7 @@ async function executarCrm(nome: string, tarefa: () => Promise<unknown>) {
     console.log(`[agenda] ${nome} ok em ${Math.round((Date.now() - inicio) / 1000)}s`, JSON.stringify(r));
   } catch (e) {
     console.error(`[agenda] ${nome} falhou:`, e instanceof Error ? e.message : e);
+    void registrarErro(`agenda: ${nome}`, e);
   }
 }
 

@@ -16,6 +16,7 @@ import { enfileirar } from "@/lib/crm/mensagens";
 import { formatarTelefone, normalizarTelefone } from "@/lib/crm/telefone";
 import { codigoDeIndicacao, indicadoraDoCodigo, registrarNaLoja, valeNaLoja } from "@/lib/crm/indicacao";
 import { indicacaoDe } from "@/lib/crm/tipos";
+import { registrarErro } from "@/lib/registroDeErros";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -86,6 +87,16 @@ async function painelDaLoja(base: Awaited<ReturnType<typeof lerBase>>, loja: str
 
 /** Busca por telefone, CPF ou nome; ou o painel da loja (?painel=Nome). */
 export async function GET(req: NextRequest) {
+  try {
+    return await responder(req);
+  } catch (e) {
+    // A tela mostra o motivo (em vez de só "Erro 500") e fica registrado em /api/erros
+    await registrarErro(`tela da loja ${req.nextUrl.search}`, e);
+    return NextResponse.json({ erro: `A tela da loja falhou: ${e instanceof Error ? e.message : String(e)}` }, { status: 500 });
+  }
+}
+
+async function responder(req: NextRequest) {
   const permitidas = await lojasPermitidas(req);
   if (!permitidas) return NextResponse.json({ erro: "Não autorizado" }, { status: 401 });
   const produtos = req.nextUrl.searchParams.get("produtos");
@@ -97,6 +108,8 @@ export async function GET(req: NextRequest) {
   }
   const painel = req.nextUrl.searchParams.get("painel");
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
+  // Só a lista de lojas: não precisa da base do CRM
+  if (!painel && !q) return NextResponse.json({ lojas: permitidas, clientes: [] });
   const base = await lerBase();
   if (painel) {
     if (!Object.values(LOJAS).includes(painel)) return NextResponse.json({ erro: "Loja não encontrada" }, { status: 400 });
@@ -106,7 +119,6 @@ export async function GET(req: NextRequest) {
       await registrarAcesso(painel).catch(() => {});
     return NextResponse.json(await painelDaLoja(base, painel, periodoDaLoja(req.nextUrl.searchParams.get("de"), req.nextUrl.searchParams.get("ate"))));
   }
-  if (!q) return NextResponse.json({ lojas: permitidas, clientes: [] });
   const dig = q.replace(/\D/g, "");
   const tel = normalizarTelefone(q);
   let lista = base.clientes.filter(
