@@ -60,8 +60,27 @@ async function examinar(arquivo: string): Promise<Achado | null> {
   }
 }
 
+/**
+ * Versões anteriores do Windows (pontos de restauração): a mesma base dentro
+ * de cada cópia de sombra do disco, se a proteção do sistema estiver ligada.
+ */
+async function nasVersoesAnteriores(): Promise<string[]> {
+  if (process.platform !== "win32") return [];
+  const semDisco = ARQUIVO_BASE_CRM.replace(/^[A-Za-z]:\\/, "");
+  const nomes = ["base.json", "base.json.tmp", "base.json.bak"].map((n) => join(dirname(semDisco), n));
+  const out: string[] = [];
+  for (let i = 1; i <= 120; i++) {
+    for (const n of nomes) {
+      const p = `\\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy${i}\\${n}`;
+      if (await stat(p).then(() => true).catch(() => false)) out.push(p);
+    }
+  }
+  return out;
+}
+
 async function procurar(): Promise<Achado[]> {
   const achados = new Set<string>(await copiasDaBase().catch(() => []));
+  for (const p of await nasVersoesAnteriores().catch(() => [])) achados.add(p);
   const ate = Date.now() + 40000;
   await varrer(dirname(ARQUIVO_BASE_CRM), 0, achados, ate);
   await varrer(homedir(), 7, achados, ate);
@@ -103,19 +122,19 @@ export async function GET() {
   const zeradas = lista.length - boas.length;
   const linhas = boas
     .map(
-      (a) => `<tr><td><code>${esc(a.arquivo)}</code><br><span class="muted">salvo em ${quando(a.em)}</span></td>
+      (a) => `<tr><td>${a.arquivo.includes("ShadowCopy") ? "<b>Versão anterior do Windows</b><br>" : ""}<code>${esc(a.arquivo)}</code><br><span class="muted">salvo em ${quando(a.em)}</span></td>
 <td class="n">${a.ultimaVenda ? esc(a.ultimaVenda.slice(0, 16).replace("T", " ")) : "—"}</td><td class="n">${a.clientes}</td><td class="n">${a.vendas}</td>
 <td><form method="post"><input type="hidden" name="arquivo" value="${esc(a.arquivo)}"><button>Usar esta</button></form></td></tr>`
     )
     .join("");
   return pagina(`
-<p>A base do CRM está em <code>${esc(ARQUIVO_BASE_CRM)}</code>. Procurei cópias no computador (pasta do usuário e discos). A mais nova vem primeiro: veja a data da última venda.</p>
+<p>A base do CRM está em <code>${esc(ARQUIVO_BASE_CRM)}</code>. Procurei cópias no computador (pasta do usuário, discos e versões anteriores do Windows). A mais nova vem primeiro: veja a data da última venda.</p>
 ${
   boas.length
     ? `<table><tr><th>Cópia</th><th class="n">Última venda</th><th class="n">Clientes</th><th class="n">Vendas</th><th></th></tr>${linhas}</table>
 <p>Ao usar uma cópia, o arquivo estragado fica guardado ao lado (não é apagado). O que aconteceu depois da cópia (vendas da TOTVS) volta na próxima sincronização.</p>`
     : `<p class="erro">Não achei nenhuma cópia boa${zeradas ? ` (achei ${zeradas} estragada${zeradas > 1 ? "s" : ""}, também zerada${zeradas > 1 ? "s" : ""})` : ""}.</p>
-<p>Ainda dá para tentar a versão anterior do Windows: no Explorador de Arquivos, abra <code>${esc(dirname(ARQUIVO_BASE_CRM))}</code>, clique com o botão direito em <b>base.json</b> › <b>Propriedades</b> › <b>Versões anteriores</b>. Se aparecer alguma, me manda um print antes de restaurar.</p>`
+<p>Também não há versão anterior do Windows guardada (a proteção do sistema está desligada, ou nenhum ponto de restauração pegou esse arquivo).</p>`
 }`);
 }
 
