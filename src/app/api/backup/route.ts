@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 
 const esc = (t: unknown) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const quando = (ms: number) => new Date(ms).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-const mb = (b: number) => `${(b / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+/** Base pequena (o financeiro) em KB: "0 MB" parecia cópia vazia */
+const mb = (b: number) =>
+  b < 1048576 ? `${Math.max(1, Math.round(b / 1024)).toLocaleString("pt-BR")} KB` : `${(b / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
 
 /** Onde estão as cópias de segurança do CRM e do financeiro, e as mais novas (só o dono). */
 export async function GET() {
