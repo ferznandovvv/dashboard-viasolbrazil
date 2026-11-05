@@ -41,6 +41,13 @@ function normalizar(texto: string): string {
 }
 
 /**
+ * Um nome começa com o outro numa palavra inteira: "TOP X" casa com "TOP X G",
+ * mas "TOP X G" não casa com "TOP X GG". O tamanho é a última palavra, e o
+ * saldo do GG (ou do PP) não pode entrar no G (ou no P).
+ */
+const comecaCom = (nome: string, inicio: string) => nome.startsWith(inicio) && (nome.length === inicio.length || nome[inicio.length] === " ");
+
+/**
  * Dois jeitos de olhar produto:
  *  - ?modo=busca&q=parte do nome → saldo de agora em todas as lojas
  *  - ?modo=vendidos&from&to&lojas&top → o que mais vendeu nas lojas e no
@@ -104,7 +111,7 @@ export async function GET(req: NextRequest) {
         const chave = normalizar(v.nome);
         if (!chave || !palavras.every((p) => chave.includes(p)) || ignorado(chave)) continue;
         // Nome da nota igual ao do estoque ou começando igual (mesmo cruzamento dos mais vendidos)
-        const k = linhas.has(chave) ? chave : chaves.find((x) => chave.startsWith(x) || x.startsWith(chave));
+        const k = linhas.has(chave) ? chave : chaves.find((x) => comecaCom(chave, x) || comecaCom(x, chave));
         let e = k ? linhas.get(k) : undefined;
         if (!e) {
           // Vendeu e não tem saldo em loja nenhuma: aparece assim mesmo
@@ -168,7 +175,7 @@ export async function GET(req: NextRequest) {
       ? alvo
       : escolhidos.has(curto)
         ? curto
-        : chaves.find((k) => alvo.startsWith(k) || k.startsWith(alvo));
+        : chaves.find((k) => comecaCom(alvo, k) || comecaCom(k, alvo));
     if (chave) {
       somarSaldo(escolhidos.get(chave)!, s.porLoja, lojasVistas);
       anexarPreco(escolhidos.get(chave)!, s.codigo);
