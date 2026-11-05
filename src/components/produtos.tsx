@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Period, buildPresets } from "@/lib/periodos";
+import { type Period, buildPresets, shiftDays, spToday } from "@/lib/periodos";
 import { fmtDay } from "@/components/viz";
 import { Abas } from "@/components/Abas";
 import { usePode, useSessao } from "@/components/sessao";
@@ -39,7 +39,9 @@ interface Resposta {
 type Aba = "busca" | "vendidos";
 
 /** Períodos que fazem sentido para decidir reposição. */
-const PERIODOS = ["Ontem", "Últimos 7 dias", "Mês atual", "Mês passado"];
+const PERIODOS = ["Ontem", "Últimos 7 dias", "Mês atual", "Mês passado", "Últimos 3 meses", "Últimos 6 meses"];
+/** Os atalhos de sempre e, só aqui, os últimos 6 meses (para ver uma coleção inteira) */
+const comSeisMeses = (): Period[] => [...buildPresets(), { key: "Últimos 6 meses", from: shiftDays(spToday(), -179), to: spToday() }];
 /** Na busca, de quando vêm as vendas de cada loja (padrão: mês atual). */
 const PERIODOS_BUSCA = ["Hoje", "Últimos 7 dias", "Mês atual", "Mês passado", "Últimos 3 meses"];
 const TOPS = [20, 50, 100];
@@ -79,7 +81,7 @@ export function Produtos() {
   // e só das lojas dele (a API já manda só essas)
   const sessao = useSessao();
   const minhas = sessao?.papel === "loja" && sessao.lojas.length ? juntar(sessao.lojas) : "";
-  const presets = useMemo(() => buildPresets().filter((p) => PERIODOS.includes(p.key)), []);
+  const presets = useMemo(() => comSeisMeses().filter((p) => PERIODOS.includes(p.key)), []);
   const [aba, setAba] = useState<Aba>("busca");
   const [q, setQ] = useState("");
   const [periodo, setPeriodo] = useState<Period>(
@@ -300,9 +302,9 @@ export function Produtos() {
 
   /** Tem vendas para mostrar: sempre nos mais vendidos; na busca, depois que elas chegam */
   const temVendas = dados?.modo === "vendidos" || dados?.vendasMs !== undefined;
-  /** Peças vendidas na loja, pequeno embaixo do estoque */
+  /** Peças vendidas na loja, pequeno embaixo do estoque: só na busca (nos mais vendidos a coluna Vendidas já diz) */
   const vendidasNaLoja = (l: Linha, loja: string) =>
-    temVendas && (l.vendasPorLoja[loja] ?? 0) > 0 ? <small className="vend-loja">{l.vendasPorLoja[loja]} vend.</small> : null;
+    dados?.modo === "busca" && temVendas && (l.vendasPorLoja[loja] ?? 0) > 0 ? <small className="vend-loja">{l.vendasPorLoja[loja]} vend.</small> : null;
 
   const baixarCSV = () => {
     if (!dados) return;
