@@ -19,6 +19,11 @@ const proximoEnvio = new Map<string, number>();
 const proximoSite = new Map<string, number>();
 
 /** Erro de número desconectado (sessão caiu): não é culpa da mensagem, não gasta tentativa. */
+/** Recusa da Meta por problema da conta (não da cliente): pagamento pendente, conta travada */
+export const ehContaBloqueada = (erro?: string) => /131042|131031|unsettled payments|account (has been )?locked/i.test(erro ?? "");
+/** Com a conta bloqueada, o oficial espera isso entre um teste e outro */
+const ESPERA_BLOQUEIO_MIN = 60;
+
 export const ehNumeroCaido = (erro?: string) => /disconnected|not found|not connected|logged ?out|sess[aã]o/i.test(erro ?? "");
 
 /**
@@ -232,6 +237,9 @@ export async function processarFilaOficial(ignorarJanela = false): Promise<Resul
     const jaHoje = base.mensagens.filter((m) => m.provedor === "oficial" && m.enviadoEm?.startsWith(hoje) && ["enviada", "entregue", "lida", "respondida"].includes(m.status)).length;
     const cabe = Math.max(0, Math.min(20, of.tetoDia - jaHoje));
     if (!cabe) return { enviadas: 0, erros: 0, motivo: "teto do dia do site" };
+    // Conta da Meta bloqueada (ex.: pagamento pendente): não queima a fila; testa 1 por hora
+    const bloqueio = base.bloqueioOficial;
+    if (bloqueio && Date.now() - Date.parse(bloqueio.em) < ESPERA_BLOQUEIO_MIN * 60000) return { enviadas: 0, erros: 0, motivo: `Meta bloqueou a conta: ${bloqueio.motivo}` };
     const agoraIso = new Date().toISOString();
     // Aviso das lojas pelo oficial segue o horário das lojas; carrinho e Pix, o do site
     const janelaLojas = ignorarJanela || dentroDaJanela(base);
@@ -243,7 +251,7 @@ export async function processarFilaOficial(ignorarJanela = false): Promise<Resul
       .filter((m) => m.provedor === "oficial" && m.status === "fila" && m.naoAntesDe <= agoraIso && (CAMPANHAS_SITE.includes(m.campanha) || janelaLojas))
       .sort((a, b) => Number(DISPARO_EM_MASSA.includes(a.campanha)) - Number(DISPARO_EM_MASSA.includes(b.campanha)) || a.naoAntesDe.localeCompare(b.naoAntesDe))
       .filter((m) => !DISPARO_EM_MASSA.includes(m.campanha) || cabeMassa-- > 0)
-      .slice(0, cabe);
+      .slice(0, bloqueio ? 1 : cabe);
     if (!escolhidas.length) return { enviadas: 0, erros: 0 };
     await alterarBase((b) => {
       for (const m of escolhidas) {
@@ -268,6 +276,15 @@ export async function processarFilaOficial(ignorarJanela = false): Promise<Resul
           x.erro = r.erro;
           x.status = "fila";
           x.naoAntesDe = new Date(Date.now() + 15 * 60000).toISOString();
+          continue;
+        }
+        if (!r.ok && ehContaBloqueada(r.erro)) {
+          // Conta da Meta bloqueada: volta pra fila sem gastar tentativa e o oficial para
+          erros++;
+          x.erro = r.erro;
+          x.status = "fila";
+          x.naoAntesDe = new Date(Date.now() + ESPERA_BLOQUEIO_MIN * 60000).toISOString();
+          b.bloqueioOficial = { motivo: /131042|unsettled/i.test(r.erro ?? "") ? "pagamento pendente na conta do WhatsApp" : (r.erro ?? "").slice(0, 80), em: new Date().toISOString() };
           continue;
         }
         x.tentativas += 1;
@@ -366,6 +383,19 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
           if (b.errosOficial.length > 20) b.errosOficial.splice(0, b.errosOficial.length - 20);
         }
         const m = b.mensagens.find((x) => x.idExterno === ev.idExterno);
+        if (doOficial && ehContaBloqueada(ev.texto)) {
+          // Problema da conta, não da cliente: a mensagem volta pra fila e o oficial para
+          b.bloqueioOficial = { motivo: /131042|unsettled/i.test(ev.texto ?? "") ? "pagamento pendente na conta do WhatsApp" : (ev.texto ?? "conta travada").slice(0, 80), em: new Date().toISOString() };
+          if (m && m.status !== "respondida") {
+            m.status = "fila";
+            m.erro = `Meta: ${ev.texto}`;
+            m.idExterno = undefined;
+            m.enviadoEm = undefined;
+            m.tentativas = Math.max(0, m.tentativas - 1);
+            m.naoAntesDe = new Date(Date.now() + ESPERA_BLOQUEIO_MIN * 60000).toISOString();
+          }
+          return;
+        }
         if (m && m.status !== "respondida") {
           m.status = "erro";
           m.erro = ev.texto ? `Meta: ${ev.texto}` : "Meta não entregou";
@@ -377,6 +407,8 @@ export async function receberEvento(ev: EventoRecebido): Promise<string> {
     if (!novo) return "status ignorado";
     await alterarBase((b) => {
       const m = b.mensagens.find((x) => x.idExterno === ev.idExterno);
+      // Chegou mensagem do oficial: a conta voltou
+      if (doOficial && b.bloqueioOficial) b.bloqueioOficial = undefined;
       // Não rebaixa "respondida" para "lida"
       if (m && m.status !== "respondida" && (m.status === "enviada" || (m.status === "entregue" && novo === "lida"))) m.status = novo;
     });

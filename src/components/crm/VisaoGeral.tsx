@@ -49,7 +49,7 @@ interface Painel {
   voltaram?: { lojas: VoltaramLoja[]; total: Omit<VoltaramLoja, "loja"> };
   retorno?: { id: string; nome: string; manual: boolean; r: ResultadoCampanha }[];
   siteSombra?: boolean;
-  envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number };
+  envio: { modoSombra: boolean; pausado: boolean; provedor: string | null; dentroDaJanela: boolean; naFila: number; inicio: number; fim: number; bloqueioOficial?: { motivo: string; em: string } | null };
   gatewayUrl?: string;
 }
 
@@ -317,6 +317,11 @@ export function VisaoGeral({ r }: { r: { base: { clientes: number; comTelefone: 
           </div>
         )}
       </div>
+      {e?.bloqueioOficial && (
+        <div className="vg-alerta" role="alert">
+          <b>WhatsApp oficial parado: a Meta bloqueou o envio ({e.bloqueioOficial.motivo}).</b> As mensagens ficam guardadas na fila e saem sozinhas quando a conta voltar. Resolva no Meta Business, em Faturamento e pagamentos da conta do WhatsApp. O painel testa uma mensagem por hora.
+        </div>
+      )}
 
       {ver === "resultado" && <ResultadoMes saldoTotal={r.base.saldoTotal} />}
 

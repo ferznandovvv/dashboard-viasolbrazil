@@ -752,6 +752,28 @@ const MIGRACOES: { id: string; aplicar: (b: BaseCrm) => void }[] = [
     },
   },
   {
+    // Meta recusou por pagamento pendente (131042) a partir de 04/11: a Black e os avisos
+    // de cashback voltam pra fila e o oficial fica em teste (1 por hora) até a conta voltar.
+    // Carrinho e Pix desses dias já perderam o sentido e ficam como erro.
+    id: "oficial-131042-volta-fila",
+    aplicar: (b) => {
+      const desde = "2026-11-04T00:00:00.000Z";
+      let n = 0;
+      for (const m of b.mensagens) {
+        if (m.provedor !== "oficial" || m.status !== "erro" || !/131042|unsettled payments/i.test(m.erro ?? "")) continue;
+        if ((m.enviadoEm ?? m.criadoEm) < desde) continue;
+        if (m.campanha === "carrinho_abandonado" || m.campanha === "carrinho_cupom" || m.campanha === "pix_pendente" || m.campanha === "pix_expirado") continue;
+        m.status = "fila";
+        m.idExterno = undefined;
+        m.enviadoEm = undefined;
+        m.tentativas = 0;
+        m.naoAntesDe = new Date().toISOString();
+        n++;
+      }
+      if (n) b.bloqueioOficial = { motivo: "pagamento pendente na conta do WhatsApp", em: new Date(Date.now() - 61 * 60000).toISOString() };
+    },
+  },
+  {
     // Black November com a arte (foto) no topo: aparece sem tocar, melhor que o vídeo no WhatsApp
     id: "black-november-arte",
     aplicar: (b) => {

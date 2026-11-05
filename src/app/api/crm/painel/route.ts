@@ -98,6 +98,7 @@ export async function GET(req: NextRequest) {
       naFila: base.mensagens.filter((m) => m.status === "fila").length,
       inicio: cfg.envioInicio,
       fim: cfg.envioFim,
+      bloqueioOficial: base.bloqueioOficial ?? null,
     },
     gatewayUrl: linkDaWaakg(cfg),
   });

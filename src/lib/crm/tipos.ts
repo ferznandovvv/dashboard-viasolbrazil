@@ -636,6 +636,8 @@ export interface BaseCrm {
   statusOficial?: { em: string; telefone: string; status: string; erro?: string; id?: string }[];
   /** Últimas mensagens que a Meta aceitou mas não entregou (motivo vem pelo webhook) */
   errosOficial?: { em: string; telefone: string; erro: string }[];
+  /** A Meta recusou por problema da conta (pagamento pendente etc.): o oficial para e testa 1 por hora */
+  bloqueioOficial?: { motivo: string; em: string };
   /** Resposta automática do número oficial: telefone → quando foi a última (uma a cada 12 h) */
   autoRespostas?: Record<string, string>;
   modelos: Modelo[];
